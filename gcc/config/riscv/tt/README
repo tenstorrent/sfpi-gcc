@@ -183,9 +183,27 @@ Terms used throughout the sources that are not standard GCC:
 
 Tests are in ../../../testsuite/g++.target/riscv/tt/.  Most passes carry
 dump-scan tests keyed to their dump name; the pre-campaign lowering passes are
-covered by assembly scans instead.  proofs/ holds machine-checked equivalence
-results that t-riscv-tt verifies against their generated form, and the
-unit harnesses there can be built directly.
+covered by assembly scans instead.
+
+proofs/ holds eleven machine-checked equivalence results.  Be precise about
+what the build checks: only two of them -- store-sink-roundtrip and
+stochrnd-store-round -- are verified by t-riscv-tt, which regenerates
+rvtt-storefold-verdicts.def from their RESULT files and fails the build if the
+checked-in table is not byte-identical.  Six more are cited from the sources as
+the legality backing for a transform, and three (cast-fp16a-rne,
+shft-imm-vs-reg, sm32-cast-elision-shift) are cited only from proofs/README.md
+and the campaign notes that record the refusal they justify.  Nothing outside
+those two is enforced mechanically.
+
+Two kinds of host-compiled tooling live here and are NOT part of the compiler
+build, so do not mistake them for dead code:
+
+  *-test.cc		  six opt-in unit harnesses, wired up in t-riscv-tt
+  rvtt-macro-vocab-enum.cc  an offline template-word vocabulary enumerator.
+			  It is in no build rule by design; it documents its
+			  own build line near the top of the file and seven
+			  entries in rvtt-refusals.def cite it as the
+			  provenance of a refusal reason.
 
 
 8. Reading order for a newcomer
