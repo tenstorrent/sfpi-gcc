@@ -52,6 +52,8 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt-raw-boundary.h"
 #include "rtl-rvtt-macro-planner-int.h"
 
+namespace rvtt_planner {
+
 /* ---------------- Formation: emission from the descriptor ------------ */
 
 /* Function-global configuration-ownership proof, typed: the planner owns
@@ -1605,3 +1607,4 @@ init_hoist_callee_scan (function *fn, const macro_region &region,
 /* Form REGION when every proof holds; returns true when code changed.
    Refusal paths never mutate.  */
 
+} /* namespace rvtt_planner */

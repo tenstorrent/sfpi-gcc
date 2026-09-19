@@ -27,6 +27,11 @@ along with GCC; see the file COPYING3.  If not see
    below are expressed in.  */
 #include "rvtt-macro-desc.h"
 
+/* Named, not global: these were file-local inside an anonymous
+   namespace before the split.  */
+
+namespace rvtt_planner {
+
 /* rtl-rvtt-macro-planner.cc grew past 3400 lines.  The leaf layer --
    the configuration-ownership proofs, the delivery cost model and IMS
    profitability arbitration, the CC all-lanes ambient analysis and the
@@ -135,5 +140,7 @@ emit_planner_run (macro_region &region, const macro_schedule &schedule,
 extern const char *
 init_hoist_callee_scan (function *fn, const macro_region &region,
 			rtx_insn **why_insn);
+
+} /* namespace rvtt_planner */
 
 #endif /* GCC_RTL_RVTT_MACRO_PLANNER_INT_H */
