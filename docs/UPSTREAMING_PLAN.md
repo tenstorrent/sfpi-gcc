@@ -118,26 +118,55 @@ before the passes it unblocks.
 
 ### Readiness of the 28
 
+Updated 2026-09-19 after the splitting work below.
+
 Size, which decides whether a reviewer can hold the patch in their head:
 
     under 500 lines      3
-    500 - 1000          8
-    1000 - 2000        12
-    over 2000           5
+    500 - 1000          10
+    1000 - 2000         15
+    over 2000            0
 
-The 23 under 2000 lines are already a normal size for a new GCC pass carrying
-its own tests and file essay.  Five are not, and should be split before they
-are sent:
+All 28 registered passes are now under 2000 lines.  Five were over, and each
+was split along a boundary the file's own structure suggested, as pure code
+movement verified byte-identical:
 
-    rtl-rvtt-macro-planner.cc   3462
-    gimple-rvtt-crosscall.cc    3186
-    rtl-rvtt-lp-alloc.cc        3094
-    rtl-rvtt-dst-autoincr.cc    2763
-    rtl-rvtt-mop-form.cc        2208
+    rtl-rvtt-macro-planner.cc   3462 -> 1910  + -cost.cc    1607
+    gimple-rvtt-crosscall.cc    3186 -> 1837  + -census.cc  1392
+    rtl-rvtt-lp-alloc.cc        3094 -> 1617  + -color.cc   1449
+    rtl-rvtt-dst-autoincr.cc    2763 -> 1858  + -scan.cc     738
+    rtl-rvtt-mop-form.cc        2208 -> 1352  + -outward.cc  936
 
-Tests: 25 of the 28 carry dump-scan tests keyed to their dump name.  Three do
-not and need them written before submission -- `gimple-rvtt-expand.cc`,
-`rtl-rvtt-lreg-livein.cc`, `rtl-rvtt-spill-diag.cc`.
+Be precise about what that does and does not claim.  It is about the 28
+registered passes, which are the units of submission.  Eight SUPPORT
+translation units are still over 2000 lines and have not been touched:
+
+    rvtt-macro-desc.cc              3276
+    gimple-rvtt-prgm-residency.cc   2950
+    rtl-rvtt-sched-pairing.cc       2699
+    rtl-rvtt-replay-hoist.cc        2666
+    rtl-rvtt-replay-crf.cc          2499
+    rvtt-mop-derive.cc              2176
+    rtl-rvtt-sched-region.cc        2172
+    rtl-rvtt-replay-discover.cc     2060
+
+None of these registers a pass; each is library code that travels with its
+subsystem's patch.  They still make those particular patches large and should
+be split before the subsystems they belong to are submitted -- they are just
+not on the critical path for the first stages.
+
+Tests: an earlier version of this section said three passes needed tests
+written.  That was measured wrongly -- it counted only dump-scan tests keyed
+to a pass's own dump name.  Checked properly:
+
+  - gimple-rvtt-expand.cc is well covered, by assembly scans rather than dump
+    scans: 138 tests exercise the v_if / v_elseif trees it lowers and 129
+    assert the CC instructions it emits.  This is exactly the arrangement the
+    directory README describes for the lowering passes.
+  - rtl-rvtt-spill-diag.cc is covered by 47 tests using dg-error or
+    dg-warning against its lreg-pressure-exceeded diagnostic.
+  - rtl-rvtt-lreg-livein.cc is the one genuinely thin pass: a single
+    reference across the whole testsuite.  It needs tests before submission.
 
 ### Does any of this need re-measuring on silicon?
 
