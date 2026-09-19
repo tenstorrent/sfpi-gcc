@@ -502,7 +502,8 @@ check_compare_form (ccmask_group *g)
 	  return refuse ("ccmask-zero-shared", g->assign);
       }
     if (rvtt_call_int_arg (g->fcmp, 2) != 0
-	|| rvtt_call_int_arg (g->fcmp, 3) != 0 || rvtt_call_int_arg (g->fcmp, 4) != 0)
+	|| rvtt_call_int_arg (g->fcmp, 3) != 0
+	|| rvtt_call_int_arg (g->fcmp, 4) != 0)
       /* The equivalence proof is against the +0.0 boundary's pure
 	 sign/zero CC lowering; other immediates lower arithmetically.  */
       return refuse ("ccmask-boundary-unsupported", g->fcmp);

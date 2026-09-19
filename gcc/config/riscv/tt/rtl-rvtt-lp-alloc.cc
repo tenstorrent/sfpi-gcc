@@ -335,7 +335,8 @@ function_peak_pressure (function *fn)
 /* Audited architectural effect data for typed value-op patterns the
    full generated effect sets do not cover lives at the definitions:
    the xtt_lane_local/xtt_cc_write attribute rows in rvtt.md, reached
-   through rvtt_lane_local_effects (the typed-effect tables; the effect_overrides
+   through rvtt_lane_local_effects (the typed-effect tables; the
+   effect_overrides
    table formerly copied verbatim from rtl-rvtt-dst-ownership.cc is
    deleted -- the migration's blocking planner-oracle re-freeze is
    recorded in testsuite oracles/refreeze-pin49-20260831.txt).  */

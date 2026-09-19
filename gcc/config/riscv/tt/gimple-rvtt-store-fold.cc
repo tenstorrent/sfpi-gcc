@@ -852,8 +852,10 @@ fn_has_prng_consumer_p (function *fun)
 	else if (insnd->id == rvtt_insn_data::sfpcast
 		 || insnd->id == rvtt_insn_data::sfpcast_lv)
 	  {
-	    long mod1 = rvtt_call_int_arg (call, insnd->id == rvtt_insn_data::sfpcast
-					? 1 : 2);
+	    long mod1
+	      = rvtt_call_int_arg (call,
+				   insnd->id == rvtt_insn_data::sfpcast
+				   ? 1 : 2);
 	    if (mod1 < 0 || mod1 == (long) SFPCAST_MOD1_INT32_TO_FP32_RNS)
 	      return true;
 	  }

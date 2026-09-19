@@ -393,8 +393,8 @@ same_body_p (const dst_iteration &a, const dst_iteration &b,
 		{
 		  if (dump_file && (dump_flags & TDF_DETAILS))
 		    fprintf (dump_file,
-			     "Dst-body mismatch: call=%u arg=%u address\n",
-			     i, argno);
+			     "Dst-body mismatch: call=%u arg=%u address\n", i,
+			     argno);
 		  return false;
 		}
 	      continue;
@@ -406,8 +406,8 @@ same_body_p (const dst_iteration &a, const dst_iteration &b,
 		{
 		  if (dump_file && (dump_flags & TDF_DETAILS))
 		    fprintf (dump_file,
-			     "Dst-body mismatch: call=%u arg=%u live-in\n",
-			     i, argno);
+			     "Dst-body mismatch: call=%u arg=%u live-in\n", i,
+			     argno);
 		  return false;
 		}
 	      if ((it == values.end () && va != vb)
@@ -415,8 +415,8 @@ same_body_p (const dst_iteration &a, const dst_iteration &b,
 		{
 		  if (dump_file && (dump_flags & TDF_DETAILS))
 		    fprintf (dump_file,
-			     "Dst-body mismatch: call=%u arg=%u vector\n",
-			     i, argno);
+			     "Dst-body mismatch: call=%u arg=%u vector\n", i,
+			     argno);
 		  return false;
 		}
 	    }

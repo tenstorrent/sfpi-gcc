@@ -361,7 +361,8 @@ find_top_of_cond_tree (gcall *stmt)
     case rvtt_insn_data::sfpxbool:
       {
 	// Follow only child for NOT, left-most child for AND/OR, all degenerate to same case
-	gcall *child = dyn_cast<gcall *> (SSA_NAME_DEF_STMT (gimple_call_arg (stmt, SFPXBOOL_LEFT_TREE_ARG_POS)));
+	tree child_arg = gimple_call_arg (stmt, SFPXBOOL_LEFT_TREE_ARG_POS);
+	gcall *child = dyn_cast<gcall *> (SSA_NAME_DEF_STMT (child_arg));
 	return find_top_of_cond_tree (child);
       }
       break;
@@ -428,7 +429,8 @@ mark_vif_stmts (gimple_stmt_iterator top,
 static void
 expand_xcondi (gcall *stmt)
 {
-  gcall *child = dyn_cast<gcall *> (SSA_NAME_DEF_STMT (gimple_call_arg (stmt, SFPXCONDI_TREE_ARG_POS)));
+  tree child_arg = gimple_call_arg (stmt, SFPXCONDI_TREE_ARG_POS);
+  gcall *child = dyn_cast<gcall *> (SSA_NAME_DEF_STMT (child_arg));
   gcall *top = find_top_of_cond_tree (child);
 
   gimple_stmt_iterator gsi = gsi_for_stmt (top);
@@ -534,7 +536,8 @@ static bool
 process_xcondi (gcall *stmt, gcall *parent, bool optimizeit)
 {
   // Process the child as a new tree
-  gcall *child = dyn_cast<gcall *> (SSA_NAME_DEF_STMT (gimple_call_arg (stmt, SFPXCONDI_TREE_ARG_POS)));
+  tree child_arg = gimple_call_arg (stmt, SFPXCONDI_TREE_ARG_POS);
+  gcall *child = dyn_cast<gcall *> (SSA_NAME_DEF_STMT (child_arg));
 
   bool optimized = false;
   tree cmp_lhs = gimple_call_lhs (parent);
@@ -757,8 +760,10 @@ transform (function *fun)
 	      if (dump_file)
 	        fprintf (dump_file, "  process xcondb\n");
 	      // This will be the sfpxvif stmt
-	      gcall *child = dyn_cast<gcall *> (SSA_NAME_DEF_STMT (gimple_call_arg (stmt, SFPXCONDB_TREE_ARG_POS)));
-	      gcall *top = dyn_cast<gcall *> (SSA_NAME_DEF_STMT (gimple_call_arg (stmt, SFPXCONDB_START_ARG_POS)));
+	      tree child_arg = gimple_call_arg (stmt, SFPXCONDB_TREE_ARG_POS);
+	      gcall *child = dyn_cast<gcall *> (SSA_NAME_DEF_STMT (child_arg));
+	      tree top_arg = gimple_call_arg (stmt, SFPXCONDB_START_ARG_POS);
+	      gcall *top = dyn_cast<gcall *> (SSA_NAME_DEF_STMT (top_arg));
 	      mark_vif_stmts (gsi_for_stmt (top), gsi);
 
 	      process_tree (child, stmt);
@@ -791,7 +796,8 @@ transform (function *fun)
 		  auto *stmt = as_a <gcall *> (*gsi);
 		  if (dump_file)
 		    fprintf (dump_file, "  process xcondi tree\n");
-		  gcall *child = dyn_cast<gcall *> (SSA_NAME_DEF_STMT (gimple_call_arg (stmt, SFPXCONDI_TREE_ARG_POS)));
+		  tree child_arg = gimple_call_arg (stmt, SFPXCONDI_TREE_ARG_POS);
+		  gcall *child = dyn_cast<gcall *> (SSA_NAME_DEF_STMT (child_arg));
 		  expand_xcondi (stmt);
 		  process_tree (child, stmt);
 		  phi_stmts.clear ();

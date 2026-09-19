@@ -966,7 +966,8 @@ match_group (const rvtt_cc_region_tree *ccr, gimple_stmt_iterator gsi,
 	    break;
 	}
     if (n_uses == 1)
-      if (gcall *sgn = rvtt_call_with_id (use_stmt, rvtt_insn_data::sfpsetsgn_v))
+      if (gcall *sgn = rvtt_call_with_id (use_stmt,
+					  rvtt_insn_data::sfpsetsgn_v))
 	if (gimple_call_arg (sgn, 0) == g->result
 	    && gimple_call_arg (sgn, 1) == g->x
 	    && rvtt_call_int_arg (sgn, 2) == 0

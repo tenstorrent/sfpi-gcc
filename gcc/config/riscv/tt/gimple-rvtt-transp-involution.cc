@@ -456,7 +456,8 @@ value_never_denormal_p (tree val, unsigned depth = 0)
     case rvtt_insn_data::sfpreadlreg:
       {
 	unsigned reg;
-	return rvtt_call_const_uarg (def, 0, &reg) && (reg == 8 || reg == 9 || reg == 10);
+	return rvtt_call_const_uarg (def, 0, &reg)
+	       && (reg == 8 || reg == 9 || reg == 10);
       }
     case rvtt_insn_data::sfpassign:
     case rvtt_insn_data::sfpassign_lv:

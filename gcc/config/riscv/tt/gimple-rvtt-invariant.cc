@@ -1498,7 +1498,8 @@ transform (function *fn)
 	     materializations there are LUT slot coefficients whose
 	     placement authority belongs to the lut-select passes
 	     (shortened slot materializations at the LUT programming
-	     point, the lut-select placement machinery); an early depth-zero hoist
+	     point, the lut-select placement machinery); an early
+	     depth-zero hoist
 	     moves the coefficient out from under that discovery and
 	     the 5-word LUT row decays to a mov-laden 7-word body
 	     (measured on hardware: 29861 -> 43447 cycles under an
