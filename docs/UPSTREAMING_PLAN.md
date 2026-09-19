@@ -118,7 +118,12 @@ before the passes it unblocks.
 
 ### Readiness of the 28
 
-Updated 2026-09-19 after the splitting work below.
+Re-measured 2026-09-19 after the cleanup work.  Every figure below came from a
+command run against the tree at that date.
+
+    fully ready                 26
+    style work outstanding       2
+    missing tests                0
 
 Size, which decides whether a reviewer can hold the patch in their head:
 
@@ -127,46 +132,62 @@ Size, which decides whether a reviewer can hold the patch in their head:
     1000 - 2000         15
     over 2000            0
 
-All 28 registered passes are now under 2000 lines.  Five were over, and each
-was split along a boundary the file's own structure suggested, as pure code
-movement verified byte-identical:
+All 28 registered passes are under 2000 lines.  Five were over; each was split
+along a boundary its own structure suggested, as pure code movement verified
+byte-identical:
 
-    rtl-rvtt-macro-planner.cc   3462 -> 1910  + -cost.cc    1607
-    gimple-rvtt-crosscall.cc    3186 -> 1837  + -census.cc  1392
-    rtl-rvtt-lp-alloc.cc        3094 -> 1617  + -color.cc   1449
-    rtl-rvtt-dst-autoincr.cc    2763 -> 1858  + -scan.cc     738
-    rtl-rvtt-mop-form.cc        2208 -> 1352  + -outward.cc  936
+    rtl-rvtt-macro-planner.cc   3462 -> 1912  + -cost.cc    1607
+    gimple-rvtt-crosscall.cc    3187 -> 1837  + -census.cc  1392
+    rtl-rvtt-lp-alloc.cc        3094 -> 1608  + -color.cc   1449
+    rtl-rvtt-dst-autoincr.cc    2763 -> 1860  + -scan.cc      738
+    rtl-rvtt-mop-form.cc        2208 -> 1351  + -outward.cc   936
 
-Be precise about what that does and does not claim.  It is about the 28
-registered passes, which are the units of submission.  Eight SUPPORT
-translation units are still over 2000 lines and have not been touched:
+Be precise about the claim: it is about the 28 REGISTERED passes, the units of
+submission.  Eight SUPPORT translation units remain over 2000 lines --
+rvtt-macro-desc.cc 3276, gimple-rvtt-prgm-residency.cc 2950,
+rtl-rvtt-sched-pairing.cc 2699, rtl-rvtt-replay-hoist.cc 2666,
+rtl-rvtt-replay-crf.cc 2499, rvtt-mop-derive.cc 2176,
+rtl-rvtt-sched-region.cc 2172, rtl-rvtt-replay-discover.cc 2060.  None
+registers a pass; each is library code travelling with its subsystem's patch.
+They enlarge those later patches and should be split before those stages, but
+they are not on the critical path for the early ones.
 
-    rvtt-macro-desc.cc              3276
-    gimple-rvtt-prgm-residency.cc   2950
-    rtl-rvtt-sched-pairing.cc       2699
-    rtl-rvtt-replay-hoist.cc        2666
-    rtl-rvtt-replay-crf.cc          2499
-    rvtt-mop-derive.cc              2176
-    rtl-rvtt-sched-region.cc        2172
-    rtl-rvtt-replay-discover.cc     2060
+Style: 61 over-80-column lines in the passes became 31.  Ten of the thirty
+fixed were created by this work -- renaming refuse to crosscall_refuse added
+eleven characters to every call site, and the shared helper names are longer
+than the private ones they replaced.  The remaining 31, eighteen in
+gimple-rvtt-expand.cc and thirteen in gimple-rvtt-dst-iteration.cc, are long
+because of NESTING DEPTH rather than expression width; two are temporaries
+introduced to shorten a line that still exceed 80 columns at eight tabs of
+indent.  Reducing that nesting is a behaviour-carrying refactor, not a style
+pass.  Three mechanical wrapping attempts each produced worse output and were
+reverted -- do not try a fourth without a real formatter.
 
-None of these registers a pass; each is library code that travels with its
-subsystem's patch.  They still make those particular patches large and should
-be split before the subsystems they belong to are submitted -- they are just
-not on the critical path for the first stages.
+Tests: all 28 passes have them.  An earlier version of this section claimed
+three did not.  That was a measurement error worth recording, because the same
+mistake is easy to repeat: coverage was counted by grepping for tests that
+scan a pass's DUMP NAME, so any pass that writes nothing to dump_file scored
+zero regardless of how well tested it is.  Checked properly:
 
-Tests: an earlier version of this section said three passes needed tests
-written.  That was measured wrongly -- it counted only dump-scan tests keyed
-to a pass's own dump name.  Checked properly:
+  - gimple-rvtt-expand.cc -- 138 tests exercise the v_if / v_elseif trees it
+    lowers, 129 assert the CC instructions it emits.  Assembly scans, which is
+    what the directory README says the lowering passes use.
+  - rtl-rvtt-spill-diag.cc -- 47 tests using dg-error or dg-warning against
+    its lreg-pressure-exceeded diagnostic.
+  - rtl-rvtt-lreg-livein.cc -- four dedicated tests, including
+    tensix/raw-lreg-livein-cfg-bh.C, which covers the block-end sentinel
+    placement edge case by name.  This pass emits no dump at all.
 
-  - gimple-rvtt-expand.cc is well covered, by assembly scans rather than dump
-    scans: 138 tests exercise the v_if / v_elseif trees it lowers and 129
-    assert the CC instructions it emits.  This is exactly the arrangement the
-    directory README describes for the lowering passes.
-  - rtl-rvtt-spill-diag.cc is covered by 47 tests using dg-error or
-    dg-warning against its lreg-pressure-exceeded diagnostic.
-  - rtl-rvtt-lreg-livein.cc is the one genuinely thin pass: a single
-    reference across the whole testsuite.  It needs tests before submission.
+Namespace hygiene: the three interface headers created by the splits
+(dst-autoincr, lp-alloc, macro-planner) put their declarations in named
+namespaces, after an independent review found that lifting types to global
+scope had given `struct candidate' three conflicting definitions in one link.
+Four older interface headers still export unprefixed names at global scope --
+gimple-rvtt-crosscall-int.h, gimple-rvtt-prgm-int.h, rtl-rvtt-replay-int.h and
+rtl-rvtt-sched-int.h, between them sixteen types across four to eight
+consuming translation units.  No definition of any of those sixteen names
+exists outside gcc/config/riscv/tt, so this is latent rather than live; fold
+the fix into whichever subsystem patch touches them.
 
 ### Does any of this need re-measuring on silicon?
 
