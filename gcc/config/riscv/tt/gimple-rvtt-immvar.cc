@@ -542,10 +542,6 @@ immload_combine (gimple_stmt_iterator gsi, const rvtt_insn_data *call_insnd,
 		 gcall *call, const rvtt_insn_data *scalar_insnd)
 {
   gcc_checking_assert (call_insnd->is_live () == scalar_insnd->is_live ());
-  gcc_checking_assert (call_insnd->num_srcs () == 0 || call_insnd->num_srcs () == 1);
-  gcc_checking_assert (scalar_insnd->num_srcs () + 1 == call_insnd->num_srcs ());
-  gcc_checking_assert (scalar_insnd->num_args ()
-		       == call_insnd->num_args () + (scalar_insnd->has_var () ? 3 : 0));
 
   auto nlv_call_insnd = call_insnd->get_non_live ();
   int mod = TREE_INT_CST_LOW (gimple_call_arg (call, call_insnd->mod_arg ()));

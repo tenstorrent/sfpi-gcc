@@ -871,6 +871,7 @@ Deferred::postprocess_muli_addi ()
 	gimple_assign_set_rhs2 (add, var);
       else
 	gimple_assign_set_rhs1 (add, var);
+      update_stmt (add);
 
       if (dump_file)
 	{
