@@ -1,7 +1,7 @@
 // { dg-options "-mcpu=tt-bh-tensix -fno-exceptions -fno-rtti -O2" }
 // { dg-final { check-function-bodies "**" "" } }
 
-void *buf;
+unsigned long volatile *buf;
 
 void cst ()
 {

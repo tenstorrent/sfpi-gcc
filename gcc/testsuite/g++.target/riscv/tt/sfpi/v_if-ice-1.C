@@ -3,7 +3,7 @@
 #if __riscv_tt_grayskull || __riscv_tt_wormhole || __riscv_tt_blackhole
 
 namespace ckernel{
-    unsigned *instrn_buffer;
+    unsigned long *instrn_buffer;
 }
 #include <sfpi.h>
 

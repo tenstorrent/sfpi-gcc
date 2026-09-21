@@ -1,7 +1,7 @@
 // { dg-options "-mcpu=tt-bh-tensix -fno-exceptions -fno-rtti -O2" }
 // { dg-final { check-function-bodies "**" "" } }
 
-extern volatile unsigned iptr[];
+extern volatile unsigned long iptr[];
 
 namespace lohi {
 void foo () {

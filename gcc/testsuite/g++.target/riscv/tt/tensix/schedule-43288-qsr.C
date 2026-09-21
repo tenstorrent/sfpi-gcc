@@ -1,7 +1,7 @@
 // { dg-options "-mcpu=tt-qsr32-tensix -fno-exceptions -fno-rtti -O2 -fno-shrink-wrap" }
 // { dg-final { check-function-bodies "**" "" } }
 
-extern volatile unsigned iptr[];
+extern volatile unsigned long iptr[];
 
 // Positive tests: SFPMAD followed by an MAD-pipeline consumer with register
 // dependency.  QSR scoreboarding is broken for these consumers, so a
