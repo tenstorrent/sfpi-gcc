@@ -332,3 +332,81 @@ passes under it.  Support translation units travel with their subsystem.
 
 Five are flagged SPLIT FIRST at over 2000 lines, and three need tests written.
 The other 20 are submission-shaped as they stand.
+
+---
+
+## 8. The gap this plan did not account for (found 2026-09-21)
+
+The 28 patches above are reorganisation, gated on byte-identity. That framing
+is still correct. But it silently assumes the passes being reorganised are
+passes that users actually run, and they are not.
+
+### What production compiles with
+
+`tt_metal/jit_build/build.cpp` builds every kernel with:
+
+    -std=c++17 -ftt-nttp -ftt-constinit -ftt-consteval -ftt-no-dyninit
+    -flto=auto -ffast-math
+    -fno-finite-math-only -fsigned-zeros -fno-associative-math
+    -fno-exceptions -fno-rtti -fno-use-cxa-atexit -MMD -Wall -Werror
+
+There is **no `-mtt-tensix-*` flag anywhere** in `jit_build` or in tt-metal's
+CMake. Those strings appear only inside tt-llk *test* headers. So a production
+kernel gets exactly the compiler's own defaults.
+
+### What the compiler defaults to
+
+`gcc/config/riscv/riscv.opt` carries 15 `Init(1)` against 98 `Init(0)`. The
+default-on transform passes are:
+
+    cc  dce  replay  dst-ownership  lut-select  setexp-fold
+
+The sweep harness's reviewed ON set is **39** flags. **Only 3 of those 39 are
+`Init(1)`**; the harness passes the other 36 explicitly on the command line.
+
+### Consequence
+
+The board's 87 wins are measured in a configuration no production build
+produces. This is not a measurement error -- the numbers are real for the
+configuration named -- but it means the campaign's output is currently
+unreachable by users. Closing that is a larger and more valuable change than
+any file split in this plan.
+
+Two independent routes, and they are not alternatives:
+
+1. **Promote in the compiler** -- `Init(0)` -> `Init(1)` per pass, in
+   riscv.opt, with `invoke.texi` updated. One-line diffs; the whole cost is
+   evidence. Benefits every consumer of the toolchain.
+2. **Wire the flags in tt-metal** -- add the reviewed set to `common_flags`.
+   Benefits tt-metal only, and leaves the compiler's own default wrong.
+
+Route 1 is the upstreamable one.
+
+### The gate for a promotion patch differs from the 28
+
+Byte-identity cannot gate a promotion: the whole point is that emitted code
+changes. The gate is silicon, and it must be measured the right way:
+
+- **Per-knob deltas across EVERY row the pass fires on**, regressions
+  included -- not the rows where it wins. Ranking by best case inverted the
+  order entirely: `delivery-shape` looked like the top candidate at a median
+  26.9 point gain when scored on its wins, and is in fact the worst default in
+  the corpus (21 rows, 3 wins, 15 regressions, worst +64.48). See
+  `craq-sfpi/board/KNOB-PROMOTION-MATRIX-20260921.tsv`.
+- **Composition A/B**, because default-on means the promoted passes fire
+  together and they do not compose: sigmoidappx goes -10.53 to +58.95 under
+  its full firing set.
+
+On the evidence measured so far exactly one knob is a clean promotion:
+`stochrnd-store-fold`, 25 rows, 25 wins, zero regressions, worst case -0.72.
+
+### A hard constraint on two of the candidates
+
+Production sets `-fno-associative-math` and `-fno-finite-math-only`. The
+licensed knobs need the opposite: `reassoc-mad-restructure` requires
+`-fassociative-math -fno-signed-zeros -fno-trapping-math`, and
+`lut-select-leaf-ext` requires `-ffinite-math-only`. **Neither can ever be a
+production default**, whatever its `Init()` says -- they are opt-in by
+construction, and any win booked on them is unavailable to users under the
+current numerics policy. That includes the largest single-row gain measured in
+the campaign (tanhderivlut-fresh, +161.96 -> +2.69 via lut-select-leaf-ext).
