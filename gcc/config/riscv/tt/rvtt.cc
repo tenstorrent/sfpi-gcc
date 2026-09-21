@@ -99,8 +99,9 @@ rvtt_insn_data::init ()
   if (POINTER_TYPE_P (TREE_VALUE (arg_types)))
     {
       // The instrn ptr operand
-      gcc_assert (!argno
-		  && VOID_TYPE_P (TREE_TYPE (TREE_VALUE (arg_types))));
+      gcc_checking_assert (long_unsigned_type_node
+			   == TYPE_MAIN_VARIANT (TREE_TYPE (TREE_VALUE (arg_types)))
+			   && !argno);
       flags = flags_t (flags | HAS_VAR);
       arg_types = TREE_CHAIN (arg_types);
       argno++;
@@ -109,7 +110,7 @@ rvtt_insn_data::init ()
   if (is_live ())
     {
       // Skip live vector
-      gcc_assert (TREE_CODE (TREE_VALUE (arg_types)) == VECTOR_TYPE);
+      gcc_checking_assert (TREE_CODE (TREE_VALUE (arg_types)) == VECTOR_TYPE);
       arg_types = TREE_CHAIN (arg_types);
       argno++;
     }
@@ -133,11 +134,11 @@ rvtt_insn_data::init ()
       argno++;
       ix++;
 
-      gcc_assert (TREE_CODE (TREE_VALUE (arg_types)) == INTEGER_TYPE);
+      gcc_checking_assert (TREE_CODE (TREE_VALUE (arg_types)) == INTEGER_TYPE);
       arg_types = TREE_CHAIN (arg_types);
       argno++;
 
-      gcc_assert (TREE_CODE (TREE_VALUE (arg_types)) == INTEGER_TYPE);
+      gcc_checking_assert (TREE_CODE (TREE_VALUE (arg_types)) == INTEGER_TYPE);
       arg_types = TREE_CHAIN (arg_types);
       argno++;
     }
@@ -148,18 +149,18 @@ rvtt_insn_data::init ()
       auto kind = ops[ix].kind ();
       if (kind == op_t::MOD || kind == op_t::XMOD)
 	{
-	  gcc_assert (first);
-	  gcc_assert (!(kind == op_t::MOD && !ops[ix].mod ()));
+	  gcc_checking_assert (first);
+	  gcc_checking_assert (!(kind == op_t::MOD && !ops[ix].mod ()));
 	  flags = flags_t (flags | HAS_MOD);
 	  mod_pos = argno;
 	}
-      gcc_assert (TREE_CODE (TREE_VALUE (arg_types)) == INTEGER_TYPE);
+      gcc_checking_assert (TREE_CODE (TREE_VALUE (arg_types)) == INTEGER_TYPE);
       ops.set_argno (ix, argno);
 
       arg_types = TREE_CHAIN (arg_types);
       argno++;
     }
-  gcc_assert (VOID_TYPE_P (TREE_VALUE (arg_types)));
+  gcc_checking_assert (VOID_TYPE_P (TREE_VALUE (arg_types)));
   arg_num = argno;
 }
 
@@ -173,6 +174,7 @@ rvtt_record_builtin (unsigned ix, char const *name, tree decl)
     // Save a bunch of strcmps on the grounds there are at least this many others.
     return false;
 
+  unsigned ecf_flags = ECF_NOTHROW | ECF_NOVOPS;
   if (!riscv_builtin_rvtt_first)
     {
       if (strncmp (name, "__builtin_rvtt_", 15) != 0)
@@ -181,7 +183,7 @@ rvtt_record_builtin (unsigned ix, char const *name, tree decl)
       riscv_builtin_rvtt_first = ix;
 
       // Make synth_opcode a const fn, it's the only one.
-      TREE_READONLY (decl) = true;
+      ecf_flags |= ECF_CONST;
     }
 
   ix -= riscv_builtin_rvtt_first;
@@ -189,6 +191,7 @@ rvtt_record_builtin (unsigned ix, char const *name, tree decl)
   if (ix >= rvtt_insn_data::hwm)
     return false;
 
+  set_call_expr_flags (decl, ecf_flags);
   sfpu_insn_data[ix].decl = decl;
 
   return !ix;
@@ -344,7 +347,7 @@ rvtt_synth::pattern (unsigned is_synthed, const char *tmpl,
       src_regno = REGNO (src_op) - SFPU_REG_FIRST;
     else
       {
-	gcc_assert (GET_CODE (src_op) == UNSPEC);
+	gcc_checking_assert (GET_CODE (src_op) == UNSPEC);
 	if (XINT (src_op, 1) == UNSPEC_SFPCSTLREG)
 	  src_regno = INTVAL (XVECEXP (src_op, 0, 0));
 	else
@@ -362,12 +365,12 @@ rvtt_synth::pattern (unsigned is_synthed, const char *tmpl,
   if (is_set)
     {
       rtx dst_reg = operands[-1];
-      gcc_assert (REG_P (dst_reg));
+      gcc_checking_assert (REG_P (dst_reg));
       unsigned dst_shift = enc.dst_shift ();
       reg_mask |= 0xf << dst_shift;
       reg_ops |= (REGNO (dst_reg) - SFPU_REG_FIRST) << dst_shift;
     }
-  gcc_assert (!reg_mask == (tmp_ix < 0));
+  gcc_checking_assert (!reg_mask == (tmp_ix < 0));
 
   uint32_t opcode = INTVAL (operands[rvtt_synth::IX_opcode]);
   static char pattern[100];
@@ -394,7 +397,7 @@ rvtt_synth::pattern (unsigned is_synthed, const char *tmpl,
 		   is_set + rvtt_synth::IX_insn, is_set + rvtt_synth::IX_mem,
 		   enc.id (), tmpl);
 
-  gcc_assert (pos < sizeof (pattern));
+  gcc_checking_assert (pos < sizeof (pattern));
 
   return pattern;
 }

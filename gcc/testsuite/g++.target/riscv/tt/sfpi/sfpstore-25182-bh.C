@@ -3,7 +3,7 @@
 
 #include <cstdint>
 namespace ckernel{
-  extern volatile uint32_t instrn_buffer[];
+  extern volatile unsigned long instrn_buffer[];
 }
 #include <sfpi.h>
 

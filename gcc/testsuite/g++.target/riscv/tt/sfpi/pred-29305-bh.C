@@ -5,7 +5,7 @@
 // setting and so borked.
 
 namespace ckernel{
-    unsigned *instrn_buffer;
+    unsigned long *instrn_buffer;
 }
 #include <sfpi.h>
 

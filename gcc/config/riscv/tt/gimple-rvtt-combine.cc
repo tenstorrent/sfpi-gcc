@@ -348,7 +348,7 @@ bool moot_muli_addi_ok (gcall *call, bool never)
 bool
 Combiner::match_init (unsigned ix, const Shape &pat, gcall *call, matched_data &matched, match_masks &masks) const
 {
-  gcc_assert (!((1 << pat.lhs) & masks.vars));
+  gcc_checking_assert (!((1 << pat.lhs) & masks.vars));
 
   matched.calls[ix] = call;
   masks.calls |= 1 << ix;
@@ -537,9 +537,9 @@ Combiner::match (gcall *call, const rvtt_insn_data *insnd, matched_data &matched
       if (!match_shape (pats_hwm - 1, gimple_bb (call), call, insnd, matched, masks))
 	continue;
 
-      gcc_assert (masks.calls == ((1u << pats_hwm) - 1)
-		  && masks.vars == (((1u << pats_hwm) - 1)
-				    | (((1u << (pat_var_hwm - rep_lhs_hwm)) - 1) << rep_lhs_hwm)));
+      gcc_checking_assert (masks.calls == ((1u << pats_hwm) - 1)
+			   && masks.vars == (((1u << pats_hwm) - 1)
+					     | (((1u << (pat_var_hwm - rep_lhs_hwm)) - 1) << rep_lhs_hwm)));
       int ok = pred_hook ? pred_hook (matched.calls, matched.vars, matched.commute_mask) : true;
       if (!ok)
 	continue;
@@ -603,8 +603,8 @@ Combiner::replace (gimple_stmt_iterator *gsi, matched_data &matched, Deferred &d
 	  else if (insnd->id == rvtt_insn_data::sfpassign_lv)
 	    assign_lv_mask = 1 << rep.lhs;
 	}
-      gcc_assert (insnd->num_args () + lv_delta == rep.num_args
-		  && insnd->decl);
+      gcc_checking_assert (insnd->num_args () + lv_delta == rep.num_args
+			   && insnd->decl);
       auto *call = gimple_build_call (insnd->decl, insnd->num_args ());
       matched.replace[rep.lhs] = call;
 
@@ -736,11 +736,11 @@ init ()
 	// Check all patterns and replacements have decls and correct number of arguments
 	for (unsigned ix = combiner.reps_hwm; ix--;) {
 	  auto const *insnd = rvtt_get_insn_data (combiner.shapes[ix].id);
-	  gcc_assert (insnd->decl && insnd->get_non_live ()->decl);
-	  gcc_assert (insnd->num_args () == combiner.shapes[ix].num_args);
+	  gcc_checking_assert (insnd->decl && insnd->get_non_live ()->decl);
+	  gcc_checking_assert (insnd->num_args () == combiner.shapes[ix].num_args);
 	  if (!ix && combiner.is_deferred && combiner.label == Combiner::T_MULI_ADDI)
 	    // The first pattern to match must be an sfploadi
-	    gcc_assert (insnd->id == rvtt_insn_data::sfploadi);
+	    gcc_checking_assert (insnd->id == rvtt_insn_data::sfploadi);
 	}
 
 	auto id = combiner.shapes[combiner.pats_hwm - 1].id;

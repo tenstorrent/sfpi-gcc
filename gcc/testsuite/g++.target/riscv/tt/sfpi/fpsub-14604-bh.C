@@ -4,7 +4,7 @@
 // Verify we notice a - b is a + -1.0 * b
 
 namespace ckernel{
-    unsigned *instrn_buffer;
+    unsigned long *instrn_buffer;
 }
 #include <sfpi.h>
 

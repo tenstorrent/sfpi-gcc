@@ -307,12 +307,8 @@ riscv_init_builtin_types (void)
 					    "__bf16");
   if (TARGET_XTT_TENSIX)
     {
-      // Ideally we'd use unsigned_intSI_type_mode here, but that's 'unsigned',
-      // which doesn't match the library's uint32_t's underlying type (unsigned
-      // long), and that type's not easily accessible here.  So void it is.
-      // Bleah!
       RISCV_ATYPE_XTT_IPTR = build_pointer_type
-	(build_qualified_type (void_type_node, TYPE_QUAL_VOLATILE));
+	(build_qualified_type (long_unsigned_type_node, TYPE_QUAL_VOLATILE));
 
       tree attrib = get_identifier ("__xtt_vector");
       char name[16];

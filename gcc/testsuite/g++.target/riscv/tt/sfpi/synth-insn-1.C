@@ -2,7 +2,7 @@
 // { dg-final { check-function-bodies "**" "" } }
 
 namespace ckernel {
-extern volatile unsigned instrn_buffer[];
+extern volatile unsigned long instrn_buffer[];
 }
 #include "sfpi.h"
 
