@@ -711,6 +711,18 @@ Combiner::match_shape (unsigned ix, basic_block bb, gcall *call, const rvtt_insn
 bool
 Combiner::match_check (matched_data &matched, match_masks const &masks) const
 {
+  /* Re-evaluate enablement HERE, not once when the dispatch table was
+     built.  A rule's enable_hook can read per-function state:
+     combiner_enable_REASSOC_FP consults flag_associative_math, which GCC
+     swaps for every function (an `optimize' attribute, a pragma, or an
+     LTO partition can mix strict and associative functions in one
+     compilation).  The table is built once per compilation, so a hook
+     evaluated only at build time would let the FIRST function decide for
+     every later one -- admitting value-changing fusion into a strict
+     function, or withholding it from a licensed one, purely on
+     compilation order.  */
+  if (enable_hook && !enable_hook ())
+    return false;
   matched.deleted = replace_mask;
   for (int ix = 0; ix != pats_hwm; ix++)
     {
@@ -1000,8 +1012,11 @@ init ()
   };
   std::map<unsigned, const Combiner *> tmp;
 
+  /* Register every rule regardless of its enable_hook.  The hook is
+     per-function and is evaluated in Combiner::match; filtering here would
+     bake the first function's answer into a table built once per
+     compilation.  */
   for (auto &combiner : combiners)
-    if (!combiner.enable_hook || combiner.enable_hook ())
       {
 	// Check all patterns and replacements have decls and correct number of arguments
 	for (unsigned ix = combiner.reps_hwm; ix--;) {
