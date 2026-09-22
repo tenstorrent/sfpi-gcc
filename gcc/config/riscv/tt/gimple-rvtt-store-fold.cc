@@ -845,10 +845,26 @@ fn_has_prng_consumer_p (function *fun)
     for (gimple_stmt_iterator gsi = gsi_start_bb (bb); !gsi_end_p (gsi);
 	 gsi_next (&gsi))
       {
-	const rvtt_insn_data *insnd = rvtt_get_insn_data (gsi_stmt (gsi));
+	gimple *stmt = gsi_stmt (gsi);
+	const rvtt_insn_data *insnd = rvtt_get_insn_data (stmt);
 	if (!insnd)
-	  continue;
-	gcall *call = as_a <gcall *> (gsi_stmt (gsi));
+	  {
+	    /* FAIL CLOSED on anything opaque.  SFPSTOCHRND advances the
+	       hardware PRNG even in its deterministic rounding modes, so
+	       deleting one shifts the stream for every later consumer --
+	       and a consumer need not be a recognised builtin in THIS
+	       function.  An ordinary call may reach a noinline callee
+	       that consumes the stream; inline assembly may consume it
+	       directly; and the caller's continuation after this function
+	       returns is not visible here at all.  Treat any statement we
+	       cannot prove inert as a consumer, which withholds the
+	       licensed fold rather than silently re-rolling somebody
+	       else's random numbers.  */
+	    if (is_gimple_call (stmt) || gimple_code (stmt) == GIMPLE_ASM)
+	      return true;
+	    continue;
+	  }
+	gcall *call = as_a <gcall *> (stmt);
 	int mod1_pos, rnd_pos;
 	if (stochrnd_args (insnd, &mod1_pos, &rnd_pos))
 	  {
