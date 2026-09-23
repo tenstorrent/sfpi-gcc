@@ -216,12 +216,18 @@ static bool
 immvar_gather (const rvtt_insn_data *insnd,
 	       gcall *call, std::vector<gcall *> &loads)
 {
-  if (!insnd->has_var ())
+  if (!insnd->has_iptr ())
     return false;
 
   tree imm = gimple_call_arg (call, insnd->imm_arg ());
   if (SSA_VAR_P (imm))
-    return false;
+    {
+      if (integer_zerop (gimple_call_arg (call, 0)))
+	error_at (gimple_location (call), "%qE immediate operand is not known at compile time",
+		  gimple_call_fndecl (call));
+
+      return false;
+    }
 
   bool changed = false;
   if (!integer_zerop (gimple_call_arg (call, 0)))
@@ -232,8 +238,11 @@ immvar_gather (const rvtt_insn_data *insnd,
 	  print_gimple_stmt (dump_file, call, 0);
 	}
       gimple_call_set_arg (call, 0, null_pointer_node);
-      gimple_call_set_arg (call, insnd->var_arg (), integer_zero_node);
-      gimple_call_set_arg (call, insnd->id_arg (), integer_zero_node);
+      if (insnd->has_var ())
+	{
+	  gimple_call_set_arg (call, insnd->var_arg (), integer_zero_node);
+	  gimple_call_set_arg (call, insnd->id_arg (), integer_zero_node);
+	}
       update_stmt (call);
       changed = true;
     }

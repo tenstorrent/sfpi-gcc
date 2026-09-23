@@ -49,6 +49,7 @@ struct rvtt_insn_data {
 public:
   enum flags_t : uint16_t {
     MOD_SHIFT,
+    IPTR_SHIFT,
     VAR_SHIFT,
     LV_SHIFT,
     VOLATILE_SHIFT,
@@ -61,6 +62,7 @@ public:
     CC_MASK_SHIFT = 16,
 
     HAS_MOD = 1 << MOD_SHIFT, // Has a MOD operand
+    HAS_IPTR = 1 << IPTR_SHIFT, // Has an ipointer operand
     HAS_VAR = 1 << VAR_SHIFT, // Has a variable immediate operand
     HAS_LV = 1 << LV_SHIFT,   // Has an explicit live value operand
     VOLATILE = 1 << VOLATILE_SHIFT, // Has unrepresented side-effects
@@ -253,6 +255,7 @@ public:
   int mod_arg () const { return mod_pos; }
   auto &mod_info () const { return ops[has_var ()]; }
 
+  bool has_iptr () const { return flags & HAS_IPTR; }
   bool has_var () const { return flags & HAS_VAR; }
   int imm_arg () const { return ops[0].argno (); }
   int var_arg () const { return imm_arg () + 1; }

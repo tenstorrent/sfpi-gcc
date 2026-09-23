@@ -63,7 +63,7 @@ rvtt_init_builtins ()
   if (!TARGET_XTT_TENSIX)
     return;
 
-  gcc_assert (sfpu_insn_data[0].decl);
+  gcc_checking_assert (sfpu_insn_data[0].decl);
 
   static const auto tensixbh = []() { return TARGET_XTT_TENSIX_BH; };
   static const auto tensixqsr = []() { return TARGET_XTT_TENSIX_QSR; };
@@ -102,10 +102,12 @@ rvtt_insn_data::init ()
       gcc_checking_assert (long_unsigned_type_node
 			   == TYPE_MAIN_VARIANT (TREE_TYPE (TREE_VALUE (arg_types)))
 			   && !argno);
-      flags = flags_t (flags | HAS_VAR);
+      flags = flags_t ((flags ^ HAS_VAR) | HAS_IPTR);
       arg_types = TREE_CHAIN (arg_types);
       argno++;
     }
+  else
+    gcc_checking_assert (!(flags & HAS_VAR));
 
   if (is_live ())
     {

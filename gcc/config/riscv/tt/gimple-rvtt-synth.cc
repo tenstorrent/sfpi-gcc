@@ -116,7 +116,8 @@ split (function *fn)
 	auto *insnd = rvtt_get_insn_data (*gsi);
 	if (!insnd)
 	  continue;
-	if (!insnd->has_var ())
+
+	if (!insnd->has_iptr ())
 	  continue;
 
 	auto *call = as_a <gcall *> (*gsi);
@@ -124,10 +125,15 @@ split (function *fn)
 	const char *msg = nullptr;
 	if (TREE_CODE (immarg) == INTEGER_CST)
 	  {
+	    if (integer_zerop (gimple_call_arg (call, 0)))
+	      continue;
 	    msg = "Constant";
 	    gimple_call_set_arg (call, 0, null_pointer_node);
-	    gimple_call_set_arg (call, insnd->var_arg (), integer_zero_node);
+	    if (insnd->has_var ())
+	      gimple_call_set_arg (call, insnd->var_arg (), integer_zero_node);
 	  }
+	else if (!insnd->has_var ())
+	  msg = "Variable";
 	else if (!integer_zerop (gimple_call_arg (call, insnd->var_arg ())))
 	  msg = "User set";
 	else
@@ -138,7 +144,7 @@ split (function *fn)
 
 	    gimple_call_set_arg (call, insnd->var_arg (), sum);
 	    gimple_call_set_arg (call, insnd->id_arg (), synth_val);
-	    msg = "Variable";
+	    msg = "Synthesize";
 	  }
 	update_stmt (call);
 	if (dump_file)
