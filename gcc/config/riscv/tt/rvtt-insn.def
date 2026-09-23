@@ -37,6 +37,7 @@ along with GCC; see the file COPYING3.  If not see
 #define VOL rvtt_insn_data::VOLATILE
 #define EXP rvtt_insn_data::EXPANDED
 #define EMP rvtt_insn_data::EMPTY
+#define NV rvtt_insn_data::HAS_VAR // inverted sense here
 
 #define N rvtt_insn_data::op_t::NONE
 #define R rvtt_insn_data::op_t::RUNTIME
@@ -240,6 +241,9 @@ RVTT_FN (ttreplay,             ,,VOID_FTYPE_XTT_IPTR_USI_USI_USI_USI_USI_USI,   
 #undef LV
 #undef CC
 #undef VOL
+#undef EXP
+#undef EMP
+#undef NV
 
 #undef N
 #undef R
