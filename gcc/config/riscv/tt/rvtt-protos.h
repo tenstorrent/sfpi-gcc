@@ -284,6 +284,7 @@ constexpr unsigned int SFPXPRED_MOD1_PUSH = 4;
 constexpr unsigned int SFPXLOGIC_MOD1_AND = 0;
 constexpr unsigned int SFPXLOGIC_MOD1_OR = 1;
 constexpr unsigned int SFPXLOGIC_MOD1_NOT = 2;
+constexpr unsigned int SFPXLOGIC_MOD1_NEARBY = 3;
 
 constexpr unsigned int SFPXCONDI_TREE_ARG_POS = 0;
 

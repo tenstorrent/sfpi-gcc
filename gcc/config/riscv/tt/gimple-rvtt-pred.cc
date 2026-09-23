@@ -35,9 +35,23 @@ along with GCC; see the file COPYING3.  If not see
 
 using pred_list = std::vector<gcall *>;
 
+enum expand_flags {
+  EF_none,
+  EF_negate = 1 << 0,
+  EF_nearby = 1 << 1,
+};
+inline expand_flags &operator^= (expand_flags &v, expand_flags bit) {
+  v = expand_flags (v ^ bit);
+  return v;
+}
+inline expand_flags &operator|= (expand_flags &v, expand_flags bit) {
+  v = expand_flags (v | bit);
+  return v;
+}
+
 static bool expand_cond (pred_list &, unsigned &ix,
 			 gimple_stmt_iterator *leftmost, gimple_stmt_iterator *rightmost,
-			 tree var, gcall *sink, bool negate);
+			 tree var, gcall *sink, expand_flags flags);
 
 static void
 finish_new_insn (gimple_stmt_iterator *gsip, bool insert_before, gimple *new_stmt, gcall *stmt)
@@ -301,7 +315,7 @@ verify_cond_var (tree var, gcall *call)
 
 static bool
 expand_cmp (gimple_stmt_iterator *left, gimple_stmt_iterator *right,
-	    gcall *cmp, const rvtt_insn_data *insnd, bool negate)
+	    gcall *cmp, const rvtt_insn_data *insnd, expand_flags flags)
 {
   *left = *right = gsi_for_stmt (cmp);
 
@@ -309,7 +323,7 @@ expand_cmp (gimple_stmt_iterator *left, gimple_stmt_iterator *right,
   unsigned type = (mod >> SFPXCMP_MOD1_TYPE_SHIFT) & SFPXCMP_MOD1_TYPE_MASK;
   unsigned op = mod & SFPXCMP_MOD1_CC_MASK;
 
-  if (negate)
+  if (flags & EF_negate)
     op ^= SFPXCMP_MOD1_CC_EQ ^ SFPXCMP_MOD1_CC_NE;
 
   rvtt_arg_info args[2] =
@@ -404,9 +418,12 @@ expand_cmp (gimple_stmt_iterator *left, gimple_stmt_iterator *right,
   UInt  isub  isub  isub  >,<=
   */
 
+  // uint<int<smag<float
   bool negated = false;
-  if ((TARGET_XTT_TENSIX_QSR && type >= SFPXCMP_MOD1_TYPE_INT)
-       || (TARGET_XTT_TENSIX_BH && type >= SFPXCMP_MOD1_TYPE_SMAG))
+  if ((TARGET_XTT_TENSIX_BH_QSR && type >= SFPXCMP_MOD1_TYPE_SMAG)
+      || (TARGET_XTT_TENSIX_QSR && type == SFPXCMP_MOD1_TYPE_INT
+	  && ((op | (SFPXCMP_MOD1_CC_NE ^ SFPXCMP_MOD1_CC_EQ)) == SFPXCMP_MOD1_CC_NE
+	      || !(flags & EF_nearby))))
     negated = expand_cmp_using_gtle (right, cmp, args, op, type);
   else
     negated = expand_cmp_using_sub (right, cmp, args, op, type);
@@ -414,7 +431,7 @@ expand_cmp (gimple_stmt_iterator *left, gimple_stmt_iterator *right,
   return negated;
 }
 
-// Handle AND, OR & NOT logical operations
+// Handle AND, OR, NOT & NEARBY logical operations
 //
 // Recursively processes a tree of boolean expressions.	 ORs are converted to
 // ANDs by negating the children of the current node.  The negation is toggled
@@ -429,25 +446,34 @@ expand_cmp (gimple_stmt_iterator *left, gimple_stmt_iterator *right,
 static bool
 expand_logical (pred_list &preds, unsigned &ix,
 		gimple_stmt_iterator *leftmost, gimple_stmt_iterator *rightmost,
-		gcall *call, const rvtt_insn_data *call_insnd, bool negate)
+		gcall *call, const rvtt_insn_data *call_insnd,  expand_flags flags)
 {
   unsigned op = TREE_INT_CST_LOW (gimple_call_arg (call, call_insnd->mod_arg ()));
   tree lhs = gimple_call_arg (call, call_insnd->mod_arg () + 1);
   
   if (op == SFPXLOGIC_MOD1_NOT)
-    return expand_cond (preds, ix, leftmost, rightmost, lhs, call, !negate);
+    {
+      flags ^= EF_negate;
+      return expand_cond (preds, ix, leftmost, rightmost, lhs, call, flags);
+    }
+  if (op == SFPXLOGIC_MOD1_NEARBY)
+    {
+      flags |= EF_nearby;
+      return expand_cond (preds, ix, leftmost, rightmost, lhs, call, flags);
+    }
 
-  bool negated = op == (negate ? SFPXLOGIC_MOD1_AND : SFPXLOGIC_MOD1_OR);
-  negate ^= negated;
+  bool negated = op == (flags & EF_negate ? SFPXLOGIC_MOD1_AND : SFPXLOGIC_MOD1_OR);
+  if (negated)
+    flags ^= EF_negate;
 
   // Emit LEFT
   gimple_stmt_iterator lhs_rightmost;
-  bool left_negated = expand_cond (preds, ix, leftmost, &lhs_rightmost, lhs, call, negate);
+  bool left_negated = expand_cond (preds, ix, leftmost, &lhs_rightmost, lhs, call, flags);
 
   // Emit RIGHT
   gimple_stmt_iterator rhs_leftmost;
   tree rhs = gimple_call_arg (call, call_insnd->mod_arg () + 2);
-  bool right_negated = expand_cond (preds, ix, &rhs_leftmost, rightmost, rhs, call, negate);
+  bool right_negated = expand_cond (preds, ix, &rhs_leftmost, rightmost, rhs, call, flags);
 
   if (right_negated)
     {
@@ -473,7 +499,7 @@ expand_logical (pred_list &preds, unsigned &ix,
 static bool
 expand_cond (pred_list &preds, unsigned &ix,
 	     gimple_stmt_iterator *leftmost, gimple_stmt_iterator *rightmost,
-	     tree var, gcall *sink, bool negate)
+	     tree var, gcall *sink, expand_flags flags)
 {
   bool negated = false;
 
@@ -486,7 +512,7 @@ expand_cond (pred_list &preds, unsigned &ix,
 	break;
 
       case rvtt_insn_data::sfpxcmp:
-	if (expand_cmp (leftmost, rightmost, call, insnd, negate))
+	if (expand_cmp (leftmost, rightmost, call, insnd, flags))
 	  {
 	    emit_compc (rightmost, call, false);
 	    negated = true;
@@ -495,7 +521,7 @@ expand_cond (pred_list &preds, unsigned &ix,
 
       case rvtt_insn_data::sfpxlogic:
 	negated = expand_logical (preds, ix, leftmost, rightmost,
-				  call, insnd, negate);
+				  call, insnd, flags);
 	break;
       }
 
@@ -574,7 +600,7 @@ expand_vif (function *fun)
 	      tree cond_var = gimple_call_arg (call, insnd->mod_arg () + 2);
 	      gimple_stmt_iterator leftmost, rightmost;
 
-	      expand_cond (preds, ix, &leftmost, &rightmost, cond_var, call, false);
+	      expand_cond (preds, ix, &leftmost, &rightmost, cond_var, call, EF_none);
 
 	      verify_cond_call (preds, ix, call);
 	      gimple_call_set_arg (call, insnd->mod_arg () + 2, integer_zero_node);

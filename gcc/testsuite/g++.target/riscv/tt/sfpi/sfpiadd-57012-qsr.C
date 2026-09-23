@@ -76,7 +76,7 @@ void better () {
   vFloat y = l_reg[LRegs::LReg0];
   sfpi::vInt e = sfpi::exexp(y, sfpi::ExponentMode::Biased);
 
-  v_if (e - 255 < 0) {
+  v_if (nearby (e < 255)) {
     y = sfpi::setexp(y, e);
     v_if (e == 0) {
       y = 0.0f;
