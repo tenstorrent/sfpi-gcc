@@ -327,13 +327,13 @@
   [(set_attr "type" "ttrocc")])
 
 (define_insn "riscv_ttrocc_addrgen_push_both"
-  [(unspec_volatile:DI [(match_operand:DI 0 "register_operand" "r")] UNSPECV_ADDRGEN_PUSH_BOTH)]
+  [(unspec_volatile:DI [(match_operand:DI 0 "const_int_operand" "n")] UNSPECV_ADDRGEN_PUSH_BOTH)]
   "TARGET_XTT_ROCC_QSR"
   "tt.rocc.addrgen_push_both\t%0"
   [(set_attr "type" "ttrocc")])
 
 (define_insn "riscv_ttrocc_addrgen_push_both_pop_x"
-  [(unspec_volatile:DI [(match_operand:DI 0 "register_operand" "r")
+  [(unspec_volatile:DI [(match_operand:DI 0 "const_int_operand" "n")
                      (match_operand:DI 1 "register_operand" "r")
                      (match_operand:DI 2 "register_operand" "r")] UNSPECV_ADDRGEN_PUSH_BOTH_POP_X)]
   "TARGET_XTT_ROCC_QSR"
