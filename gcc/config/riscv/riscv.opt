@@ -546,6 +546,8 @@ Mask(XTT_TENSIX_QSR) Var(riscv_tt_subext)
 
 Mask(XTT_TENSIX_WH) Var(riscv_tt_subext)
 
+Mask(XTT_ZBKB) Var(riscv_tt_subext)
+
 mtt-fix-qsrreplay
 Target Var(riscv_tt_fix_qsr_replay) Init(-1)
 Emit code to address Quasar replay erratum
