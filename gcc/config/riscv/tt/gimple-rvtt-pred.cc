@@ -40,32 +40,36 @@ along with GCC; see the file COPYING3.  If not see
 
 // A predicate node marks an block.if/else/end.
 // We constrain the graph.  The graph doesn't persist beyond the current
-// function's processing. We allocate from ggc memory and it just all gets
-// blown away at the next GC.
+// function's processing.
 
-struct pred_node
+struct GTY((chain_next ("%h.chain"))) pred_node
 {
-  pred_node *next = nullptr; // next at this level
+  pred_node *parent = nullptr; // Node within-which we reside
 
-  pred_node *parent = nullptr; // node withinn this one resides
   pred_node *child = nullptr; // predicates inside this node
+  pred_node *first = nullptr; // First node of this sequence
 
-  pred_node *chain = nullptr; // chained pred 
+  pred_node *chain = nullptr; // chained pred, last points to next sequence
 
   gcall *call = nullptr; // The call marking this point
   gcall *cond = nullptr; // The sfpxcond (if applicable)
 
   unsigned mod = 0; // The mod flags for this node
+  unsigned depth = 0;
+
+  pred_node (gcall *call, unsigned mod)
+    :call (call), mod (mod) {}
 };
 
-class pred_map
-{
-  std::unordered_map<gcall *, pred_node *> call_map;
-  pred_node *root;
-};
+using node_pair = std::pair<pred_node *, pred_node *>;
+
+static GTY(()) pred_node *predicates;
 
 using call_vec_t = std::vector<gcall *>;
 using stmt_vec_t = std::vector<gimple *>;
+
+// Map used during node graph construction
+using ssa_node_map_t = std::unordered_map<tree, pred_node *>;
 using ssa_map_t = std::unordered_map<tree, std::pair<gcall *, unsigned>>;
 
 static bool expand_cond (call_vec_t &, unsigned &ix,
@@ -541,8 +545,111 @@ expand_cond (call_vec_t &conds, unsigned &ix,
   return negated;
 }
 
+// Create a new pred_node for CALL and link it in to the graph.  Diagnose
+// malformed graphs.
+
+static void
+chain_pred (node_pair &pair, gcall *call, unsigned xmod)
+{
+  unsigned mod = xmod & ((1 << SFPXPRED_MOD1_DEPTH_SHIFT) - 1);
+  pred_node *node = new (ggc_alloc<pred_node> ()) pred_node (call, mod);
+
+  if (mod == SFPXPRED_MOD1_PUSH
+      || mod == (SFPXPRED_MOD1_PUSH | SFPXPRED_MOD1_IF))
+    {
+      // New v_if, chain on
+      if (!pair.first)
+	pair.first = node;
+      else if (!pair.second->mod)
+	{
+	  // Sibling
+	  pair.second->chain = node;
+	  node->parent = pair.second->parent;
+	}
+      else
+	{
+	  // Child
+	  if (pair.second->child)
+	    {
+	      auto probe = pair.second->child;
+	      while (probe->chain)
+		probe = probe->chain;
+	      if (probe->mod)
+		gcc_unreachable (); // ERROR bad nesting
+	      probe->chain = node;
+	      node->parent = pair.second;
+	    }
+	  else
+	    {
+	      pair.second->child = node;
+	      node->parent = pair.second;
+	    }
+	}
+    }
+  else
+    {
+      // Continuing v_if, find chain to continue
+      // verify via dep var
+      pred_node *probe = pair.second;
+    loop:;
+      while (probe && !probe->mod)
+	probe = probe->parent;
+      if (probe)
+	{
+	  tree dep = gimple_call_lhs (probe->cond ? probe->cond : probe->call);
+	  // FIXME: What about PHI nodes -- need to look through them
+	  if (gimple_call_arg (call, 1) != dep) {
+	    gcc_unreachable (); // ERROR bad nesting
+	    probe = probe->parent;
+	    goto loop;
+	  }
+	  probe->chain = node;
+	  node->depth = probe->depth;
+	  node->parent = probe->parent;
+	  node->first = probe->first ? probe->first : probe;
+
+	  switch (mod)
+	    {
+	    case SFPXPRED_MOD1_END:
+	      // allowed anywhere
+	      if (gimple_call_lhs (call))
+		gcc_unreachable (); // ERROR
+	      break;
+
+	    case SFPXPRED_MOD1_IF:
+	      // Only alloed inside a block
+	      if (node->first->mod & SFPXPRED_MOD1_IF)
+		gcc_unreachable (); // ERROR
+	      break;
+
+	    case SFPXPRED_MOD1_ELSE:
+	    case SFPXPRED_MOD1_IF | SFPXPRED_MOD1_ELSE | SFPXPRED_MOD1_PUSH:
+	      // Only allowed not in a block, cannot follow ELSE
+	      if (!(node->first->mod & SFPXPRED_MOD1_IF))
+		gcc_unreachable (); // ERROR;
+	      if (probe->mod == SFPXPRED_MOD1_ELSE)
+		gcc_unreachable ();
+	      break;
+
+	    default:
+	      gcc_unreachable (); // ERROR 
+	    }
+	}
+      else
+	gcc_unreachable (); // ERROR bad nesting
+    }
+
+  // Check depth
+  if (mod & SFPXPRED_MOD1_PUSH)
+    node->depth++;
+  if (node->depth != (xmod >> SFPXPRED_MOD1_DEPTH_SHIFT))
+    gcc_unreachable (); // ERROR
+
+  pair.second = node;
+}
+
 static bool
-expand_conditionals (call_vec_t &conds, call_vec_t &preds, ssa_map_t &ssa_map, basic_block bb)
+expand_conditionals (call_vec_t &conds, call_vec_t &preds, ssa_map_t &ssa_map, basic_block bb, node_pair &node_pair)
 {
   bool changed = false;
 
@@ -577,12 +684,14 @@ expand_conditionals (call_vec_t &conds, call_vec_t &preds, ssa_map_t &ssa_map, b
 			  "Disallowed nested predication region");
 	      }
 
+	    int mod = TREE_INT_CST_LOW (gimple_call_arg (call, insnd->mod_arg ()));
+	    chain_pred (node_pair, call, mod);
+
 	    if (tree lhs = gimple_call_lhs (call))
 	      ssa_map.insert ({lhs, {call, 0}});
 	    else
 	      preds.push_back (call);
 
-	    int mod = TREE_INT_CST_LOW (gimple_call_arg (call, insnd->mod_arg ()));
 	    if (mod & SFPXPRED_MOD1_IF)
 	      conds.push_back (call);
 	  }
@@ -599,6 +708,12 @@ expand_conditionals (call_vec_t &conds, call_vec_t &preds, ssa_map_t &ssa_map, b
 	  if (insnd->id != rvtt_insn_data::sfpxcond)
 	    break;
 	  
+	  if (node_pair.second && node_pair.second->mod & SFPXPRED_MOD1_IF)
+	    {
+	      // FIXME:Verify ssa dep?
+	      node_pair.second->cond = call;
+	    }
+
 	  if (dump_file)
 	    {
 	      fprintf (dump_file, "Expanding ");
@@ -810,6 +925,25 @@ check_preds (stmt_vec_t &preds)
     }
 }
 
+static void
+print_node (FILE *stream, pred_node *node, unsigned depth = 0)
+{
+  if (!node)
+    return;
+
+  static const char spaces[] = "          ";
+  fprintf (stream, "%.*s0x%x, %d ", depth * 2, spaces,
+	   node->mod, node->depth);
+  print_gimple_stmt (stream, node->call, 0);
+  if (node->cond)
+    {
+      fprintf (stream, "%.*s  cond:", depth * 2, spaces);
+      print_gimple_stmt (stream, node->cond, 0);
+    }
+  print_node (stream, node->child, depth + 1);
+  print_node (stream, node->chain, depth);
+}
+
 // The hardware does not support OR and generates some comparisons (LTE, GE)
 // by ANDing others together and issuing a compc.  This requires refactoring
 // boolean expressions using De Moragan's laws.	 The root of a tree is anchored
@@ -818,7 +952,7 @@ check_preds (stmt_vec_t &preds)
 // replaces it with one that works w/ the HW.
 
 static unsigned
-expand_xpred (function *fn)
+expand_vif (function *fn)
 {
   call_vec_t cond_vec;
   call_vec_t pred_vec;
@@ -827,7 +961,7 @@ expand_xpred (function *fn)
   
   // Walk the blocks in something like graph order.  With the exception of
   // loop back edges every block is walked after its predecessors.
-  std::deque<basic_block> worklist;
+  std::deque<std::pair<basic_block, pred_node *>> worklist;
 
   basic_block bb;
   FOR_ALL_BB_FN (bb, fn)
@@ -835,14 +969,16 @@ expand_xpred (function *fn)
 
   basic_block entry = ENTRY_BLOCK_PTR_FOR_FN (fn);
   entry->flags |= BB_VISITED;
-  worklist.emplace_back (entry);
+  worklist.emplace_back (entry, nullptr);
 
+  node_pair node_pair {nullptr, nullptr};
   while (!worklist.empty ())
     {
-      auto bb = worklist.front ();
+      auto [bb, node] = worklist.front ();
       worklist.pop_front ();
 
-      if (expand_conditionals (cond_vec, pred_vec, pred_map, bb))
+      node_pair.second = node;
+      if (expand_conditionals (cond_vec, pred_vec, pred_map, bb, node_pair))
 	changed = true;
 
       edge e;
@@ -853,10 +989,18 @@ expand_xpred (function *fn)
 	  if (!(s->flags & BB_VISITED))
 	    {
 	      s->flags |= BB_VISITED;
-	      worklist.push_back (s);
+	      worklist.push_back ({s, node_pair.second});
 	    }
 	}
     }
+
+  predicates = node_pair.first;
+  if (dump_file && predicates)
+    {
+      fprintf (dump_file, "\nv_if graph:\n");
+      print_node (dump_file, predicates);
+    }
+  // FIXME: Verify flow in/out of vif nodes
 
   // Check the pred_vec contains well-formed xpred chains
   auto pred_vector = gather_preds (pred_vec, pred_map);
@@ -894,7 +1038,7 @@ public:
 
   virtual unsigned int execute (function *fn) override
   {
-    return expand_xpred (fn);
+    return expand_vif (fn);
   }
 }; // class pass_rvtt_vif
 
