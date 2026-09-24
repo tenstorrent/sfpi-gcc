@@ -37,19 +37,21 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt.h"
 #include <deque>
 #include <unordered_map>
+#include <unordered_set>
 
+namespace {
 // A predicate node marks an block.if/else/end.
 // We constrain the graph.  The graph doesn't persist beyond the current
 // function's processing.
 
-struct GTY((chain_next ("%h.chain"))) pred_node
+struct GTY((chain_next ("%h.chain"))) pred_node_t
 {
-  pred_node *parent = nullptr; // Node within-which we reside
+  pred_node_t *parent = nullptr; // Node within-which we reside
 
-  pred_node *child = nullptr; // predicates inside this node
-  pred_node *first = nullptr; // First node of this sequence
+  pred_node_t *child = nullptr; // predicates inside this node
+  pred_node_t *first = nullptr; // First node of this sequence
 
-  pred_node *chain = nullptr; // chained pred, last points to next sequence
+  pred_node_t *chain = nullptr; // chained pred, last points to next sequence
 
   gcall *call = nullptr; // The call marking this point
   gcall *cond = nullptr; // The sfpxcond (if applicable)
@@ -57,19 +59,118 @@ struct GTY((chain_next ("%h.chain"))) pred_node
   unsigned mod = 0; // The mod flags for this node
   unsigned depth = 0;
 
-  pred_node (gcall *call, unsigned mod)
-    :call (call), mod (mod) {}
+  pred_node_t (gcall *call, unsigned xmod)
+    :call (call), mod (xmod & ((1 << SFPXPRED_MOD1_DEPTH_SHIFT) - 1)),
+    depth (xmod >> SFPXPRED_MOD1_DEPTH_SHIFT) {}
 };
 
-using node_pair = std::pair<pred_node *, pred_node *>;
+struct graph_t
+{
+  std::unordered_map<tree, pred_node_t *> map;
+  std::vector<pred_node_t *> nodes;
 
-static GTY(()) pred_node *predicates;
+  void record (pred_node_t *node, gcall *call) {
+    nodes.push_back (node);
+    if (auto lhs = gimple_call_lhs (call))
+      map.insert ({lhs, node});
+  }
+
+  void assemble ();
+  pred_node_t *find (std::unordered_set<gphi *> &phis, tree var) const;
+};
+}
+
+pred_node_t *
+graph_t::find (std::unordered_set<gphi *> &phis, tree var) const
+{
+  auto def = SSA_NAME_DEF_STMT (var);
+  if (auto *phi = dyn_cast <gphi *> (def))
+    {
+      if (!phis.insert (phi).second)
+	return nullptr;
+
+      pred_node_t *result = nullptr;
+      use_operand_p arg_p;
+      ssa_op_iter iter;
+      FOR_EACH_PHI_ARG (arg_p, phi, iter, SSA_OP_USE)
+	{
+	  auto r = find (phis, USE_FROM_PTR (arg_p));
+	  if (r)
+	    {
+	      if (result)
+		gcc_unreachable (); // ERROR
+	      result = r;
+	    }
+	}
+      return result;
+    }
+
+  auto prev = map.find (var);
+  if (prev != map.end () && prev->second->first)
+    return prev->second;
+
+  return nullptr;
+}
+  
+void
+graph_t::assemble ()
+{
+  std::vector<pred_node_t *> fragments;
+  auto slot = nodes.begin ();
+  for (auto node : nodes)
+    {
+      auto dep = gimple_call_arg (node->call, 1);
+      if (SSA_VAR_P (dep))
+	{
+	  auto prev = map.find (dep);
+	  if (prev != map.end ())
+	    {
+	      if (prev->second->chain)
+		gcc_unreachable (); // ERROR
+	      prev->second->chain = node;
+	    }
+	  else
+	    {
+	      auto def = SSA_NAME_DEF_STMT (dep);
+	      if (!is_a <gphi *> (def))
+		gcc_unreachable (); // ERROR
+	      fragments.push_back (node);
+	    }
+	}
+      else
+	*slot++ = node;
+    }
+
+  nodes.erase (slot, nodes.end ());
+
+  // thread up the roots
+  for (auto node : nodes)
+    for (auto probe = node; probe; probe = probe->chain)
+      probe->first = node;
+
+  // attach the fragments
+  std::unordered_set<gphi *> phis;
+  for (auto frag : fragments)
+    {
+      auto prev = find (phis, gimple_call_arg (frag->call, 1));
+      phis.clear ();
+      if (!prev)
+	gcc_unreachable (); // ERROR
+      if (prev->chain)
+	gcc_unreachable (); // ERROR
+      prev->chain = frag;
+      for (auto probe = frag; probe; probe = probe->chain)
+	probe->first = prev->first;
+    }
+}
+
+static GTY(()) pred_node_t *predicates;
 
 using call_vec_t = std::vector<gcall *>;
 using stmt_vec_t = std::vector<gimple *>;
 
 // Map used during node graph construction
-using ssa_node_map_t = std::unordered_map<tree, pred_node *>;
+using ssa_node_map_t = std::unordered_map<tree, pred_node_t *>;
 using ssa_map_t = std::unordered_map<tree, std::pair<gcall *, unsigned>>;
 
 static bool expand_cond (call_vec_t &, unsigned &ix,
@@ -545,14 +646,15 @@ expand_cond (call_vec_t &conds, unsigned &ix,
   return negated;
 }
 
-// Create a new pred_node for CALL and link it in to the graph.  Diagnose
+// Create a new pred_node_t for CALL and link it in to the graph.  Diagnose
 // malformed graphs.
 
+#if 0
 static void
 chain_pred (node_pair &pair, gcall *call, unsigned xmod)
 {
   unsigned mod = xmod & ((1 << SFPXPRED_MOD1_DEPTH_SHIFT) - 1);
-  pred_node *node = new (ggc_alloc<pred_node> ()) pred_node (call, mod);
+  pred_node_t *node = new (ggc_alloc<pred_node_t> ()) pred_node_t (call, mod);
 
   if (mod == SFPXPRED_MOD1_PUSH
       || mod == (SFPXPRED_MOD1_PUSH | SFPXPRED_MOD1_IF))
@@ -590,7 +692,7 @@ chain_pred (node_pair &pair, gcall *call, unsigned xmod)
     {
       // Continuing v_if, find chain to continue
       // verify via dep var
-      pred_node *probe = pair.second;
+      pred_node_t *probe = pair.second;
     loop:;
       while (probe && !probe->mod)
 	probe = probe->parent;
@@ -617,7 +719,7 @@ chain_pred (node_pair &pair, gcall *call, unsigned xmod)
 	      break;
 
 	    case SFPXPRED_MOD1_IF:
-	      // Only alloed inside a block
+	      // Only allowed inside a block
 	      if (node->first->mod & SFPXPRED_MOD1_IF)
 		gcc_unreachable (); // ERROR
 	      break;
@@ -647,11 +749,12 @@ chain_pred (node_pair &pair, gcall *call, unsigned xmod)
 
   pair.second = node;
 }
-
+#endif
 static bool
-expand_conditionals (call_vec_t &conds, call_vec_t &preds, ssa_map_t &ssa_map, basic_block bb, node_pair &node_pair)
+expand_conditionals (graph_t &graph, call_vec_t &conds, call_vec_t &preds, ssa_map_t &ssa_map, basic_block bb)
 {
   bool changed = false;
+  pred_node_t *node = nullptr;
 
   for (auto gsi = gsi_start_bb (bb); !gsi_end_p (gsi); gsi_next (&gsi))
     {
@@ -684,16 +787,18 @@ expand_conditionals (call_vec_t &conds, call_vec_t &preds, ssa_map_t &ssa_map, b
 			  "Disallowed nested predication region");
 	      }
 
-	    int mod = TREE_INT_CST_LOW (gimple_call_arg (call, insnd->mod_arg ()));
-	    chain_pred (node_pair, call, mod);
-
 	    if (tree lhs = gimple_call_lhs (call))
 	      ssa_map.insert ({lhs, {call, 0}});
 	    else
 	      preds.push_back (call);
 
-	    if (mod & SFPXPRED_MOD1_IF)
+	    int xmod = TREE_INT_CST_LOW (gimple_call_arg (call, insnd->mod_arg ()));
+	    node = new (ggc_alloc<pred_node_t> ()) pred_node_t (call, xmod);
+
+	    if (xmod & SFPXPRED_MOD1_IF)
 	      conds.push_back (call);
+	    else
+	      graph.record (node, call);
 	  }
 	  break;
 
@@ -707,12 +812,10 @@ expand_conditionals (call_vec_t &conds, call_vec_t &preds, ssa_map_t &ssa_map, b
 	  conds.push_back (call);
 	  if (insnd->id != rvtt_insn_data::sfpxcond)
 	    break;
-	  
-	  if (node_pair.second && node_pair.second->mod & SFPXPRED_MOD1_IF)
-	    {
-	      // FIXME:Verify ssa dep?
-	      node_pair.second->cond = call;
-	    }
+
+	  node->cond = call;
+	  graph.record (node, call);
+	  // FIXME:Verify ssa dep?
 
 	  if (dump_file)
 	    {
@@ -926,7 +1029,7 @@ check_preds (stmt_vec_t &preds)
 }
 
 static void
-print_node (FILE *stream, pred_node *node, unsigned depth = 0)
+print_node (FILE *stream, pred_node_t *node, unsigned depth = 0)
 {
   if (!node)
     return;
@@ -954,6 +1057,7 @@ print_node (FILE *stream, pred_node *node, unsigned depth = 0)
 static unsigned
 expand_vif (function *fn)
 {
+  graph_t graph;
   call_vec_t cond_vec;
   call_vec_t pred_vec;
   ssa_map_t pred_map;
@@ -961,7 +1065,7 @@ expand_vif (function *fn)
   
   // Walk the blocks in something like graph order.  With the exception of
   // loop back edges every block is walked after its predecessors.
-  std::deque<std::pair<basic_block, pred_node *>> worklist;
+  std::deque<basic_block> worklist;
 
   basic_block bb;
   FOR_ALL_BB_FN (bb, fn)
@@ -969,16 +1073,14 @@ expand_vif (function *fn)
 
   basic_block entry = ENTRY_BLOCK_PTR_FOR_FN (fn);
   entry->flags |= BB_VISITED;
-  worklist.emplace_back (entry, nullptr);
+  worklist.emplace_back (entry);
 
-  node_pair node_pair {nullptr, nullptr};
   while (!worklist.empty ())
     {
-      auto [bb, node] = worklist.front ();
+      bb = worklist.front ();
       worklist.pop_front ();
 
-      node_pair.second = node;
-      if (expand_conditionals (cond_vec, pred_vec, pred_map, bb, node_pair))
+      if (expand_conditionals (graph, cond_vec, pred_vec, pred_map, bb))
 	changed = true;
 
       edge e;
@@ -989,16 +1091,20 @@ expand_vif (function *fn)
 	  if (!(s->flags & BB_VISITED))
 	    {
 	      s->flags |= BB_VISITED;
-	      worklist.push_back ({s, node_pair.second});
+	      worklist.push_back (s);
 	    }
 	}
     }
 
-  predicates = node_pair.first;
-  if (dump_file && predicates)
+  graph.assemble ();
+  // FIXME: verify control flow
+  // FIXME: Nest and chain separate v_ifs
+
+  if (dump_file && !graph.nodes.empty ())
     {
       fprintf (dump_file, "\nv_if graph:\n");
-      print_node (dump_file, predicates);
+      for (auto node : graph.nodes)
+	print_node (dump_file, node);
     }
   // FIXME: Verify flow in/out of vif nodes
 
