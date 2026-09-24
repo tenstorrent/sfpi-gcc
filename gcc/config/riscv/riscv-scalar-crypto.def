@@ -18,7 +18,7 @@ along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
 // ZBKB
-RISCV_BUILTIN (pack_sihi, "pack", RISCV_USI_FTYPE_UHI_UHI, crypto_zbkb32),
+RISCV_BUILTIN (pack_sihi, "pack", RISCV_USI_FTYPE_UHI_UHI, crypto_zbkb32_xtt_zbkb),
 RISCV_BUILTIN (pack_disi, "pack", RISCV_UDI_FTYPE_USI_USI, crypto_zbkb64),
 
 RISCV_BUILTIN (packh_si, "packh", RISCV_USI_FTYPE_UQI_UQI, crypto_zbkb32),
@@ -29,7 +29,7 @@ RISCV_BUILTIN (packw, "packw", RISCV_UDI_FTYPE_UHI_UHI, crypto_zbkb64),
 RISCV_BUILTIN (zip, "zip", RISCV_USI_FTYPE_USI, crypto_zbkb32),
 RISCV_BUILTIN (unzip, "unzip", RISCV_USI_FTYPE_USI, crypto_zbkb32),
 
-RISCV_BUILTIN (brev8_si, "brev8_32", RISCV_USI_FTYPE_USI, crypto_zbkb),
+RISCV_BUILTIN (brev8_si, "brev8_32", RISCV_USI_FTYPE_USI, crypto_zbkb_xtt_zbkb),
 RISCV_BUILTIN (brev8_di, "brev8_64", RISCV_UDI_FTYPE_UDI, crypto_zbkb64),
 
 // ZBKX

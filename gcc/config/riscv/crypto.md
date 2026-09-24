@@ -75,7 +75,7 @@
   [(set (match_operand:GPR 0 "register_operand" "=r")
         (unspec:GPR [(match_operand:GPR 1 "register_operand" "r")]
                   UNSPEC_BREV8))]
-  "TARGET_ZBKB"
+  "TARGET_ZBKB || TARGET_XTT_ZBKB"
   "brev8\t%0,%1"
   [(set_attr "type" "crypto")])
 
@@ -100,7 +100,7 @@
         (unspec:X [(match_operand:HISI 1 "register_operand" "r")
                   (match_operand:HISI 2 "register_operand" "r")]
                   UNSPEC_PACK))]
-  "TARGET_ZBKB"
+  "TARGET_ZBKB || TARGET_XTT_ZBKB"
   "pack\t%0,%1,%2"
   [(set_attr "type" "crypto")])
 
@@ -113,7 +113,7 @@
 			 (match_operand 2 "immediate_operand" "n"))
 	       (zero_extend:X
 		 (match_operand:HX 3 "register_operand" "r"))))]
-  "TARGET_ZBKB && INTVAL (operands[2]) == BITS_PER_WORD / 2"
+  "(TARGET_ZBKB || TARGET_XTT_ZBKB) && INTVAL (operands[2]) == BITS_PER_WORD / 2"
   "pack\t%0,%3,%1"
   [(set_attr "type" "crypto")])
 
