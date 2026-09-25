@@ -152,6 +152,35 @@ static unsigned n_folded;
    returns false so recognizers can bail with `return refuse
    (...)'.  */
 
+
+/* main folded sfpxicmps/icmpv/fcmps/fcmpv into a single sfpxcmp whose two
+   value operands are both vectors.  The old "scalar" compare forms -- a
+   vector against an immediate carried in args 2..4 -- are now a compare
+   against a CONSTANT OPERAND, and the kind (int/float) moved into the mod.
+   Return the non-constant operand through *VALUE and the constant one
+   through *CST; false when the compare is vector-vs-vector, which is the
+   shape this pass has always refused.  */
+
+static bool
+rvtt_cmp_value_and_cst (gcall *cmp, tree *value, uint32_t *cst)
+{
+  rvtt_arg_info a0 (gimple_call_arg (cmp, 0));
+  rvtt_arg_info a1 (gimple_call_arg (cmp, 1));
+  if (a1.is_cst () && !a0.is_cst ())
+    {
+      *value = a0.get_arg ();
+      *cst = a1.get_cst ();
+      return true;
+    }
+  if (a0.is_cst () && !a1.is_cst ())
+    {
+      *value = a1.get_arg ();
+      *cst = a0.get_cst ();
+      return true;
+    }
+  return false;
+}
+
 static bool
 refuse (const char *reason, gimple *stmt)
 {
@@ -229,20 +258,25 @@ match_group (gimple_stmt_iterator gsi, intabs_group *g, bool *candidate)
 	    if (want != WANT_ICMP)
 	      return *candidate ? refuse ("int-abs-region-shape", stmt)
 				: false;
+	    /* Float and vector-vector compares keep the CC lowering: the
+	       SFPABS equivalence proof here covers the signed-int sign
+	       test against literal 0 only.  (A float region is the
+	       ccmask pass's candidate class, never this one.)  Those used
+	       to be separate builtins and refused here by identity; main
+	       folded all four into sfpxcmp, so vector-vs-vector refuses
+	       here by shape and the int/float kind is refused by mod in
+	       check_compare_form below -- same two refusal names, same
+	       admitted set.  */
+	    tree value;
+	    uint32_t cst;
+	    if (!rvtt_cmp_value_and_cst (call, &value, &cst))
+	      return *candidate
+		? refuse ("int-abs-compare-kind-unsupported", stmt) : false;
 	    g->icmp = call;
-	    g->x = gimple_call_arg (call, 1);
+	    g->x = value;
 	    want = WANT_CONDB;
 	    continue;
 	  }
-
-	case rvtt_insn_data::sfpxcmp:
-	  /* Float and vector-vector compares keep the CC lowering: the
-	     SFPABS equivalence proof here covers the signed-int sign
-	     test against literal 0 only.  (A float region is the
-	     ccmask pass's candidate class, never this one.)  */
-	  return *candidate ? refuse ("int-abs-compare-kind-unsupported",
-				      stmt)
-			    : false;
 
 	case rvtt_insn_data::sfpxcond:
 	  {
@@ -400,7 +434,8 @@ match_group (gimple_stmt_iterator gsi, intabs_group *g, bool *candidate)
      EQ/NE are not order tests; every other type or boundary lowers
      differently.  */
   {
-    long mod = rvtt_call_int_arg (g->icmp, 5);
+    const rvtt_insn_data *cmp_insnd = rvtt_get_insn_data (g->icmp);
+    long mod = rvtt_call_int_arg (g->icmp, cmp_insnd->mod_arg ());
     if (mod < 0)
       return refuse ("int-abs-compare-form", g->icmp);
     unsigned type = ((unsigned) mod >> SFPXCMP_MOD1_TYPE_SHIFT)
@@ -415,9 +450,13 @@ match_group (gimple_stmt_iterator gsi, intabs_group *g, bool *candidate)
     unsigned eff = g->compc ? (cc ^ 1) : cc;
     if (eff != SFPXCMP_MOD1_CC_LT && eff != SFPXCMP_MOD1_CC_LE)
       return refuse ("int-abs-region-shape", g->icmp);
-    if (rvtt_call_int_arg (g->icmp, 2) != 0
-	|| rvtt_call_int_arg (g->icmp, 3) != 0
-	|| rvtt_call_int_arg (g->icmp, 4) != 0)
+    /* Against literal zero.  In the old six-argument scalar compare the
+       immediate lived in args 2..4 and this checked all three were 0;
+       in main's folded sfpxcmp the immediate IS the constant operand,
+       so the same condition is that operand being a constant zero.  */
+    tree value;
+    uint32_t cst;
+    if (!rvtt_cmp_value_and_cst (g->icmp, &value, &cst) || cst != 0)
       return refuse ("int-abs-boundary-unsupported", g->icmp);
   }
 

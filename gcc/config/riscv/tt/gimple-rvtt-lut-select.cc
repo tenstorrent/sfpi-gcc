@@ -520,16 +520,27 @@ static bool
 match_lt_boundary (gcall *fcmp, tree mag, uint32_t *bits)
 {
   const rvtt_insn_data *insnd = rvtt_get_insn_data (fcmp);
-  if (gimple_call_arg (fcmp, 1) != mag)
+  /* main folded the four compare builtins into sfpxcmp: the compared
+     value and the boundary constant are its two value operands, where
+     the old scalar form had the value at arg 1 and the constant at
+     arg 2.  Reading arg 2 now would read the MOD.  */
+  rvtt_arg_info a0 (gimple_call_arg (fcmp, 0));
+  rvtt_arg_info a1 (gimple_call_arg (fcmp, 1));
+  tree value;
+  uint32_t k;
+  if (a1.is_cst () && !a0.is_cst ())
+    value = a0.get_arg (), k = a1.get_cst ();
+  else if (a0.is_cst () && !a1.is_cst ())
+    value = a1.get_arg (), k = a0.get_cst ();
+  else
+    return false;
+  if (value != mag)
     return false;
   long mod = rvtt_call_int_arg (fcmp, insnd->mod_arg ());
   if (mod != ((long)(SFPXCMP_MOD1_TYPE_FLOAT << SFPXCMP_MOD1_TYPE_SHIFT)
 	      | SFPXCMP_MOD1_CC_LT))
     return false;
-  long k = rvtt_call_int_arg (fcmp, 2);
-  if (k < 0)
-    return false;
-  *bits = (uint32_t) k;
+  *bits = k;
   return true;
 }
 

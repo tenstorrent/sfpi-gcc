@@ -1107,7 +1107,7 @@ main (int argc, const char **argv)
       // The line number alone made every fire witness pin a
       // source-version-dependent number (a recalibration-prone class;
       // FH audit FHO-5/FHF-5).
-      out.print (", \"", combine.target, "\"");
+      out.print ("\"", combine.target, "\", ");
       for (unsigned ix = 0; ix != Combine::H_HWM; ix++)
 	{
 	  if (ix)

@@ -189,6 +189,34 @@ static unsigned n_folded;
    returns false so recognizers can bail with `return refuse
    (...)'.  */
 
+
+/* main folded sfpxicmps/icmpv/fcmps/fcmpv into a single sfpxcmp whose two
+   value operands are both vectors.  The old "scalar" compare forms -- a
+   vector against an immediate carried in args 2..4 -- are now a compare
+   against a CONSTANT OPERAND, and the kind (int/float) moved into the mod.
+   Return the non-constant operand through *VALUE and the constant one
+   through *CST; false when the compare is vector-vs-vector.  */
+
+static bool
+rvtt_cmp_value_and_cst (gcall *cmp, tree *value, uint32_t *cst)
+{
+  rvtt_arg_info a0 (gimple_call_arg (cmp, 0));
+  rvtt_arg_info a1 (gimple_call_arg (cmp, 1));
+  if (a1.is_cst () && !a0.is_cst ())
+    {
+      *value = a0.get_arg ();
+      *cst = a1.get_cst ();
+      return true;
+    }
+  if (a0.is_cst () && !a1.is_cst ())
+    {
+      *value = a1.get_arg ();
+      *cst = a0.get_cst ();
+      return true;
+    }
+  return false;
+}
+
 static bool
 refuse (const char *reason, gimple *stmt)
 {
@@ -520,7 +548,8 @@ static bool
 check_compare_form (ccmask_group *g)
 {
   {
-    long mod = rvtt_call_int_arg (g->fcmp, 5);
+    const rvtt_insn_data *cmp_insnd = rvtt_get_insn_data (g->fcmp);
+    long mod = rvtt_call_int_arg (g->fcmp, cmp_insnd->mod_arg ());
     if (mod < 0)
       return refuse ("ccmask-compare-form", g->fcmp);
     unsigned type = ((unsigned) mod >> SFPXCMP_MOD1_TYPE_SHIFT)
@@ -554,12 +583,18 @@ check_compare_form (ccmask_group *g)
 	if (!has_single_use (g->zv))
 	  return refuse ("ccmask-zero-shared", g->assign);
       }
-    if (rvtt_call_int_arg (g->fcmp, 2) != 0
-	|| rvtt_call_int_arg (g->fcmp, 3) != 0
-	|| rvtt_call_int_arg (g->fcmp, 4) != 0)
-      /* The equivalence proof is against the +0.0 boundary's pure
-	 sign/zero CC lowering; other immediates lower arithmetically.  */
-      return refuse ("ccmask-boundary-unsupported", g->fcmp);
+    /* The equivalence proof is against the +0.0 boundary's pure
+       sign/zero CC lowering; other immediates lower arithmetically.
+       The old six-argument scalar compare carried that immediate in
+       args 2..4; main's folded sfpxcmp carries it as the constant
+       operand, so the same condition is that operand being zero.  */
+    {
+      tree cmp_value;
+      uint32_t cmp_cst;
+      if (!rvtt_cmp_value_and_cst (g->fcmp, &cmp_value, &cmp_cst)
+	  || cmp_cst != 0)
+	return refuse ("ccmask-boundary-unsupported", g->fcmp);
+    }
   }
 
   if (TREE_CODE (g->x) != SSA_NAME || TREE_CODE (g->z) != SSA_NAME)
@@ -641,7 +676,15 @@ match_group_general (function *fun, const rvtt_cc_region_tree *ccr,
   g->xvif = as_a <gcall *> (chain[0]);
   g->fcmp = as_a <gcall *> (chain[1]);
   g->condb = as_a <gcall *> (chain[2]);
-  g->x = gimple_call_arg (g->fcmp, 1);
+  {
+    /* The compared value is the non-constant operand of the folded
+       sfpxcmp; it was arg 1 of the old scalar form.  */
+    tree cmp_value;
+    uint32_t cmp_cst;
+    if (!rvtt_cmp_value_and_cst (g->fcmp, &cmp_value, &cmp_cst))
+      return false;
+    g->x = cmp_value;
+  }
 
   /* Member census over the tree's statement mapping.  */
   gcall *assign = nullptr;
@@ -734,8 +777,12 @@ match_group_general (function *fun, const rvtt_cc_region_tree *ccr,
 
   /* Stage-A operand linkage of the structured condition.  */
   {
-    tree c = gimple_call_arg (g->condb, 0);
-    tree t = gimple_call_arg (g->condb, 1);
+    /* sfpxcondb(c, t) became sfpxcond(mod, pred, cond): main reads the
+       two linked values at mod_arg()+1 and mod_arg()+2
+       (gimple-rvtt-pred.cc expand_vif).  */
+    const rvtt_insn_data *cond_insnd = rvtt_get_insn_data (g->condb);
+    tree c = gimple_call_arg (g->condb, cond_insnd->mod_arg () + 1);
+    tree t = gimple_call_arg (g->condb, cond_insnd->mod_arg () + 2);
     if (TREE_CODE (c) != SSA_NAME || TREE_CODE (t) != SSA_NAME
 	|| SSA_NAME_DEF_STMT (c) != g->fcmp
 	|| SSA_NAME_DEF_STMT (t) != g->xvif
