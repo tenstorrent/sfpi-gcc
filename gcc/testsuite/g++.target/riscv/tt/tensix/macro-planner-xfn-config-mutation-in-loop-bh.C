@@ -25,6 +25,6 @@ __attribute__((noinline)) void face_loop_mutated (unsigned faces)
       FACE ();
       auto knob = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0,
 					  no_increment);
-      __builtin_rvtt_sfpwriteconfig_v (knob, 4);
+      __builtin_rvtt_sfpwriteconfig_v (knob, 0, 4);
     }
 }

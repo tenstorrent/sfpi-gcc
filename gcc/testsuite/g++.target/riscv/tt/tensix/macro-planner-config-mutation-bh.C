@@ -37,6 +37,6 @@ __attribute__((noinline)) void config_mutation_between_rows ()
 {
   ROW ();
   auto knob = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, no_increment);
-  __builtin_rvtt_sfpwriteconfig_v (knob, 4);
+  __builtin_rvtt_sfpwriteconfig_v (knob, 0, 4);
   ROW ();
 }

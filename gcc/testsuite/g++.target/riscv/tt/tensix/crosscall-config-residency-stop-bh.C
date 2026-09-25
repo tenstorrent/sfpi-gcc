@@ -11,7 +11,7 @@ __attribute__((noinline)) void
 ccs_callee ()
 {
   auto v = __builtin_rvtt_sfploadi (nullptr, 16128, 0, 0, 0);
-  __builtin_rvtt_sfpwriteconfig_v (v, 12);
+  __builtin_rvtt_sfpwriteconfig_v (v, 0, 12);
   auto a0 = __builtin_rvtt_sfpxloadi (nullptr, 0x3e4ccccd, 0, 0, -32);
   auto a1 = __builtin_rvtt_sfpxloadi (nullptr, 0x3e87ae14, 0, 0, -32);
   auto a2 = __builtin_rvtt_sfpxloadi (nullptr, 0x3dbba5e3, 0, 0, -32);

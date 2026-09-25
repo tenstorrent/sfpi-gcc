@@ -36,7 +36,7 @@ void config_barrier ()
   x = __builtin_rvtt_sfpmul (x, x, 0);
   x = __builtin_rvtt_sfpmul (x, x, 0);
   x = __builtin_rvtt_sfpmul (x, x, 0);
-  __builtin_rvtt_sfpwriteconfig_v (x, 0);
+  __builtin_rvtt_sfpwriteconfig_v (x, 0, 0);
   x = __builtin_rvtt_sfpmul (x, x, 0);
   x = __builtin_rvtt_sfpmul (x, x, 0);
   x = __builtin_rvtt_sfpmul (x, x, 0);

@@ -32,7 +32,7 @@ void audited_pushes_then_math ()
 
   auto x = __builtin_rvtt_sfpreadlreg (0);
   auto s = __builtin_rvtt_sfpreadlreg (1);
-  __builtin_rvtt_sfpwriteconfig_v (s, 14);   // typed claim of L14
+  __builtin_rvtt_sfpwriteconfig_v (s, 0, 14);   // typed claim of L14
   for (unsigned ix = 0; ix != 32; ++ix)
     {
       auto prod = __builtin_rvtt_sfpmul (x, s, 0);

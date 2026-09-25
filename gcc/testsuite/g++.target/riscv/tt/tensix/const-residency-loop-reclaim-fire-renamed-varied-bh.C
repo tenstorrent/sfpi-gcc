@@ -18,11 +18,11 @@
 void audit_ip_claimer (void)
 {
   auto s0 = __builtin_rvtt_sfpxloadi (nullptr, 0x3ca3d70a, 0, 0, 31);
-  __builtin_rvtt_sfpwriteconfig_v (s0, 12);
+  __builtin_rvtt_sfpwriteconfig_v (s0, 0, 12);
   auto s1 = __builtin_rvtt_sfpxloadi (nullptr, 0x3d4ccccd, 0, 0, 31);
-  __builtin_rvtt_sfpwriteconfig_v (s1, 13);
+  __builtin_rvtt_sfpwriteconfig_v (s1, 0, 13);
   auto s2 = __builtin_rvtt_sfpxloadi (nullptr, 0xbe99999a, 0, 0, 31);
-  __builtin_rvtt_sfpwriteconfig_v (s2, 14);
+  __builtin_rvtt_sfpwriteconfig_v (s2, 0, 14);
 }
 
 void audit_ip_row_body (void)

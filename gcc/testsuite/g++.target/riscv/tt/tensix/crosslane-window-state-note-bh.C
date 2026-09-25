@@ -7,7 +7,7 @@
 void unknown_state_write ()
 {
   auto v = __builtin_rvtt_sfpreadlreg (0);
-  __builtin_rvtt_sfpwriteconfig_v (v, 15);   // state -> UNKNOWN
+  __builtin_rvtt_sfpwriteconfig_v (v, 0, 15);   // state -> UNKNOWN
   auto y = __builtin_rvtt_sfpand (v, v);
   __builtin_rvtt_sfpwritelreg (y, 5);        // L5 write, unproven state
 }

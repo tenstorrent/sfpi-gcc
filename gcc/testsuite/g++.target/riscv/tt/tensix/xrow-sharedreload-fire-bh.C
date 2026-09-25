@@ -18,11 +18,11 @@
 void owner_init (void)
 {
   auto c6 = __builtin_rvtt_sfpxloadi (nullptr, 0x3bc0919e, 0, 0, 31);
-  __builtin_rvtt_sfpwriteconfig_v (c6, 12);
+  __builtin_rvtt_sfpwriteconfig_v (c6, 0, 12);
   auto c5 = __builtin_rvtt_sfpxloadi (nullptr, 0xbd887f48, 0, 0, 31);
-  __builtin_rvtt_sfpwriteconfig_v (c5, 13);
+  __builtin_rvtt_sfpwriteconfig_v (c5, 0, 13);
   auto c4 = __builtin_rvtt_sfpxloadi (nullptr, 0x3e905782, 0, 0, 31);
-  __builtin_rvtt_sfpwriteconfig_v (c4, 14);
+  __builtin_rvtt_sfpwriteconfig_v (c4, 0, 14);
 }
 
 void tanh_row (void)

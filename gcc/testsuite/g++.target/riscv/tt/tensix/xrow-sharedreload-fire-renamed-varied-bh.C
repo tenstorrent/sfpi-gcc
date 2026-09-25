@@ -15,11 +15,11 @@
 void audit_ip_owner_init (void)
 {
   auto w6 = __builtin_rvtt_sfpxloadi (nullptr, 0x3c23d70a, 0, 0, 31);
-  __builtin_rvtt_sfpwriteconfig_v (w6, 12);
+  __builtin_rvtt_sfpwriteconfig_v (w6, 0, 12);
   auto w5 = __builtin_rvtt_sfpxloadi (nullptr, 0xbd4ccccd, 0, 0, 31);
-  __builtin_rvtt_sfpwriteconfig_v (w5, 13);
+  __builtin_rvtt_sfpwriteconfig_v (w5, 0, 13);
   auto w4 = __builtin_rvtt_sfpxloadi (nullptr, 0x3e6b851f, 0, 0, 31);
-  __builtin_rvtt_sfpwriteconfig_v (w4, 14);
+  __builtin_rvtt_sfpwriteconfig_v (w4, 0, 14);
 }
 
 void audit_ip_poly_row (void)

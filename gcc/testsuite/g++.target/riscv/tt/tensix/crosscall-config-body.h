@@ -30,7 +30,7 @@
     {									\
       auto CCH_CFG_V = __builtin_rvtt_sfploadi (nullptr, CCH_CFG_VAL,	\
 						0, 0, 0);		\
-      __builtin_rvtt_sfpwriteconfig_v (CCH_CFG_V, CCH_CFG_DEST);	\
+      __builtin_rvtt_sfpwriteconfig_v (CCH_CFG_V, 0, CCH_CFG_DEST);	\
     }									\
   while (0)
 

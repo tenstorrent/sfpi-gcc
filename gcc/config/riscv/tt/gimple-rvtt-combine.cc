@@ -711,18 +711,6 @@ Combiner::match_shape (unsigned ix, basic_block bb, gcall *call, const rvtt_insn
 bool
 Combiner::match_check (matched_data &matched, match_masks const &masks) const
 {
-  /* Re-evaluate enablement HERE, not once when the dispatch table was
-     built.  A rule's enable_hook can read per-function state:
-     combiner_enable_REASSOC_FP consults flag_associative_math, which GCC
-     swaps for every function (an `optimize' attribute, a pragma, or an
-     LTO partition can mix strict and associative functions in one
-     compilation).  The table is built once per compilation, so a hook
-     evaluated only at build time would let the FIRST function decide for
-     every later one -- admitting value-changing fusion into a strict
-     function, or withholding it from a licensed one, purely on
-     compilation order.  */
-  if (enable_hook && !enable_hook ())
-    return false;
   matched.deleted = replace_mask;
   for (int ix = 0; ix != pats_hwm; ix++)
     {
@@ -804,6 +792,24 @@ Combiner::match_check (matched_data &matched, match_masks const &masks) const
 int
 Combiner::match (gcall *call, const rvtt_insn_data *insnd, matched_data &matched) const
 {
+  /* Re-evaluate enablement HERE, not once when the dispatch table was
+     built.  A rule's enable_hook can read per-function state:
+     combiner_enable_REASSOC_FP consults flag_associative_math, which GCC
+     swaps for every function (an `optimize' attribute, a pragma, or an
+     LTO partition can mix strict and associative functions in one
+     compilation).  The table is built once per compilation, so a hook
+     evaluated only at build time would let the FIRST function decide for
+     every later one.
+
+     It has to happen before match_shape rather than in match_check,
+     because a rule disabled on this target may name an arity this
+     target's builtin does not have -- the QSR sfpsetcc patterns pass a
+     third argument that BH's two-argument sfpsetcc lacks.  Walking those
+     args to decide the shape does not match reads past the end of the
+     call, so the gate must close before the walk, not after it.  */
+  if (enable_hook && !enable_hook ())
+    return 0;
+
   for (; matched.commute_mask < (1u << commute_bits);
        matched.commute_mask++)
     {

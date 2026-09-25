@@ -11,17 +11,17 @@
 void owner_init_conflict (void)
 {
   auto a = __builtin_rvtt_sfpxloadi (nullptr, 0x3f317218, 0, 0, 31);
-  __builtin_rvtt_sfpwriteconfig_v (a, 12);
+  __builtin_rvtt_sfpwriteconfig_v (a, 0, 12);
   auto b = __builtin_rvtt_sfpxloadi (nullptr, 0x3f000000, 0, 0, 31);
-  __builtin_rvtt_sfpwriteconfig_v (b, 12);	/* same dest, other value */
+  __builtin_rvtt_sfpwriteconfig_v (b, 0, 12);	/* same dest, other value */
   auto c = __builtin_rvtt_sfpxloadi (nullptr, 0x3dd8adac, 0, 0, 31);
-  __builtin_rvtt_sfpwriteconfig_v (c, 13);
+  __builtin_rvtt_sfpwriteconfig_v (c, 0, 13);
 }
 
 void owner_init_runtime (unsigned bits)
 {
   auto s = __builtin_rvtt_sfploadi (nullptr, bits, 0, 0, 0);
-  __builtin_rvtt_sfpwriteconfig_v (s, 14);	/* underivable value */
+  __builtin_rvtt_sfpwriteconfig_v (s, 0, 14);	/* underivable value */
 }
 
 void kernel_conflicted (void)

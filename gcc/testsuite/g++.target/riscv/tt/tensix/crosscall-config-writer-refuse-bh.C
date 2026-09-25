@@ -13,7 +13,7 @@
 #define CCH_CALLEE_HEAD() CCH_CALLEE_HEAD_CONFIG ()
 #define CCH_CALLEE_EXTRA(r) do { \
     CCH_ROW_CONFIG_READ (r); \
-    __builtin_rvtt_sfpwriteconfig_v ((r), 12); \
+    __builtin_rvtt_sfpwriteconfig_v ((r), 0, 12); \
   } while (0)
 #define CCH_TILES tiles
 #define CCH_T t

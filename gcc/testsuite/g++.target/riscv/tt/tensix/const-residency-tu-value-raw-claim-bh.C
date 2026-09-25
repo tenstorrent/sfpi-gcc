@@ -10,11 +10,11 @@
 void owner_init_typed (void)
 {
   auto ln2 = __builtin_rvtt_sfpxloadi (nullptr, 0x3f317218, 0, 0, 31);
-  __builtin_rvtt_sfpwriteconfig_v (ln2, 12);
+  __builtin_rvtt_sfpwriteconfig_v (ln2, 0, 12);
   auto k1 = __builtin_rvtt_sfpxloadi (nullptr, 0x3dd8adac, 0, 0, 31);
-  __builtin_rvtt_sfpwriteconfig_v (k1, 13);
+  __builtin_rvtt_sfpwriteconfig_v (k1, 0, 13);
   auto k2 = __builtin_rvtt_sfpxloadi (nullptr, 0xbf317218, 0, 0, 31);
-  __builtin_rvtt_sfpwriteconfig_v (k2, 14);
+  __builtin_rvtt_sfpwriteconfig_v (k2, 0, 14);
 }
 
 void owner_init_raw (void)

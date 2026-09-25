@@ -16,9 +16,9 @@ void user_claims_all_prgm ()
 {
   auto x = __builtin_rvtt_sfpreadlreg (0);
   auto s = __builtin_rvtt_sfpreadlreg (1);
-  __builtin_rvtt_sfpwriteconfig_v (s, 12);
-  __builtin_rvtt_sfpwriteconfig_v (s, 13);
-  __builtin_rvtt_sfpwriteconfig_v (s, 14);
+  __builtin_rvtt_sfpwriteconfig_v (s, 0, 12);
+  __builtin_rvtt_sfpwriteconfig_v (s, 0, 13);
+  __builtin_rvtt_sfpwriteconfig_v (s, 0, 14);
   for (unsigned ix = 0; ix != 32; ++ix)
     {
       auto prod = __builtin_rvtt_sfpmul (x, s, 0);
