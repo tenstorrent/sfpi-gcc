@@ -213,10 +213,12 @@ rvtt_replay_unroll_row_words (const rvtt_insn_data *insnd)
     case rvtt_insn_data::sfpswap_indexed:
     case rvtt_insn_data::sfpselect2:
     case rvtt_insn_data::sfpselect4:
-    case rvtt_insn_data::sfpiadd_v:
+    /* The iadd family is NOT here: main folded the structured
+       sfpxiadd_* (two words) into the raw sfpiadd_* (one word).
+       Indistinguishable now, so it keeps the two-word count above --
+       an over-estimate, which is the safe direction for replay-buffer
+       capacity.  */
     case rvtt_insn_data::sfpiadd_v_lv:
-    case rvtt_insn_data::sfpiadd_i:
-    case rvtt_insn_data::sfpiadd_i_lv:
     case rvtt_insn_data::sfpmul:
     case rvtt_insn_data::sfpmul_lv:
     case rvtt_insn_data::sfpmuli:

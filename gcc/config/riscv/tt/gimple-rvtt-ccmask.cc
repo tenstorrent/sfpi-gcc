@@ -330,18 +330,23 @@ match_group (const rvtt_cc_region_tree *ccr, gimple_stmt_iterator gsi,
 	    if (want != WANT_FCMP)
 	      return *candidate ? refuse ("ccmask-region-shape", stmt)
 				: false;
+	    /* Vector-vector and integer compares keep the CC lowering:
+	       the mask equivalence proof here covers the float order
+	       test against +0.0 only.  Those were separate builtins and
+	       refused here by identity; main folded all four into
+	       sfpxcmp, so vector-vs-vector refuses here by shape and the
+	       int/float kind refuses by mod in check_compare_form --
+	       same refusal names, same admitted set.  */
+	    tree cmp_value;
+	    uint32_t cmp_cst;
+	    if (!rvtt_cmp_value_and_cst (call, &cmp_value, &cmp_cst))
+	      return *candidate
+		? refuse ("ccmask-compare-kind-unsupported", stmt) : false;
 	    g->fcmp = call;
-	    g->x = gimple_call_arg (call, 1);
+	    g->x = cmp_value;
 	    want = WANT_CONDB;
 	    continue;
 	  }
-
-	case rvtt_insn_data::sfpxcmp:
-	  /* Vector-vector and integer compares keep the CC lowering:
-	     the mask equivalence proof here covers the float order
-	     test against +0.0 only.  */
-	  return *candidate ? refuse ("ccmask-compare-kind-unsupported", stmt)
-			    : false;
 
 	case rvtt_insn_data::sfpxcond:
 	  {

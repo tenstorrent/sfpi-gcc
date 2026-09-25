@@ -244,7 +244,12 @@ delivery_latency_class (const rvtt_insn_data *insnd)
     case rvtt_insn_data::sfpxpred:
     case rvtt_insn_data::sfpxlogic:
     case rvtt_insn_data::sfpxcond:
-    case rvtt_insn_data::sfpxcmp:
+    /* sfpxcmp is NOT here: main folded the float and integer compares
+       into one builtin, and the float form costs 2 (it lowers through
+       the mad unit) while the integer form cost 0.  Indistinguishable
+       now, so it takes the 2 below -- an over-estimate of the execution
+       term, which makes hoisting decisions more conservative rather
+       than less.  */
     case rvtt_insn_data::sfpreadlreg:
     case rvtt_insn_data::sfpassign:
     case rvtt_insn_data::sfpassign_lv:

@@ -125,7 +125,7 @@ namespace {
 
     uint8_t replace_mask; // patterns whose output is a replacement output
     uint8_t rep_use_mask; // patterns whose output is used in a replacement
-    int8_t commute_arg; // final pattern commutable arg, if non-negative
+    int8_t commute_bits;  // number of bits in the commute mask
 
     unsigned lineno; // line in rvtt.gc file
     bool is_deferred;

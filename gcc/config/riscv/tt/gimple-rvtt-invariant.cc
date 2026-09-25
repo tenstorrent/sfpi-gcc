@@ -937,9 +937,13 @@ cc_narrowing_modifier_p (const rvtt_insn_data *insnd)
     case rvtt_insn_data::sfpsetcc:
     case rvtt_insn_data::sfpcompc:
     case rvtt_insn_data::sfpxcmp:
-    case rvtt_insn_data::sfpiadd_v:
-    case rvtt_insn_data::sfpiadd_i:
-    case rvtt_insn_data::sfpiadd_i_lv:
+    /* The iadd family is NOT here.  This arm admitted the structured
+       sfpxiadd_* forms unconditionally; the raw sfpiadd_* forms are
+       admitted below only under -mtt-tensix-optimize-cc-region-general,
+       pending their audit.  main deleted the structured spelling, so the
+       two are one builtin now and cannot be told apart -- it therefore
+       takes the GATED arm below.  Fail closed: admitting unconditionally
+       what was gated would widen the admitted set past its audit.  */
       return true;
 
     /* R2 widening 1 (-mtt-tensix-optimize-cc-region-general): the
@@ -1029,7 +1033,6 @@ cc_restore_classify_stmt (gimple *stmt, int *depth, cc_restore_analysis &a)
 	  return !a.why;
 
 	case rvtt_insn_data::sfpxpred:
-	case rvtt_insn_data::sfpxcond:
 	case rvtt_insn_data::sfpxlogic:
 	  /* Structured condition markers: their expander-inserted CC
 	     effects are confined to the enclosing balanced region (see
@@ -1043,7 +1046,16 @@ cc_restore_classify_stmt (gimple *stmt, int *depth, cc_restore_analysis &a)
 	case rvtt_insn_data::sfpxcond:
 	  /* Condition-value materialization: its expansion inserts CC
 	     writes at its own position outside any user region; not
-	     audited here.  Fail closed.  */
+	     audited here.  Fail closed.
+
+	     main folded sfpxcondb (the structured marker, which this
+	     pass admitted inside a balanced region) and sfpxcondi (the
+	     value materialization, never audited) into one sfpxcond.
+	     They are indistinguishable now, so the merged builtin takes
+	     the unaudited treatment and this pass refuses on it.  That
+	     NARROWS what invariant hoisting admits -- it costs
+	     optimization, not correctness -- and it is the honest state
+	     until the folded condition shape is audited.  */
 	  a.has_cc = true;
 	  a.why = "cc-restore-cond-value-unaudited";
 	  return false;
