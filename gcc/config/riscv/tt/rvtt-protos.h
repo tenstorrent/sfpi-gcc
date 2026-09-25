@@ -545,4 +545,11 @@ struct rvtt_addrmod_hoist_program
 extern const char *rvtt_crosscall_addrmod_hoist (function *callee,
 						 rvtt_addrmod_hoist_program *);
 
+/* Defined in rtl-rvtt-schedule.cc.  rtl-rvtt-lp-schedule-prera.cc is the
+   only other user; it reached them through rtl-rvtt-sched-int.h, the
+   private header of a per-unit scheduler split that is not part of this
+   branch.  */
+extern bool issued_tensix_p (rtx_insn *insn);
+extern int audited_latency (rtx_insn *insn);
+
 #endif /* ! GCC_RVTT_PROTOS_H */

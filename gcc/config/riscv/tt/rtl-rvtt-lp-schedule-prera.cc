@@ -175,7 +175,6 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt-protos.h"
 #include "rvtt-refuse.h"
 #include "rvtt-effects.h"
-#include "rtl-rvtt-sched-int.h"
 #include "rvtt-timing.h"
 
 namespace {

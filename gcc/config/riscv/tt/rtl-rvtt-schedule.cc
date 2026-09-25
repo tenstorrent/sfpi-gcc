@@ -708,7 +708,7 @@ bare_lreg_copy_p (rtx_insn *insn)
    least one instruction word: excludes USE/CLOBBER markers and
    zero-length bookkeeping patterns.  */
 
-static bool
+bool
 issued_tensix_p (rtx_insn *insn)
 {
   return GET_CODE (insn) == INSN
@@ -999,7 +999,7 @@ fill_nop_shadows (function *fn)
 /* Audited result latency of INSN in issue slots; -1 refuses (opaque
    effects or no audited `xtt_result_latency' entry).  */
 
-static int
+int
 audited_latency (rtx_insn *insn)
 {
   if (!issued_tensix_p (insn))
