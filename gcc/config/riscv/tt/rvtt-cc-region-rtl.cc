@@ -152,7 +152,17 @@ classify_cc_rtl_event (rtx_insn *insn)
     return fx.cc_write_all_lanes ? CC_RTL_EV_ENCC_ALL : CC_RTL_EV_ENCC_OTHER;
   if (code == CODE_FOR_rvtt_sfpcompc)
     return CC_RTL_EV_COMPC;
-  if (code == CODE_FOR_rvtt_sfpsetcc_i || code == CODE_FOR_rvtt_sfpsetcc_v
+  /* main merged the two SFPSETCC patterns and made the surviving
+     define_insn anonymous (*rvtt_sfpsetcc in rvtt.md), so it has no
+     CODE_FOR_ constant to compare against -- only the two define_expands
+     keep names, and expands do not survive to RTL.  Recognise it by the
+     unspec code the pattern actually carries, which does not depend on
+     the pattern keeping a name.  */
+  rtx setcc_pat = PATTERN (insn);
+  if (GET_CODE (setcc_pat) == PARALLEL && XVECLEN (setcc_pat, 0) > 0)
+    setcc_pat = XVECEXP (setcc_pat, 0, 0);
+  if ((GET_CODE (setcc_pat) == UNSPEC_VOLATILE
+       && XINT (setcc_pat, 1) == UNSPECV_SFPSETCC)
       || code == CODE_FOR_rvtt_sfpgt_cc || code == CODE_FOR_rvtt_sfple_cc)
     return CC_RTL_EV_NARROW;	/* tt/proofs/cc-narrowing-writers/ */
   bool lane_local_ccw;

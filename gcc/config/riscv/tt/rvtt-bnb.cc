@@ -566,10 +566,13 @@ mirror_counted_hoist_fires (const rvtt_delivery_problem &p)
      inputs are the downstream ds_* constants and the ds_exec
      interlock estimate, never a re-pricing).  */
   rvtt_timing::hoist_costs costs;
-  costs.push = p.ds_push;
-  costs.slot = p.ds_slot;
-  costs.turnaround = p.ds_turnaround;
-  costs.record_overhead = p.ds_record_overhead;
+  /* The downstream constants live in the problem s cost_table, not as
+     flattened ds_* members; the two structs are field-for-field the
+     same quantities.  */
+  costs.push = p.dcost.push_x100;
+  costs.slot = p.dcost.slot_x100;
+  costs.turnaround = p.dcost.turnaround_x100;
+  costs.record_overhead = p.dcost.record_overhead_x100;
   return rvtt_timing::counted_hoist_price (costs, p.trips, p.row_words,
 					   p.ds_exec).benefit
 	 >= p.ds_hoist_min_benefit;
@@ -602,10 +605,13 @@ mirror_rerecord_hoist_fires (const rvtt_delivery_problem &p,
   const unsigned payload_slots = payload_rows * safe_words (p);
   const unsigned run = p.autoincr_enabled ? factor / payload_rows : 1;
   rvtt_timing::hoist_costs costs;
-  costs.push = p.ds_push;
-  costs.slot = p.ds_slot;
-  costs.turnaround = p.ds_turnaround;
-  costs.record_overhead = p.ds_record_overhead;
+  /* The downstream constants live in the problem s cost_table, not as
+     flattened ds_* members; the two structs are field-for-field the
+     same quantities.  */
+  costs.push = p.dcost.push_x100;
+  costs.slot = p.dcost.slot_x100;
+  costs.turnaround = p.dcost.turnaround_x100;
+  costs.record_overhead = p.dcost.record_overhead_x100;
   return rvtt_timing::rerecord_hoist_price
 	   (costs, groups, payload_slots,
 	    (int64_t) payload_rows * (p.ds_exec - p.barrier_words),
