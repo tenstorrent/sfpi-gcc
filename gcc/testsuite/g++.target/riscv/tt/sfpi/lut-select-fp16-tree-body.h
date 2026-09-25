@@ -9,10 +9,10 @@
    coefficient encodability proofs).  LUT_TREE_TOP is the top
    architectural boundary (3.0f = TABLE1, 4.0f = TABLE2).  */
 
-extern volatile unsigned __instrn_buffer[];
+extern volatile unsigned long __instrn_buffer[];
 
 namespace ckernel {
-constexpr inline volatile unsigned (&instrn_buffer)[] = ::__instrn_buffer;
+constexpr inline volatile unsigned long (&instrn_buffer)[] = ::__instrn_buffer;
 }
 
 #include <sfpi.h>

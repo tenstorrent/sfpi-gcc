@@ -10,7 +10,7 @@
 // { dg-final { scan-tree-dump "delivery-shape: requested unroll 2 of loop" "rvtt_delivery_shape" } }
 // { dg-final { scan-tree-dump-times "replay-loop-unroll: fires=0 refusals=0" 2 "rvtt_replay_unroll" } }
 // { dg-final { scan-tree-dump-times "round-interleave: fires=0" 2 "rvtt_round_interleave" } }
-extern volatile unsigned int __instrn_buffer[];
+extern volatile unsigned long __instrn_buffer[];
 __attribute__((noinline)) void
 fh_comp_rows (int tiles)
 {

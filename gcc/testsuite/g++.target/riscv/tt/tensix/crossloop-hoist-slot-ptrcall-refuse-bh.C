@@ -16,7 +16,7 @@
 // { dg-final { scan-tree-dump-not "hoisted across" "rvtt_crossloop" } }
 
 typedef volatile unsigned int vu32;
-extern volatile unsigned int __instrn_buffer[];
+extern volatile unsigned long __instrn_buffer[];
 
 struct xdke_tmpl { unsigned w0, w1, w2, w3, w4, w5, w6, w7, w8; };
 

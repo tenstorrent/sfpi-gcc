@@ -2,9 +2,9 @@
 // Target control: no QSR oracle is pinned, so neither fold surface was
 // proven there -- the pass fails closed by name.
 // { dg-final { scan-tree-dump "store-fold refused .store-fold-target-unproven" "rvtt_store_fold" } }
-extern volatile unsigned __instrn_buffer[];
+extern volatile unsigned long __instrn_buffer[];
 namespace ckernel {
-constexpr inline volatile unsigned (&instrn_buffer)[] = ::__instrn_buffer;
+constexpr inline volatile unsigned long (&instrn_buffer)[] = ::__instrn_buffer;
 }
 #include <sfpi.h>
 __attribute__((noinline)) void

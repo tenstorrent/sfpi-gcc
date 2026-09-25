@@ -14,7 +14,7 @@
 // { dg-final { scan-assembler-not "SFPMAD" } }
 
 typedef volatile unsigned int vu32;
-extern volatile unsigned int __instrn_buffer[];
+extern volatile unsigned long __instrn_buffer[];
 
 // 1. An unaudited raw opcode in an instruction slot.
 void slot_word_unproven ()

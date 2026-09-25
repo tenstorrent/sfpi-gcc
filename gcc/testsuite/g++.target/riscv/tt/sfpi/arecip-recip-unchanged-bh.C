@@ -3,9 +3,9 @@
 // mnemonic byte-identically -- no raw word.
 // { dg-final { scan-assembler-times "SFPARECIP\tL\[0-7\], L\[0-7\], 0" 1 } }
 // { dg-final { scan-assembler-not "\\.ttinsn" } }
-extern volatile unsigned __instrn_buffer[];
+extern volatile unsigned long __instrn_buffer[];
 namespace ckernel {
-constexpr inline volatile unsigned (&instrn_buffer)[] = ::__instrn_buffer;
+constexpr inline volatile unsigned long (&instrn_buffer)[] = ::__instrn_buffer;
 }
 #include <sfpi.h>
 

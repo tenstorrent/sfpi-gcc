@@ -6,7 +6,7 @@
 // { dg-final { scan-tree-dump-not "hoisted across" "rvtt_crossloop" } }
 
 typedef volatile unsigned int vu32;
-extern volatile unsigned int __instrn_buffer[];
+extern volatile unsigned long __instrn_buffer[];
 
 static inline void xlh_mopr_program_template (unsigned outer, unsigned inner)
 {

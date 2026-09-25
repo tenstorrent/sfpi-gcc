@@ -6,9 +6,9 @@
 // pragma-unroll-8 snake-beta body).  Refuse hoisting by name.
 // { dg-final { scan-tree-dump "cc-restore-unroll-pressure-unmodeled" "rvtt_invariant" } }
 // { dg-final { scan-tree-dump-not "Hoisted invariant SFPU immediate" "rvtt_invariant" } }
-extern volatile unsigned __instrn_buffer[];
+extern volatile unsigned long __instrn_buffer[];
 namespace ckernel {
-constexpr inline volatile unsigned (&instrn_buffer)[] = ::__instrn_buffer;
+constexpr inline volatile unsigned long (&instrn_buffer)[] = ::__instrn_buffer;
 }
 #include <sfpi.h>
 

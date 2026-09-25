@@ -4,9 +4,9 @@
 // no fold fires.
 // { dg-final { scan-tree-dump "ccmask: folds=0" "rvtt_ccmask" } }
 // { dg-final { scan-assembler-not "SFPGT" } }
-extern volatile unsigned __instrn_buffer[];
+extern volatile unsigned long __instrn_buffer[];
 namespace ckernel {
-constexpr inline volatile unsigned (&instrn_buffer)[] = ::__instrn_buffer;
+constexpr inline volatile unsigned long (&instrn_buffer)[] = ::__instrn_buffer;
 }
 #include <sfpi.h>
 __attribute__((noinline)) void

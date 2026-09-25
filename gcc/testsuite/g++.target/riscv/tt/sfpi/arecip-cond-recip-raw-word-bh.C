@@ -6,9 +6,9 @@
 // Mod1 = 1), annotated with its decode.
 // { dg-final { scan-assembler "\\.ttinsn\t\[0-9\]+\t# SFPARECIP" } }
 // { dg-final { scan-assembler-not "\n\tSFPARECIP\tL\[0-7\], L\[0-7\], 1" } }
-extern volatile unsigned __instrn_buffer[];
+extern volatile unsigned long __instrn_buffer[];
 namespace ckernel {
-constexpr inline volatile unsigned (&instrn_buffer)[] = ::__instrn_buffer;
+constexpr inline volatile unsigned long (&instrn_buffer)[] = ::__instrn_buffer;
 }
 #include <sfpi.h>
 

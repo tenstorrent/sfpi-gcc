@@ -7,7 +7,7 @@
 // { dg-final { scan-rtl-dump-not "colorability=proven" "rvtt_lp_alloc" } }
 // { dg-error "lreg-pressure-exceeded" "" { target *-*-* } 0 }
 
-extern volatile unsigned __instrn_buffer[];
+extern volatile unsigned long __instrn_buffer[];
 
 void lreg_alloc_bf16_refuse (void)
 {

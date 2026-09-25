@@ -7,7 +7,7 @@
 // { dg-final { scan-assembler {\mSFPSTORE\tL[0-7], 248, 4, 7} } }
 // { dg-final { scan-assembler-not {\mSFPSTORE\tL[0-7], 252, 4, 7} } }
 
-extern volatile unsigned __instrn_buffer[];
+extern volatile unsigned long __instrn_buffer[];
 
 void lreg_alloc_dst32 (void)
 {

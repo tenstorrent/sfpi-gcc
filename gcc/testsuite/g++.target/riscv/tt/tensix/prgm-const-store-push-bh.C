@@ -10,7 +10,7 @@
 // { dg-final { scan-assembler "SFPMAD" } }
 
 typedef volatile unsigned int vu32;
-extern volatile unsigned int __instrn_buffer[];
+extern volatile unsigned long __instrn_buffer[];
 
 void audited_pushes_then_math ()
 {

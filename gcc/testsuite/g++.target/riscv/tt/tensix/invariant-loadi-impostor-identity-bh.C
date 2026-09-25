@@ -2,7 +2,7 @@
 // { dg-final { scan-tree-dump-not "Hoisted invariant SFPU immediate" "rvtt_invariant" } }
 
 namespace impostor {
-extern volatile unsigned __instrn_buffer[];
+extern volatile unsigned long __instrn_buffer[];
 }
 
 static volatile unsigned __instrn_buffer[1];

@@ -10,7 +10,7 @@
 // { dg-final { scan-tree-dump-not "hoisted across" "rvtt_crossloop" } }
 
 typedef volatile unsigned int vu32;
-extern volatile unsigned int __instrn_buffer[];
+extern volatile unsigned long __instrn_buffer[];
 
 static inline void yq_seed_template (unsigned yo, unsigned yi)
 {

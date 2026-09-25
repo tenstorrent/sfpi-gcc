@@ -9,7 +9,7 @@
 // { dg-final { scan-rtl-dump-not "Hoisted no-exec capture" "rvtt_replay" } }
 // { dg-final { scan-assembler-not "TTREPLAY" } }
 
-extern unsigned int __instrn_buffer[];
+extern volatile unsigned long __instrn_buffer[];
 
 void iadd_synth_nearmiss (int n)
 {

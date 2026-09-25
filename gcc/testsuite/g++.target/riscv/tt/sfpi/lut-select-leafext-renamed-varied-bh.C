@@ -9,9 +9,9 @@
 // { dg-final { scan-assembler-times "SFPLUTFP32" 1 } }
 // { dg-final { scan-assembler-not "SFPSETCC" } }
 
-extern volatile unsigned __instrn_buffer[];
+extern volatile unsigned long __instrn_buffer[];
 namespace ckernel {
-constexpr inline volatile unsigned (&instrn_buffer)[] = ::__instrn_buffer;
+constexpr inline volatile unsigned long (&instrn_buffer)[] = ::__instrn_buffer;
 }
 #include <sfpi.h>
 

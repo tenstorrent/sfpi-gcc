@@ -2,9 +2,9 @@
 // Fail-closed control: Mod1 values 3-7 (the doc's default-to-EXP
 // aliases) refuse by name at the builtin check -- no encoder may rely
 // on the alias (mask 0x7 = modes {0,1,2} only).
-extern volatile unsigned __instrn_buffer[];
+extern volatile unsigned long __instrn_buffer[];
 namespace ckernel {
-constexpr inline volatile unsigned (&instrn_buffer)[] = ::__instrn_buffer;
+constexpr inline volatile unsigned long (&instrn_buffer)[] = ::__instrn_buffer;
 }
 #include <sfpi.h>
 

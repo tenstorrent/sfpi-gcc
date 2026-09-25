@@ -5,9 +5,9 @@
 // without the owner's token.
 // { dg-final { scan-tree-dump "store-fold refused .store-fold-sink-format-canonicalizing" "rvtt_store_fold" } }
 // { dg-final { scan-tree-dump "store-fold: forwarded=0 sunk=0 sunk-licensed=0" "rvtt_store_fold" } }
-extern volatile unsigned __instrn_buffer[];
+extern volatile unsigned long __instrn_buffer[];
 namespace ckernel {
-constexpr inline volatile unsigned (&instrn_buffer)[] = ::__instrn_buffer;
+constexpr inline volatile unsigned long (&instrn_buffer)[] = ::__instrn_buffer;
 }
 #include <sfpi.h>
 __attribute__((noinline)) void

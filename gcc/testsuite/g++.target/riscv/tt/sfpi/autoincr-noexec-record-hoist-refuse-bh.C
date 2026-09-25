@@ -16,8 +16,8 @@
 // { dg-final { scan-rtl-dump-not "Hoisted no-exec capture" "rvtt_replay" } }
 // { dg-final { scan-rtl-dump "Dst-autoincr group: bb" "rvtt_dst_autoincr" } }
 // { dg-final { scan-rtl-dump-not "mod-write-noexec-record-composition-unaudited" "rvtt_dst_autoincr" } }
-extern volatile unsigned __instrn_buffer[];
-namespace ckernel { constexpr inline volatile unsigned (&instrn_buffer)[] = ::__instrn_buffer; }
+extern volatile unsigned long __instrn_buffer[];
+namespace ckernel { constexpr inline volatile unsigned long (&instrn_buffer)[] = ::__instrn_buffer; }
 #include <sfpi.h>
 __attribute__((noinline)) void
 qk_zeta_rows_near (volatile int *sep)

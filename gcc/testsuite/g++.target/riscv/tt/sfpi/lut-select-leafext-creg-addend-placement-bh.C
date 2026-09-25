@@ -29,9 +29,9 @@
 // { dg-final { scan-assembler "SFPMAD\tL3, L3, L3, L10" } }
 // { dg-final { scan-assembler-not "SFPMOV" } }
 
-extern volatile unsigned __instrn_buffer[];
+extern volatile unsigned long __instrn_buffer[];
 namespace ckernel {
-constexpr inline volatile unsigned (&instrn_buffer)[] = ::__instrn_buffer;
+constexpr inline volatile unsigned long (&instrn_buffer)[] = ::__instrn_buffer;
 }
 #include <sfpi.h>
 

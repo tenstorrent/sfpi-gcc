@@ -12,7 +12,7 @@
 // { dg-final { scan-tree-dump-times "crossloop-hoist: hoisted across loop" 2 "rvtt_crossloop" } }
 // { dg-final { scan-tree-dump-not "refused" "rvtt_crossloop" } }
 
-extern volatile unsigned int __instrn_buffer[];
+extern volatile unsigned long __instrn_buffer[];
 
 void
 xlh_ccgeneral_fire (int tiles)

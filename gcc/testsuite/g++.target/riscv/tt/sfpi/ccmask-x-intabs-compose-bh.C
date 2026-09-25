@@ -4,8 +4,8 @@
 // body with value coupling -- both sibling folds must fire independently.
 // { dg-final { scan-tree-dump "ccmask: folded zeroing CC region" "rvtt_ccmask" } }
 // { dg-final { scan-tree-dump "int-abs: folded negate-select CC region" "rvtt_int_abs" } }
-extern volatile unsigned __instrn_buffer[];
-namespace ckernel { constexpr inline volatile unsigned (&instrn_buffer)[] = ::__instrn_buffer; }
+extern volatile unsigned long __instrn_buffer[];
+namespace ckernel { constexpr inline volatile unsigned long (&instrn_buffer)[] = ::__instrn_buffer; }
 #include <sfpi.h>
 using namespace sfpi;
 __attribute__((noinline)) void

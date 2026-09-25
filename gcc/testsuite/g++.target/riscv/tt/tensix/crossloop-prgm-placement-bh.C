@@ -5,7 +5,7 @@
 // { dg-final { scan-tree-dump "allocated PRGM L" "rvtt_prgm_const" } }
 // { dg-final { scan-tree-dump "crossloop-hoist: placement lifted from entry bb" "rvtt_prgm_const" } }
 
-extern volatile unsigned int __instrn_buffer[];
+extern volatile unsigned long __instrn_buffer[];
 
 void
 xlh_prgm_kernel (int tiles)

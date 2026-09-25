@@ -13,7 +13,7 @@
      XLH_ROW_EXTRA(x)	 extra statement inside the row loop
      XLH_GUARD_BEGIN/END wrap the row loop (speculation shapes)  */
 
-extern volatile unsigned int __instrn_buffer[];
+extern volatile unsigned long __instrn_buffer[];
 
 #ifndef XLH_ADDR_MODE
 #define XLH_ADDR_MODE 7		/* BH no-increment; WH tests use 3 */

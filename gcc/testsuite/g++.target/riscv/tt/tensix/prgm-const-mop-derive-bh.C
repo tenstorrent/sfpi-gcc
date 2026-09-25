@@ -13,7 +13,7 @@
 // { dg-final { scan-assembler "SFPMAD" } }
 
 typedef volatile unsigned int vu32;
-extern volatile unsigned int __instrn_buffer[];
+extern volatile unsigned long __instrn_buffer[];
 
 // The production ckernel_template::program shape: mop_sync guard is a
 // separate concern; the slot writes are constant-address volatile

@@ -8,7 +8,7 @@
 // { dg-final { scan-tree-dump "crossloop-cc-ambient-unproven" "rvtt_crossloop" } }
 // { dg-final { scan-tree-dump-not "hoisted across" "rvtt_crossloop" } }
 
-extern volatile unsigned int __instrn_buffer[];
+extern volatile unsigned long __instrn_buffer[];
 
 void
 xlh_ccgeneral_encc (int tiles)

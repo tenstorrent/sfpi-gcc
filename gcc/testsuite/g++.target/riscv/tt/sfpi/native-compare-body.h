@@ -5,10 +5,10 @@
    arithmetic (the GT/LE arms key only on the compare direction reaching
    rvtt_emit_sfpxfcmps/v).  */
 
-extern volatile unsigned __instrn_buffer[];
+extern volatile unsigned long __instrn_buffer[];
 
 namespace ckernel {
-constexpr inline volatile unsigned (&instrn_buffer)[] = ::__instrn_buffer;
+constexpr inline volatile unsigned long (&instrn_buffer)[] = ::__instrn_buffer;
 }
 
 #include <sfpi.h>

@@ -11,7 +11,7 @@
 // { dg-final { scan-assembler-not "SFPMAD" } }
 
 typedef volatile unsigned int vu32;
-extern volatile unsigned int __instrn_buffer[];
+extern volatile unsigned long __instrn_buffer[];
 extern volatile unsigned int some_external_block[];
 
 // 1. A raw SFPU-class word pushed by store evades nothing.
