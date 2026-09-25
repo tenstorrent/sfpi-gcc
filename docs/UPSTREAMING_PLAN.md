@@ -18,16 +18,24 @@
    <http://www.gnu.org/licenses/>.
 -->
 
-# Landing the 31 new passes on `tenstorrent/sfpi-gcc`
+# Landing the 32 new passes on `tenstorrent/sfpi-gcc`
 
 Revised 2026-09-25.  The previous revision planned a 28-patch *refactoring*
 stack aimed at upstream GCC's contribution gates.  That was the wrong target
 in two ways: the gates it optimised for are not the ones this fork runs, and a
-refactoring series does not land a single pass.  The goal is 31 passes in
+refactoring series does not land a single pass.  The goal is 32 passes in
 `main`.  This revision plans for that, and for nothing else.
 
 The deliverable of each submission is **one pass, compiled in, defaulted off,
 with its tests**.  Nothing else travels with it.
+
+One framing point that the plan turns on: the branch registers 54 passes, but
+**22 of those were already in the backend when we forked it** (merge-base
+`48ba20142`, 2026-08-11 — Nathan Sidwell's and Paul Keller's work).  Only 32
+are ours.  We are not proposing a backend; we are proposing 32 optional
+additions to one he already maintains, 23 of which are inert until a flag is
+passed.  That is a much smaller thing to ask for, and it is what the cover
+message should say.
 
 
 ## 1. The two facts that set the whole strategy
@@ -42,11 +50,11 @@ that the one person who can merge them has not seen.
 Everything in this plan is downstream of fixing that, and the fix is a
 conversation, not a patch series.
 
-**22 of the 31 new passes land inert.**  They are gated on a
+**23 of the 32 new passes land inert.**  They are gated on a
 `-mtt-tensix-optimize-*` option that is `Init(0)`, and the backend's standing
 rule (`gcc/config/riscv/tt/README`) is that with the flag off the emitted
 binary is bit-for-bit identical to the previous build.  That is the entire
-argument for why a 31-pass series is acceptable at all: **each one is provably
+argument for why a 32-pass series is acceptable at all: **each one is provably
 a no-op until somebody asks for it.**  A reviewer is being asked to accept new
 code, not new behaviour.
 
@@ -103,8 +111,8 @@ He also does not watch the repo.  From PR #19, in his own words:
 
 ## 3. Prerequisites — none of §4 starts until all four are done
 
-**P1 — Ask him.**  One message, before any code: here is a backend of 31
-optional passes for Tensix, all default-off, all with tests; would you rather
+**P1 — Ask him.**  One message, before any code: here are 32 optional passes for an
+SFPU backend you already maintain, all default-off, all with tests; would you rather
 see them one PR per pass, or should we talk about the shape first?  His answer
 reorders everything below and costs a day to get.
 
@@ -142,7 +150,9 @@ Each PR contains exactly:
   gcc/config/riscv/tt/rvtt-passes.def      one INSERT_PASS line
   gcc/config/riscv/tt/rvtt-protos.h        one make_pass_* declaration
   gcc/config/riscv/tt/t-riscv-tt           one object in RVTT_OBJS
-  gcc/config/riscv/riscv.opt               one Init(0) option
+  gcc/config/riscv/riscv.opt               its Init(0) option(s) -- a pass
+                                           may own several; pass_rvtt_replay
+                                           owns twelve
   gcc/doc/invoke.texi                      one option paragraph
   gcc/testsuite/g++.target/riscv/tt/...    tests, >=1 check-function-bodies
 ```
@@ -151,77 +161,76 @@ Subject `#NNNNN: Add <pass-name> pass` if a ticket exists, else
 `Add <pass-name> pass`.  Empty body, or two sentences if the pass needs a
 sentence of motivation.  No `Co-Authored-By` trailers — he uses none.
 
-### Wave A — small, gated, well-tested (send these first)
+### The ordering principle
 
-Four passes, each inside his observed review ceiling of ~840 lines.
+Waves are ordered by **how many of the 134 raced kernels the pass actually
+reaches**, not by how easy it is to review.  An earlier revision of this plan
+sorted by line count and led with `int-not` — a pass whose entire measured
+benefit is one kernel row.  That is the worst possible opening: it makes a
+year of work look like a bag of one-off hacks, which is exactly the charge the
+generality census exists to answer.
 
-| pass | loc | tests | option |
+Reach, for all 32 (kernels touched of 134, source lines):
+
+```
+ 85  1860  dst-autoincr          10  1781  launch-flatten
+ 44  1828  invariant              8  1912  macro-planner
+ 40  1201  store-fold             7  1007  ccmask
+ 39   631  delivery-shape         6   954  dst-iteration
+ 28  1536  reassoc                5   948  prgm-const
+                                  4   563  crossloop
+                                  4  1902  crosscall
+                                  3  1592  lut-select
+   5 passes reach >= 20           8 passes reach 3-19      19 reach < 3
+```
+
+A "0" in that census means one of three different things and they must not be
+conflated: the pass has **no flag at all** (`spill-diag`, `lreg-livein`,
+`lp-alloc`, `crosslane-window`, `lp-schedule-prera` — always-on, so the census
+has no row by construction); the pass's flag is **named differently** from the
+pass (`replay-reform` is measured as `post-autoincr-window`, 13 kernels;
+`macro-planner-residency` appears in the census as `planner-residency`); or the
+pass genuinely **fires nowhere on this board** (`mop-form`, `round-interleave`).
+Resolve which before using a zero as an argument.
+
+### Wave A — the four that carry the result
+
+| pass | kernels | loc | why here |
 |---|---|---|---|
-| `int-not` | 286 | 8 | `-mtt-tensix-optimize-int-not` |
-| `crossloop-cc-peel` | 532 | 43 | `-mtt-tensix-optimize-crossloop-cc-peel` |
-| `int-abs` | 577 | 13 | `-mtt-tensix-optimize-int-abs` |
-| `delivery-shape` | 596 | 18 | `-mtt-tensix-optimize-delivery-shape` |
+| `delivery-shape` | 39 | **631** | **Send this first.**  Real breadth *and* inside his observed 843-line ceiling.  It is also the project's thesis in one pass: choosing push vs launch vs record from a cost model rather than a heuristic. |
+| `dst-autoincr` | **85** | 1860 | The widest pass on the board, 124 tests.  Over the ceiling, but it already splits — `rtl-rvtt-dst-autoincr-scan.cc` is a separate file — so it can go as a two-patch series if he prefers. |
+| `invariant` | 44 | 1828 | Second-widest.  Needs a contract written first (§3, P5): 1828 lines behind a title line today. |
+| `store-fold` | 40 | 1201 | Exemplary proof discipline already — every fold tied to a `tt/proofs/` artifact with a named standing refusal. |
 
-`int-not` goes first: smallest, self-contained, an obviously-correct integer
-identity, and it establishes the shape of every PR that follows.  If Wave A
-merges, the pattern is proven and the rest is throughput.  If it does not, we
-have learned that for 286 lines instead of 168,691.
+If Wave A merges, the pattern is proven and the rest is throughput.  If it does
+not, we have learned that on the passes that matter rather than on trivia.
 
-### Wave B — mid-size, gated
+### Wave B — real reach, needs a size or design conversation
 
-| pass | loc | tests |
-|---|---|---|
-| `prgm-const` | 948 | 37 |
-| `ccmask` | 953 | 27 |
-| `dst-iteration-fusion` | 954 | 9 |
-| `dst-ownership` | 1015 | 23 |
-| `lp-schedule` | 1110 | 13 |
-| `store-fold` | 1201 | 32 |
-| `transp-involution` | 1206 | 10 |
-| `mop-form` | 1352 | 17 |
+`reassoc` (28) — the licensed FP pass; argue the double key on its own, not
+buried in a series.  `launch-flatten` (10).  `macro-planner` (8, 245 tests,
+fronting a 24-file subsystem — it needs to reference `docs/MACRO_PLANNER.md`
+from its header before it goes).  `ccmask` (7).  `dst-iteration` (6).
+`prgm-const` (5).  `crossloop` (4).  `crosscall` (4).  `lut-select` (3).
 
-All above his ceiling.  Each needs either a split into
-recogniser / transform / tests, or his explicit agreement to review at size.
-Ask in Wave A's thread rather than guessing.
+### Wave C — the narrow ones, sent as one batch and framed honestly
 
-### Wave C — large, gated, needs design agreement first
+The 19 passes reaching fewer than three kernels, including `int-abs` and
+`int-not` at exactly one each, both `birth_share 1.00`.  Their headers already
+say it: *not claimed to generalise; claimed to be correct and free.*  Each is
+exhaustively proven over 2^32 and each is inert with its flag off.  That is a
+footnote to the story, not the opening — send them together, late, with the
+census slide's own numbers attached so the narrowness is the project's
+disclosure rather than a reviewer's discovery.
 
-`reassoc` (1536), `lut-select` (1592), `round-interleave` (1781),
-`launch-flatten` (1781), `crosslane` (1813), `invariant-loadi` (1828),
-`crosscall-hoist` (1847), `dst-autoincr` (1860), `macro-planner` (1912),
-`lreg-rename-chains` (1965).
+### Wave D — the nine that are not purely flag-gated
 
-`dst-autoincr` (124 tests) and `macro-planner` (245 tests) are the two widest
-passes on the board and the two most valuable; they are also the two least
-likely to be reviewed cold.  Open a design thread for each before sending
-code.
-
-`reassoc` additionally changes FP results under a double key
-(`-fassociative-math` + `-mtt-tensix-optimize-reassoc`).  That is a
-documented, licensed value change, and it needs to be argued as such rather
-than buried in a series.
-
-### Wave D — the 9 that are not purely flag-gated
-
-These do not land inert, so the Wave A argument does not cover them:
-
-| pass | gate | loc | tests |
-|---|---|---|---|
-| `spill-diag` | `TARGET_XTT_TENSIX` | 212 | 3 |
-| `lreg-livein` | `TARGET_XTT_TENSIX` | 349 | 1 |
-| `crosslane-window` | `TARGET_XTT_TENSIX` | 1019 | 6 |
-| `lp-schedule-prera` | `optimize > 0` | 1349 | 0 |
-| `lp-alloc` | `optimize > 0` | 1609 | 1 |
-| `reprprop` | `riscv_tt_opt_repr_prop` | 603 | 8 |
-| `dst-interleave` | `riscv_tt_opt_dst_iteration_fusion` | 954 | 0 |
-| `replay-reform` | `riscv_tt_opt_replay` | 1316 | 0 |
-| `replay-unroll` | `riscv_tt_opt_replay_loop_unroll` | 1781 | 8 |
-
-The last four do consult a flag, just one whose name does not match the pass —
-they are Wave B/C material once renamed or documented.  The first five change
-codegen for every Tensix compile and are the genuinely hard sell.  Three of
-them have 0 or 1 tests.  **Write the tests before proposing them.**
-
+`spill-diag`, `lreg-livein`, `crosslane-window`, `lp-schedule-prera`,
+`lp-alloc`, `reprprop`, `dst-interleave`, `replay-reform`, `replay-unroll`.
+These change codegen without a flag to turn off, so the Wave A argument does
+not cover them and they go last.  Three have 0 or 1 tests; write the tests
+before proposing them.  `lreg-livein` in particular is 349 lines gated on
+`TARGET_XTT_TENSIX` alone with one test in a 1530-test suite.
 
 ## 5. What is deliberately NOT in the series
 
