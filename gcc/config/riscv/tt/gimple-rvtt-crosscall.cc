@@ -3510,7 +3510,6 @@ rvtt_crosscall_addrmod_hoist (function *callee_fn,
   pop_cfun ();
   return result;
 }
-=======
 
 /* Pass factory for rvtt_crosscall, referenced from
    rvtt-passes.def.  */
