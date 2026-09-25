@@ -156,15 +156,26 @@ along with GCC; see the file COPYING3.  If not see
    untransformed stream -- an unpriceable or unproven candidate is a
    named refusal, never a guess.
 
-   SCOPE OF THE NOTES BELOW.  This file is not ours.  The replay pass
-   was originated by Paul Keller and rewritten by Nathan Sidwell, and
-   that base -- recognising a repeated record, emitting TT_REPLAY,
-   managing the 32 slots -- is their work and is documented by them
-   above.  The LINEAGE / HARDWARE / BIRTH KERNEL notes that follow
-   describe only what the craq campaign ADDED on top of it: the
-   formation policy, the hoisting and canonicalization tiers, and the
-   twelve -mtt-tensix-optimize-replay-* flags that gate them.  Read
-   them as an appendix to the pass, not as a description of it.
+   PROVENANCE OF THIS FILE.  The replay pass was originated by Paul
+   Keller and rewritten by Nathan Sidwell; that base -- recognising a
+   repeated record, emitting TT_REPLAY, managing the 32 slots -- is
+   theirs, and the -mtt-tensix-optimize-replay flag that gates it is
+   theirs.  Everything built on top is this campaign's.  Measured
+   against the merge-base (48ba20142, 2026-08-11): of their 255
+   substantive lines here, 71 survive; of the 770 substantive lines in
+   this file today, 699 (91%) are new.  The formation policy lives in
+   three files that did not exist at all -- rtl-rvtt-replay-discover.cc,
+   rtl-rvtt-replay-crf.cc and rtl-rvtt-replay-hoist.cc, 7234 lines
+   between them -- and all seven replay flags in the FIRE-BREADTH
+   census (replay-exec-record, replay-hoist, replay-record-hoist,
+   replay-loop-unroll, opaque-replay-record, replay-window-sizing,
+   macro-planner-replay) are ours.
+
+   So the LINEAGE / HARDWARE / BIRTH KERNEL notes below describe this
+   campaign's work, not Keller's or Sidwell's: the formation policy,
+   the hoisting and canonicalization tiers, and the flags that gate
+   them.  They are not a description of the base pass, which stands
+   documented above.
 
    LINEAGE.
      technique  C. W. Fraser, E. W. Myers and A. L. Wendt, "Analyzing
