@@ -183,6 +183,76 @@ planner_config_window_ok (const macro_region &region)
      descriptors before launching.  This is a documented accepted risk,
      mirrored in docs/MACRO_PLANNER.md.  */
 
+
+/* Materialize the 32-bit word IMM into DST at RTL.
+
+   main deleted rvtt.cc's rvtt_emit_sfpxloadi when it moved immediate
+   materialization into gimple-rvtt-immvar.cc.  That covers the GIMPLE
+   path, but the macro planner emits its descriptor program at RTL,
+   after immvar has run, so it still needs the RTL form.  Reinstated
+   here, local to its only user, byte-identical to the deleted
+   function.  The mod selection matters: the planner's cost model counts
+   the words this emits, so a blanket two-loadi sequence would
+   mis-price every short-form word.  */
+
+static void
+planner_emit_loadi (rtx dst, rtx lv, rtx imm)
+{
+  /* Early nonimm pass assures this */
+  gcc_assert (CONST_INT_P (imm));
+
+  /* FIXME: we're just moving bits around here, the type of the input value
+     doesnt matter.  */
+  uint32_t int_imm = INTVAL (imm);
+  int new_mod = -1;
+
+  if (int_imm <= 0x7fff || int_imm >= 0xffff8000)
+    new_mod = SFPLOADI_MOD0_SHORT;
+  else if (int_imm <= 0xffff)
+    new_mod = SFPLOADI_MOD0_USHORT;
+  else if (!(int_imm & 0xffff))
+    {
+      imm = GEN_INT (int_imm >> 16);
+      new_mod = SFPLOADI_MOD0_FLOATB;
+    }
+  else if (!(int_imm & 0x1FFF))
+    {
+      int exp = (int_imm >> 23) & 0xFF;
+
+      if (exp < 127 + 16 && exp >= 127 - 14)
+	  {
+	    /* Fits in fp16a */
+	    imm = GEN_INT (((int_imm >> 13) & 0x3ff)
+			   | ((int_imm >> 16) & 0x8000)
+			   | ((exp - 0x70) << 10));
+	    new_mod = SFPLOADI_MOD0_FLOATA;
+	  }
+    }
+
+  if (new_mod >= 0)
+    emit_insn (gen_rvtt_sfploadi_lv_int (dst, const0_rtx, const0_rtx,
+					 const0_rtx, imm,
+					 rvtt_gen_rtx_noval (XTT32SImode),
+					 lv, GEN_INT (new_mod)));
+  else
+    {
+      /* A full literal is assembled in place.  The UPPER form reads the
+         preceding low half from LV, and the MD pattern ties LV to its result;
+         using DST for both avoids materializing a distinct temporary (and the
+         SFPMOV reload needed solely to satisfy that tie).  */
+      emit_insn (gen_rvtt_sfploadi_lv_int (dst, const0_rtx, const0_rtx,
+					   const0_rtx,
+					   GEN_INT (int_imm & 0xFFFF),
+					   rvtt_gen_rtx_noval (XTT32SImode),
+					   lv, GEN_INT (SFPLOADI_MOD0_USHORT)));
+      emit_insn (gen_rvtt_sfploadi_lv_int (dst, const0_rtx, const0_rtx,
+					   const0_rtx,
+					   GEN_INT (int_imm >> 16),
+					   rvtt_gen_rtx_noval (XTT32SImode),
+					   dst, GEN_INT (SFPLOADI_MOD0_UPPER)));
+    }
+}
+
 static bool
 planner_scope_insn_clean_p (rtx_insn *insn, const rvtt_macro::caps *c)
 {
@@ -1144,9 +1214,12 @@ emit_planner_run (macro_region &region, const macro_schedule &schedule,
       rtx config_lreg = gen_rtx_REG (XTT32SImode, SFPU_REG_FIRST);
       auto config_word = [&] (uint32_t word, unsigned dest)
 	{
-	  rvtt_emit_sfpxloadi (config_lreg, rvtt_gen_rtx_noval (XTT32SImode),
-			       GEN_INT (word));
-	  emit_insn (gen_rvtt_sfpwriteconfig_v (config_lreg,
+	  planner_emit_loadi (config_lreg, rvtt_gen_rtx_noval (XTT32SImode),
+			      GEN_INT (word));
+	  /* main's sfpwriteconfig_v takes (value, mod, dest); it used to
+	     take (value, dest).  Mod 0 is the plain config write this
+	     has always emitted.  */
+	  emit_insn (gen_rvtt_sfpwriteconfig_v (config_lreg, const0_rtx,
 						GEN_INT (dest)));
 	};
       auto emit_config_words = [&] ()

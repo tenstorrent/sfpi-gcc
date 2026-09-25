@@ -1867,8 +1867,12 @@ upward_carrier_try (function *fn, macro_region &region,
 		     v.seed_ix, chain_str, newreg, prefix0.length (),
 		     est_ii, new_ii);
 	  bool local_changed = false;
-	  bool proven = planner_process_region (fn, *sel, resid, dump,
-						&local_changed);
+	  /* Not provably the sole region on this path -- the carrier
+	     former is working through selected candidates -- so the
+	     cross-call init hoist refuses here (drain-init-callee-
+	     unproven), which is the conservative default.  */
+	  bool proven = planner_process_region (fn, *sel, /*sole_region=*/false,
+						resid, dump, &local_changed);
 	  if (proven && local_changed)
 	    {
 	      *changed = true;

@@ -2555,7 +2555,7 @@ hoist_profitable_p (class loop *loop, basic_block preheader,
     fprintf (dump_file,
 	     "Record delivery hidden: contiguous launch run %u exec"
 	     " surplus %ld >= record delivery %ld\n",
-	     launch_run, (long) pricing.surplus, (long) deliver_record);
+	     launch_run, (long) pricing.surplus, (long) price.deliver_record);
 
   if (dump_file)
     fprintf (dump_file,
