@@ -48,7 +48,87 @@ along with GCC; see the file COPYING3.  If not see
    re-derived descriptor does not match what was planned, the region is not
    formed.
 
-   Gated by TARGET_XTT_TENSIX and the -mtt-tensix-macro-planner family.  */
+   Gated by TARGET_XTT_TENSIX and the -mtt-tensix-macro-planner family.
+
+   LINEAGE.
+     technique  B. R. Rau and C. D. Glaeser, "Some scheduling
+                techniques and an easily schedulable horizontal
+                architecture for high performance scientific
+                computing", MICRO-14, 1981, pp. 183-198.
+                Placing operations against a RESERVATION TABLE of
+                per-unit, per-slot occupancy.  That is what the sched
+                layer (rvtt-macro-sched) does with the macro
+                sub-unit calendar: occupancy modulo the interval,
+                delay ranges, port and hazard bounds.
+     technique  B. R. Rau, "Iterative modulo scheduling: an
+                algorithm for software pipelining loops", MICRO-27,
+                1994, pp. 63-74.
+                The backtracking half: when a maximal proposal
+                cannot be proven, deterministically unplace and retry
+                within a bounded budget instead of refusing the whole
+                region (-mtt-tensix-macro-ims).  The repair driver
+                below cites this work by eponym alone; this is its
+                attribution.
+                What is NOT taken: no loop is pipelined and no
+                interval is minimized across iterations.  The
+                "interval" here is slots per ROW inside one
+                descriptor program, the search is refusal-biased
+                (exhausting the budget leaves the region unformed,
+                never admits an unproven variant), and a repair may
+                only recover regions the established search already
+                refused.
+     admission  A. Pnueli, M. Siegel and E. Singerman, "Translation
+                validation", Tools and Algorithms for the
+                Construction and Analysis of Systems (TACAS), 1998,
+                pp. 151-166.
+                Layer 7 does not trust the planner: the descriptor is
+                RE-DERIVED from the region and compared with what was
+                planned, and a mismatch refuses formation rather than
+                reporting a diagnostic.  That is per-instance
+                validation of one translation instead of verification
+                of the translator -- the discipline that also let the
+                pattern-calendar predecessor be deleted against
+                byte-parity oracles minted from it.
+     modelled on  none.  GCC describes a FIXED machine's issue
+                hazards (gcc/genautomata.cc and the DFA it builds);
+                nothing in GCC derives a programmable instruction
+                template from a region's own dataflow, and nothing
+                in GCC proves that a region owns the configuration
+                state such a template lives in.
+
+   HARDWARE.  SFPLOADMACRO: a short sequence described once in
+   configuration state -- the descriptor program -- and re-launched
+   by a single instruction.  A RISC-pushed operation costs roughly
+   1.23x a replayed slot on the audited model, so collapsing a
+   repeated row into a macro removes words from the instruction
+   stream even when it removes no work.  What is spent is
+   configuration state that OUTLIVES the region, which is why
+   ownership (function-global first, then refined to the loop body)
+   is Layer 1 and not an afterthought; rows are then placed against
+   the sub-unit calendar's slot capacity, and the values they carry
+   occupy the 8 LREGs.
+     - SFPLOADMACRO SequenceBits, per-sub-unit adjacency rule, Misc
+       field layout        [SPEC] SFPLOADMACRO.md; [SIM] the
+                           reference simulator's dispatch builder
+                           and its 4-slot select calendar
+     - per-target capability tables (QSR intentionally absent)
+                           rvtt-macro-tables-bh.def /
+                           rvtt-macro-tables-wh.def
+     - push-vs-replayed-slot ratio and the delivery prices
+                           rvtt-cost.md
+
+   BIRTH KERNEL.  where/reduce-sdpa.  Ledger: FIRE-BREADTH.tsv flag
+   macro-planner, birth_share 0.53 -- about half the measured
+   benefit lies off the birth row, so the derived descriptor is
+   doing real work beyond the row it was built on, which is the
+   whole point of having deleted the pattern-calendar predecessor.
+   The testsuite agrees on the family (macro-planner-where-form,
+   -where-default, -where-refuse, plus macro-planner-cast-round-emit
+   and the ims/ambient rows).  The satellite flags differ:
+   macro-planner-residency is "where impl-1 (laneBN)" at 1.00
+   (birth-row-bound) and macro-planner-replay is "where impl
+   (planner)" with no share recorded ("-").
+   */
 
 #define IN_TARGET_CODE 1
 

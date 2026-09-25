@@ -119,7 +119,66 @@ along with GCC; see the file COPYING3.  If not see
    class as the straight replay former.
 
    All diagnostics are gated behind the default-off crosslane flag;
-   code that never uses the typed markers is never diagnosed.  */
+   code that never uses the typed markers is never diagnosed.
+
+   LINEAGE.
+     technique  G. A. Kildall, "A unified approach to global program
+                optimization", POPL 1973, pp. 194-206.
+                The monotone forward dataflow framework: a lattice
+                value per program point, a transfer function per
+                instruction, meet at joins.  Here the lattice is the
+                three-point CLOSED / OPEN / UNKNOWN, the entry value
+                is CLOSED, and the meet of unequal states is UNKNOWN.
+                What is NOT taken: Kildall computes facts in order to
+                ENABLE a transformation, and spends imprecision on
+                refusing to optimize.  This framework transforms
+                nothing -- it decides whether a hard architectural
+                restriction is violated -- so its imprecision is spent
+                the other way: UNKNOWN never errors, it only notes,
+                because a false error would punish kernels that never
+                open a window.
+     modelled on  none.  The one in-tree relative is the replay
+                former's own shadow walk over slot-occupying words,
+                reused here to expand a launch's resolved payload at
+                the launch position.
+
+   HARDWARE.  LaneConfig.ENABLE_DEST_INDEX and the write restriction
+   it opens: while that bit is set, an instruction other than SFPLOAD
+   / SFPLOADI / SFPSWAP / SFPTRANSP that writes LReg[4..7] is
+   UnsupportedFunctionality (SFPCONFIG.md LaneConfig table).  The
+   resource at risk is the upper half of the eight-LREG file, and the
+   price of getting it wrong is not delivered words or issue slots but
+   silent wrong execution: a REAL allocator-inserted `SFPMOV L5, L4'
+   was caught inside an open window.  The check therefore runs on the
+   FINAL RTL stream, where allocator copies and scheduled motion are
+   visible, and models the 32-slot REPLAY expander exactly, because a
+   playback launch carries no LReg SET of its own.
+     - window bit         SFPCONFIG.md LaneConfig, imm16 bit 2;
+                          mod1 1/3/5/7 = write / OR / AND / XOR
+     - exempt opcodes     exactly four; SFPLOADMACRO is deliberately
+                          NOT among them
+     - replay expander    WormholeB0 REPLAY.md: a fixed capture
+                          claims slots (Index+i)%32, Exec=0 swallows
+                          the recorded words, and a playback emits
+                          them at the launch position
+
+   BIRTH KERNEL.  NONE.  This pass shares the crosslane flag, and
+   FIRE-BREADTH.tsv has no crosslane row, so no measured-benefit
+   record exists for it.  In the usual sense it could not have one:
+   the pass is a DIAGNOSTIC, and what it is worth is the violations it
+   refuses to let through, not cycles saved.  What the tests record
+   instead is exactly that -- the window family under
+   gcc/testsuite/g++.target/riscv/tt/tensix/
+   (crosslane-window-violation-bh.C, -legal-bh.C, -raw-refuse-bh.C,
+   -call-refuse-bh.C, -mop-refuse-bh.C and -mop-outside-accept-bh.C,
+   -state-note-bh.C, and the delivered-word replay family:
+   -replay-unproven, -replay-nondominating-refuse,
+   -replay-delivered-violation (bh / varied / wh),
+   -replay-delivered-marker, -replay-delivered-exempt,
+   -replay-noexec-record-accept) fixes both the error set and the
+   honesty contract that UNKNOWN only notes.  A reviewer should see
+   that no benefit-ledger row backs this file.
+   */
 
 #define INCLUDE_MAP
 #define INCLUDE_SET

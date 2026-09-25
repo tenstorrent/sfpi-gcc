@@ -38,7 +38,109 @@ along with GCC; see the file COPYING3.  If not see
    stride; replay bookkeeping, because a fold inside a captured record must
    account for the record's shadow; then the transform itself.
 
-   Gated by TARGET_XTT_TENSIX and -mtt-tensix-optimize-dst-autoincr.  */
+   Gated by TARGET_XTT_TENSIX and -mtt-tensix-optimize-dst-autoincr.
+
+   NAMED REFUSALS (rvtt-refusals.def; each leaves the function
+   byte-identical to the flag-off compilation):
+
+     configuration-to-consume      no legal anchor for the modifier
+                                   program, or the placement sits
+                                   nearer its first consuming row than
+                                   the audited min_config_distance.
+     mod-write-dominates-rolled-body
+                                   the per-iteration rows cannot pay
+                                   the backedge-crossing charge out of
+                                   the audited drained-frontend
+                                   retirement window.
+     mod-write-noexec-record-composition-unaudited
+                                   a no-exec replay recording window
+                                   may still be ingesting where the
+                                   group's mod-write executes.
+     preheader-placement           the crosscall contract: the group
+                                   is placed in its own preheader or
+                                   shares a placement, so the callee
+                                   does not own the program.
+     stride-plural                 the crosscall contract: the
+                                   callee's groups do not agree on one
+                                   stride.
+     replay-delivered-row          the crosscall contract: a row's
+                                   terminator access lives inside a
+                                   replay payload.
+     callee-slot-clobber           an unowned item in the callee may
+                                   write the scratch modifier slot.
+     entry-distance                the callee-local block prefix is
+                                   shorter than min_config_distance.
+     crosscall-addrmod-unproven    the caller-side service refused the
+                                   lifted program (epoch scan at every
+                                   lifted level, MOP template audit,
+                                   watched bank-select row, or
+                                   preheader occupancy).
+
+   LINEAGE.
+     technique  none.  Folding a counter advance into the access that
+                precedes it is an addressing-mode selection over a
+                machine resource with no published antecedent.  The
+                thing advanced is not an address register the program
+                names but the Dst read/write counter -- positional
+                machine state shared by the vector unit and the packer
+                -- and the modifier that advances it is a separately
+                programmed configuration slot, not a field of the
+                access.  The auto-increment literature assumes the
+                increment and the access name the same register and
+                that the fold is free; here neither holds, and the bulk
+                of this file is the proof that the fold is OWNED and
+                the pricing that says it is PAID FOR.
+     modelled on  none.  gcc/auto-inc-dec.cc (merge_in_block,
+                attempt_change) performs the structurally analogous
+                merge, but it requires a REG_INC-able MEM whose address
+                is the incremented register; a typed Dst access is an
+                UNSPEC_VOLATILE with no MEM and no address register, so
+                that pass sees nothing to merge -- and it has nowhere
+                to express the three-register configuration program the
+                modifier slot needs, nor any way to prove ownership of
+                it across a region.
+
+   HARDWARE.  One Dst address-modifier (ADDR_MOD) slot -- the target's
+   compiler-owned scratch slot, all three of its configuration
+   registers programmed (Src, Dst+fidelity, bias) through SETC16 into
+   ThreadConfig -- made to post-increment the Dst RWC on the row's
+   final typed access, so the explicit per-row TTINCRWC becomes dead.
+   The saving is ONE DELIVERED WORD PER ROW, and rows dominate the SFPU
+   instruction stream.  The costs are the configuration program's
+   SETC16 words, each occupying the audited two-cycle configuration
+   issue class, and -- when the mod-write's consumer is reached across
+   a loop backedge -- the part of the audited drained-frontend
+   retirement window the iteration's own issue-slot words do not cover.
+   No LREG is consumed either way: the counter is not an allocatable
+   resource.
+     - ADDR_MOD slot, SETC16/ThreadConfig   per-target capability
+                                            table in this file
+     - TTINCRWC: latency 0, applied at issue  rvtt-cost.md row step
+     - drained_frontend_window = 7 slots    rvtt-cost.md, fit from
+                                            five whole-ELF hardware
+                                            witnesses bracketing both
+                                            the skinny and fat regimes
+     - configuration issue class, 2 cycles  rvtt-cost.md
+                                            rvtt_issue_cfg
+     - min_config_distance drain residual   per-target capability
+                                            table in this file
+
+   BIRTH KERNEL.  UNTRACEABLE.  Ledger: FIRE-BREADTH.tsv flag
+   dst-autoincr, birth_row "pre-pin-10 core", birth_share n/a(core).
+   The mechanism predates the pin-10 ledger and no birth row was ever
+   recorded for it, so NO kernel provenance is claimed here.  The
+   kernels this file does name -- lcm, relu, binopscalar-fresh,
+   absint32, bitwisenot, unaryshift-fresh, threshold-fresh,
+   hardshrink-fresh, rdiv, xielu-fresh, gcd -- are the hardware
+   witnesses that calibrated and bracketed the cost model, not the
+   transform's birth.
+
+   The pass's SECOND flag does have a row.  Ledger: FIRE-BREADTH.tsv
+   flag crosscall-addrmod, birth kernel binopscalar (lane IK, pin 42),
+   birth_share 0.00.  A share of 0.00 says none of that flag's measured
+   benefit falls on its own birth row -- the benefit is elsewhere in
+   the census -- so the cross-call address-modifier contract is not a
+   one-row mechanism and is not disclaimed as one.  */
 
 #define INCLUDE_ALGORITHM
 #define INCLUDE_MAP

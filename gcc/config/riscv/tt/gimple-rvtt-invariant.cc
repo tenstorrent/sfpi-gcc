@@ -17,6 +17,191 @@ You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
+/* -mtt-tensix-optimize-invariant-loadi (default off).
+
+   CONTRACT.  A semantic SFPI kernel materializes its vector constants
+   where it uses them: an SFPLOADI -- or a short SFPLOADI sequence for
+   a full 32-bit immediate -- sits in the loop body and re-executes
+   every iteration, delivering the same bits each time.  This pass
+   moves such a materialization to the loop preheader, where it runs
+   once per loop entry.  It runs EARLY, before pass_rvtt_immvar_expand,
+   while the values are still SSA pseudos, so every later pressure,
+   residency and scheduling pass sees the constant already placed.
+
+   The move is neither free nor unconditional.  SFPLOADI writes an
+   architectural LREG and is lane-predicated (`if (LaneEnabled)' in the
+   functional model, tt-isa-documentation SFPLOADI.md), so hoisting it
+   changes both WHEN it executes and WHICH LANES it writes unless both
+   are proven.  Each loop must therefore discharge, in order:
+
+     - an entry edge, and a preheader able to receive an insertion
+       (rvtt_loop_entry_edge, rvtt_preheader_insertion_blocked_p).  A
+       shared entry edge is split only at COMMIT time, so every refusal
+       below leaves the compilation byte-identical to flag-off;
+     - no opaque LREG state anywhere in the hoist region -- the
+       preheader tail at or after the insertion point, union the loop
+       body (rvtt_loop_hoist_region_opaque_p).  Opacity elsewhere in
+       the function cannot interleave with the hoisted live ranges and
+       is no reason to refuse;
+     - a structurally proven first iteration
+       (rvtt_loop_first_iteration_executes_p) and at least one expected
+       backedge.  The architectural LREG write is never speculated out
+       of a loop that may execute zero times;
+     - per candidate, a block that executes on every entered iteration
+       (rvtt_stmt_executes_every_entered_iteration_p);
+     - the structured-CC-restore proof, which REPLACED the older
+       "refuse on ANY CC writer" barrier.  Its statement and its
+       architectural citations are in the block comment headed
+       "Structured-CC-restore proof (EC-F1)" below, and the short form
+       is: in a loop whose every CC write is confined to balanced
+       plain-PUSHC / plain-POPC regions, the lane-enable state at every
+       depth-zero position equals the loop-entry state on every
+       iteration -- which is the preheader's state -- so a depth-zero
+       hoist is MASK-EXACT; and for an in-region (depth > 0) candidate
+       the position's enable set is a provable SUBSET of the
+       preheader's, because every in-region modifier (SFPSETCC, the
+       CC-writing SFPIADD forms, SFPCOMPC, and the structured condition
+       markers) can only narrow.  A depth > 0 candidate without that
+       containment fact refuses cc-position-widening-unproven; a loop
+       that fails the proof outright refuses by the analysis's own
+       reason name (the cc-restore-... family, or sfpu-barrier);
+     - a pressure filter (select_pressure_legal_loads): the admitted
+       loads are ranked by materialization cost and cut to what the
+       loop's pressure profile can hold, because each hoist PINS ONE
+       LREG across the whole loop out of an eight-register file;
+     - and, on a CC-carrying loop with an explicit unroll factor, an
+       outright refusal (cc-restore-unroll-pressure-unmodeled).  The
+       unroller multiplies the in-loop live ranges AFTER this pass and
+       the single-body SSA pressure walk models none of that overlap;
+       a miss there is not a lost optimization but the post-allocation
+       lreg-pressure-exceeded USER ERROR on a kernel that used to
+       compile.
+
+   Loops are visited innermost first and a load hoists STEPWISE: out of
+   its own loop into the enclosing body, where the enclosing loop's
+   proofs decide again.  A short, exactly counted constant replay loop
+   may instead have a complete unroll requested, and only on a loop
+   with no CC machinery at all -- never overriding an explicit
+   "#pragma GCC unroll".  QSR refuses the whole pass.  Refusals never
+   mutate the IL.
+
+   PLACEMENT AUTHORITY.  This pass is the EARLY placement authority and
+   it deliberately does not own every candidate.  When the late
+   const-residency walk and its pressure-park tier are both enabled, a
+   CC-restore loop SPLITS.  Its in-region (depth > 0) candidates defer
+   to that walk by name (residency-walk-ordering), because both defects
+   that motivated the original wholesale deferral live in that class:
+   BUDGET ORDERING, where a first-come hoist here spends exactly the
+   free registers the walk's priced arbiter would have allocated over
+   all of the loop's constants; and LV-CARRIER FORGING, where hoisting
+   a predicated materialization upgrades its disabled lanes from
+   RA-indeterminate to defined-constant and forges a per-iteration
+   lane-predicated SFPMOV merge that no later pass can remove.  Its
+   depth-zero candidates are KEPT here by name
+   (depth-zero-hoist-dominant), because the restore proof makes such a
+   hoist a mask-exact FREE code motion, while the late walk can
+   re-place the same candidate only behind a manufactured CC-canonical
+   first-iteration peel whose pricing never measures against a free
+   hoist.  Two overrides sit above that split and defer the whole loop
+   wholesale, both still booked under residency-walk-ordering but with
+   their own dump detail: a body carrying LUT machinery
+   (lut-coefficient-authority in the source's vocabulary, detail
+   "lut-coefficient" -- those constants are LUT slot coefficients
+   belonging to the lut-select placement), and a loop with three or
+   more in-region invariant constants (in-region-demand, detail
+   "demand-arbitrated" -- the pressure-arbitrated regime).  Under
+   -mtt-tensix-optimize-priced-placement the demand cut
+   is replaced by a priced capacity query that is MONOTONE fail-closed:
+   it may only rescue an over-deferral, never manufacture a new one
+   (place-alternative-unpriceable, place-budget-exhausted).
+
+   The measured anatomy behind every one of those verdicts -- which
+   kernels lost how many cycles under which alternative -- is recorded
+   inline in transform(), in the "EARLY-vs-RESIDENCY ORDERING" and
+   "PARK-SEED COMPOSITION REFINEMENT" comments and the
+   "LUT-COEFFICIENT AUTHORITY", "IN-REGION DEMAND" and "ITEM #13"
+   notes that follow them.  Read those before moving a cut: each one
+   is a hardware measurement, not a heuristic.
+
+   LINEAGE.
+     technique  F. E. Allen and J. Cocke, "A catalogue of optimizing
+                transformations", in Design and Optimization of
+                Compilers, Prentice-Hall, 1972, pp. 1-30.
+                Code motion out of loops: a computation whose operands
+                do not change across iterations is evaluated once
+                before the loop instead of once per iteration.  What is
+                NOT taken: the catalogue's invariance test is about
+                OPERANDS and its safety test is about faulting and
+                guaranteed execution.  Neither is the hard part here.
+                An SFPLOADI's operands are literal bits, so invariance
+                is trivial; what costs is that the statement's EFFECT
+                is not its SSA result -- it writes an architectural
+                LREG under a lane mask -- so the whole weight of this
+                pass is proving that the mask at the destination equals
+                (or refines) the mask at the source, and that the
+                pinned register is affordable.
+     modelled on  gcc/tree-ssa-loop-im.cc: move_computations_worker
+                (pass_lim) -- the same innermost-first, stepwise,
+                hoist-to-preheader shape, down to committing the
+                preheader only once a load will actually move.  It
+                cannot serve here: LIM decides on operand invariance
+                and memory dependence, treats a volatile builtin call
+                as immovable, and has no model either of a lane mask or
+                of a register file whose values have no spill path.
+
+   HARDWARE.  SFPLOADI -- one delivered word, or a short sequence for a
+   full 32-bit immediate -- moved from the loop body to the preheader.
+   The saving is those words on every iteration; the price is ONE LREG
+   pinned across the entire loop, out of the eight-register file.  That
+   is the whole trade, and it is why this pass is a placement authority
+   rather than a rewrite: the words are cheap and the register is not,
+   so the interesting decisions are all about who gets to place a
+   constant, not about what to emit.  The lane-mask obligation comes
+   from the flag stack, and the narrowing argument from the fact that
+   the in-region writers update LaneFlags only in already-enabled
+   lanes, or intersect against the region-entry save.
+     - SFPLOADI lane-predicated write    SFPLOADI.md functional model
+     - lane-enable pair {LaneFlags, UseLaneFlagsForLaneEnable}
+                                         VectorUnit.md IsLaneEnabled
+     - SFPPUSHC mod 0 / SFPPOPC mod 0 save and restore that pair
+       VERBATIM                          SFPPUSHC.md, SFPPOPC.md, and
+                                         the reference simulator
+     - narrowing-only in-region writers  SFPSETCC.md, SFPIADD.md;
+                                         SFPCOMPC computes
+                                         LaneFlags = Top.LaneFlags
+                                         && !LaneFlags (SFPCOMPC.md)
+     - structured markers lower to exactly that class
+                                         gimple-rvtt-expand.cc
+                                         process_tree /
+                                         process_bool_tree
+     - 8-LREG file, no spill path        rvtt-pressure
+
+   BIRTH KERNEL.  UNTRACEABLE.  Ledger: FIRE-BREADTH.tsv flag
+   invariant-loadi, birth_row "pre-pin-10 core", birth_share n/a(core).
+   The mechanism predates the pin-10 ledger and has no birth row, so NO
+   kernel provenance is claimed for the hoist itself.  The three
+   ordering flags this pass consults DO have rows:
+
+     park-ordering     softplus-fresh (lane HN, pin 32), share 0.15
+     pressure-park     softsign (lane GV, pin 29),       share 0.12
+     const-residency   hardsigmoid/sigmoid-tree (lane GA), share 0.38
+
+   None of the three is birth-row-bound (every share is well below
+   1.00).  Those readings are the ledger's, and this file's own
+   measured anatomy agrees with them: the deferral's "measured
+   discharge of the in-region claim" names softplus-fresh; softsign
+   appears among the six measured depth-zero LOSS rows that forced the
+   park-seed split, not as a park birth; and hardsigmoid appears among
+   the kept-hoist winners the residency walk is arbitrated against.
+
+   DISPUTED -- resolve before submission.  A circulating summary of the
+   birth data rotates these three assignments by one, reading
+   park-ordering as softsign, pressure-park as hardsigmoid/sigmoid-tree
+   and const-residency as softplus-fresh.  Both readings are recorded
+   here; the rows printed above are what FIRE-BREADTH.tsv and the
+   inline anatomy in transform() say, and they are what this header
+   asserts.  */
+
 #define INCLUDE_VECTOR
 #define INCLUDE_ALGORITHM
 #include "config.h"

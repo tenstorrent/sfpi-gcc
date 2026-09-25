@@ -130,7 +130,144 @@ along with GCC; see the file COPYING3.  If not see
    the token); with the token absent the standing
    reassoc-loop-carried-underived refusal continues byte-identically
    (note_loop_carried below is the historical diagnostic, kept
-   verbatim).  Nothing fires that is not proven or licensed.  */
+   verbatim).  Nothing fires that is not proven or licensed.
+
+   LINEAGE.  This is the pass that changes floating-point results, so
+   its provenance is worth stating more carefully than most.
+
+     technique  M. Lam, "Software pipelining: an effective scheduling
+                technique for VLIW machines", Proceedings of the ACM
+                SIGPLAN 1988 Conference on Programming Language Design
+                and Implementation, 1988, pp. 318-328.
+                The idea taken is modulo variable expansion: a
+                loop-carried value that serializes successive
+                iterations on one name is given SEVERAL names, so the
+                iterations become independent and the recurrence bound
+                falls by the expansion factor.  Site 3's P round-robin
+                partial accumulators are exactly that shape, and the
+                factor is chosen from the same quantity Lam's is --
+                the producer's result latency measured in issue slots
+                (rvtt-timing.h accum_split_factor).
+                What is NOT taken -- and this is the whole reason the
+                pass needs a license: Lam's expansion is
+                VALUE-PRESERVING.  It renames one value across
+                iterations of a software pipeline; every arithmetic
+                operation and every rounding stays exactly where it
+                was.  Site 3 does not rename, it SPLITS an associative
+                reduction into P independent partial sums and
+                recombines them with a balanced tree on the exit edge.
+                That reassociates the summation, moves which
+                intermediate roundings occur, and is bit-changing on
+                floating-point data.  The P-1 new accumulators must
+                also be initialized to a +0.0 identity, and -0.0 + x
+                vs x is precisely the divergence class the FP license
+                ratifies.  Hence the double key, and hence integer and
+                bitwise chains -- where the operator is exactly
+                associative and no rounding exists -- are separated out
+                and fire under the target flag alone.
+     modelled on  gcc/tree-ssa-reassoc.cc:
+                rewrite_expr_tree_parallel, for Site 1 (the balanced
+                binary tree over the same terms in the same order,
+                depth n-1 down to ceil(log2 n)); and
+                gcc/loop-unroll.cc: analyze_insn_to_expand_var
+                (-fvariable-expansion-in-unroller), for Site 3's
+                accumulator expansion.
+                Why generic GCC cannot do either here: the chain links
+                are SFPU builtin CALLS carrying typed effects, not
+                GIMPLE arithmetic, so tree-ssa-reassoc never sees an
+                associative operator to rank and
+                -fvariable-expansion-in-unroller never sees an
+                accumulating insn to expand.  More importantly neither
+                generic pass knows the ceiling that governs here: a
+                wider tree or an extra partial accumulator costs
+                registers, and the eighth LREG is free while the ninth
+                is a hard compile error with no memory spill path to
+                soften it.  A value-changing transform that turned a
+                compilable kernel into an uncompilable one would be
+                indefensible whatever the license said -- hence
+                reassoc-pressure-budget-exceeded, which has no
+                counterpart in either generic pass.
+     admission  no exhaustive sweep is possible or claimed here, and
+                that asymmetry with the proven folds
+                (gimple-rvtt-int-not.cc, gimple-rvtt-int-abs.cc, whose
+                admission is a mismatch count of zero) is the point:
+                these FP sites are KNOWN to change results.  They are
+                admitted by explicit user consent -- flag_associative_math
+                together with riscv_tt_opt_reassoc -- not by proof,
+                every firing site prints a named "reassoc:" dump line,
+                and with either key absent every FP site refuses by
+                name and the output is byte-identical to a compiler
+                without this pass.  The integer and bitwise chains ARE
+                proven (associativity of mod-2^32 addition and of the
+                bitwise lattice operators) and are labeled separately
+                in the dump.
+
+   HARDWARE.  The MAD unit's RESULT LATENCY is the resource this pass
+   trades against, and the eight LREGs are the budget it must stay
+   inside.  A left-associated chain of n plain-mod SFPADD/SFPMUL
+   statements has dependence depth n-1, and with the MAD unit's
+   latency that depth IS the row's critical path in issue slots;
+   rebalancing to ceil(log2 n) keeps the statement count identical and
+   buys only independence -- the post-RA list scheduler's chain
+   interleaving is what converts that independence into filled
+   result-latency shadows, so the delivered word count does not change
+   at Site 1 at all.  Site 3 trades differently: a K-link loop-carried
+   recurrence is bound at K * (words + latency) slots per iteration and
+   splitting into P partials cuts it to ceil(K/P) * (words + latency),
+   but here words ARE added -- P-1 identity initializations in the
+   preheader and a balanced reduction tree on the single exit edge --
+   and those one-time overhead words are priced through
+   rvtt-delivery-cost in the fire dump rather than assumed away.  The
+   budget on both sites is LREG live ranges: a balanced tree holds at
+   most tree-depth partial results simultaneously live where the
+   serial chain held one, and each extra accumulator is one more live
+   range across the whole loop body.  P is capped by that headroom
+   (P = min(latency-derived ideal, pressure headroom + 1, 4, K)), and a
+   site whose conservative block peak plus its new partials could
+   exceed eight refuses -- the compilable Cos/Sin/I1/welford kernels
+   are exactly what that refusal protects.
+     - audited result latency       read once at the gimple seam via
+                                    rvtt_builtin_result_latency;
+                                    rvtt.md `xtt_result_latency'
+                                    (encoded latency+1; 0 = unaudited)
+     - split factor and saving      rvtt-timing.h accum_split_factor /
+                                    accum_split_saving
+     - overhead words priced        rvtt-delivery-cost.h, in the fire
+                                    dump
+     - eight allocatable LREGs      riscv.h SFPU_REG_NUM; the block
+                                    peak from rvtt-pressure.cc
+                                    rvtt_pressure_bb_peak
+     - replay playback is a hard    a TTREPLAY delivery boundary inside
+       boundary, not a cost         a chain window refuses
+                                    (reassoc-replay-playback-boundary):
+                                    recorded slot content is not
+                                    derivable, so value order across it
+                                    is unproven
+
+   BIRTH KERNEL.  tan chain (lane EJ, pin 16).  Ledger: FIRE-BREADTH.tsv
+   flag reassoc, birth_row "tan chain (laneEJ, pin 16)", birth_share
+   "-" (absent, not zero), verdict NO-FIRE, genesis MODEL-BORN.  The
+   share is absent because there is nothing to apportion: on the board
+   corpus, at ON-36 plus license, this pass commits NOTHING.  The
+   ledger's note records it as an honest zero -- 150 named refusals, of
+   which 147 are reassoc-pressure-budget-exceeded, and zero commits.
+   So the birth row says where the transform was first modelled, not
+   where it pays.  Report this pass as measured-zero-on-corpus:
+   neither birth-row-bound nor broad.  That is a defensible state for a
+   licensed pass -- it fires only on user consent, and the corpus does
+   not grant it -- but it means no breadth claim may be made for it at
+   all.  The source names no birth kernel of its own, and the kernels
+   it does name serve other purposes: welford is the loop-carried
+   recognition class for Site 3, and Cos/Sin/I1/welford are the
+   pressure-refusal exemplars.  The two sibling licensed flags,
+   -mtt-tensix-optimize-reassoc-loop-carried (Site 3) and
+   -mtt-tensix-optimize-reassoc-mad-restructure (Site 2, implemented in
+   gimple-rvtt-combine.cc / rvtt.gc), have NO ledger row at all.  What
+   the tree records instead is 37 tests under
+   g++.target/riscv/tt/tensix/ (reassoc-*), weighted toward refusal
+   rows -- license-absent, target-flag-absent, pressure, CC boundary,
+   replay playback, loop-shape -- which is the right weighting for a
+   pass whose principal obligation is to do nothing without consent.  */
 
 #define INCLUDE_VECTOR
 #include "config.h"

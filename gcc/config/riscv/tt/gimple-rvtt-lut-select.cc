@@ -146,7 +146,80 @@ along with GCC; see the file COPYING3.  If not see
      base increment).  The original per-leaf coefficient
      materializations die with the tree; the packed words are
      synthesized as ordinary invariant immediates and participate in
-     the shared preheader placement.  */
+     the shared preheader placement.
+
+   LINEAGE.
+     technique  J. R. Allen, K. Kennedy, C. Porterfield and J. Warren,
+                "Conversion of control dependence to data dependence",
+                POPL 1983, pp. 177-189.
+                If-conversion: a control-dependent region computes one
+                value function of its inputs, and that function may be
+                computed without the control flow.  What is NOT taken:
+                the classical rule stops at predication, replacing
+                branches with masks.  Here the predicated
+                range-dispatch tree is not flattened but DISSOLVED --
+                the hardware's own magnitude bucketing takes over the
+                compare chain -- so the tree's boundaries must BE the
+                architectural boundaries, and the equivalence argument
+                is bucket agreement (NaN and infinities included),
+                not mask agreement.
+     technique  A. V. Aho, M. Ganapathi and S. W. K. Tjiang, "Code
+                generation using tree matching and dynamic
+                programming", ACM TOPLAS 11(4):491-516, October 1989.
+                Instruction selection by matching a pattern against a
+                dataflow tree rather than against opcodes -- the
+                reason this matcher is purely structural and ignores
+                coefficient values and names.  What is NOT taken: the
+                cost-driven dynamic program.  Admission here is not
+                cheapest-match but capability-table match: a (leaf
+                class, slot partition, target) triple forms only where
+                rvtt-lut-tables.cc records its exhaustive bit-exact
+                certification, and refuses by name otherwise.
+     modelled on  none.  GCC's combine and its recognizers work below
+                the level at which a whole CC-scaffolded select tree
+                is one selection candidate.
+
+   HARDWARE.  SFPLUTFP32 and its coefficient table, in two encodings:
+   the FP32 3-entry mode holds any FP32 coefficient verbatim, while
+   the FP16 six-entry TABLE1 / TABLE2 modes pack two LUT16-lattice
+   coefficients into each table LReg, so every slot coefficient must
+   be a compile-time constant that re-encodes EXACTLY or formation
+   refuses.  The table LREGs are IMPLICIT HARD REGISTERS: the formed
+   instruction reads them directly, so a slot operand defined by a
+   constant-register read forces a physical copy at the USE -- inside
+   the row loop.  The delivered-word saving is the whole dispatch tree
+   (the PUSHC / SETCC / COMPC / POPC scaffolding plus one MAD per
+   range) collapsed to one word; the binding cost is the eight-LREG
+   file, which the coefficient placement must fit transactionally or
+   else leave every coefficient rematerializing per row.
+     - bucketing         strict magnitude-bit compares of |x|; BH
+                         agrees with the tree's float compares, WH
+                         does not for negative NaN (admitted only
+                         under -ffinite-math-only)
+     - single rounding   the table evaluates fma (A_i, |x|, B_i) with
+                         one rounding, matching the SFPMAD the
+                         default-on rvtt combine pass already formed
+     - FLOATB exactness  SFPLOADI.md: FLOATB materializes
+                         imm16 << 16 bit-exactly, which is what lets a
+                         recorded creg value become its own shortened
+                         materialization
+
+   BIRTH KERNEL.  Three flags, all BIRTH-ROW-BOUND at birth_share
+   1.00, none of them named in this header -- the kernels appear only
+   mid-file, in the slot-copy and LREG-budget notes:
+     -mtt-tensix-optimize-lut-select -- FIRE-BREADTH.tsv birth_row
+       "tanhlut/sigmoidlut LUT rows", birth_share 1.00.
+     -mtt-tensix-optimize-lut-select-leaf-ext -- FIRE-BREADTH.tsv
+       birth_row "tanhderivlut (lanes CY/HF/HT)", birth_share 1.00;
+       tanhderivlut is also the named measured residual in the
+       slot-copy note below, so source and ledger agree here.
+     -mtt-tensix-optimize-lut-select-fp16 -- FIRE-BREADTH.tsv
+       birth_row "geluappx (laneGU, pin 29)", birth_share 1.00; the
+       gelu row is the measured 71223-cycle case in the LREG-budget
+       note below.
+   birth_share 1.00 on all three means each flag's entire measured
+   benefit is its single birth row; no arm is claimed to generalise.
+   */
 
 #include "config.h"
 #include "system.h"

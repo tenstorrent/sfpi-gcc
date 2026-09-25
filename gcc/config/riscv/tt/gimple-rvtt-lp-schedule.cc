@@ -17,6 +17,192 @@ You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
+/* -mtt-tensix-optimize-pressure-schedule (default off).
+
+   THE NAME IS A TRAP, and it is a three-way one.  This file, the pass
+   (pass_rvtt_lp_schedule) and its dump (-fdump-tree-rvtt_lp_schedule)
+   are all spelled "lp_schedule" -- after the linear-programming
+   formulation of the capacity problem, not after any option.  The
+   option of that name, -mtt-tensix-optimize-lp-schedule, is a
+   TOMBSTONE: it was a historical alias with no in-tree or external
+   consumer and it now calls error() rather than silently forwarding
+   (riscv.cc riscv_override_options_internal; riscv.opt keeps it
+   Undocumented Init(-1) solely so the error can be raised).  The LIVE
+   gate is riscv_tt_opt_pressure_schedule
+   (-mtt-tensix-optimize-pressure-schedule), and the LP half of the
+   name is reached by a fourth spelling again,
+   -mtt-tensix-pressure-schedule-use-milp.  Reading a dump named
+   lp_schedule and reaching for -mtt-tensix-optimize-lp-schedule is the
+   expected mistake; it errors out, which is the intended outcome.
+   Note also that the live flag is SHARED: the same
+   -mtt-tensix-optimize-pressure-schedule enables the pre-IRA pressure
+   audit layer of rtl-rvtt-lp-alloc.cc.
+
+   WHAT THE PASS DOES.  It reorders -- and only reorders -- straight-
+   line SFPU arithmetic so a region that needs more than eight
+   simultaneously live vector values stops needing more than eight.  No
+   statement is created, deleted or rewritten; the delivered word count
+   is identical before and after; the only thing that moves is issue
+   order within one basic block.  The payoff is not speed, it is
+   COMPILABILITY: peak pressure above the eight allocatable LREGs has
+   no memory spill path to fall back on, so it is the hard
+   lreg-pressure-exceeded error, and a kernel that fits only in some
+   orders must be put in one of them.
+
+   THE SEAT is just before RTL expansion and after the Dst interleaver
+   (rvtt-passes.def), on GIMPLE, where the SFPU operations are still
+   builtin calls with typed effects and the values are still SSA names.
+
+   THE GATE is optimize > 0, TARGET_XTT_TENSIX_WH or _BH, and
+   riscv_tt_opt_pressure_schedule.  Deliberately NO debug_info_level
+   condition: the pass is debug-transparent -- regions, pressure and
+   the committed order are all computed debug-blind, and span-internal
+   debug binds are re-emitted after the region -- so -g and -g0 produce
+   identical code.  The historical DINFO_LEVEL_NONE gate made the pass
+   unmeasurable under the LLK harness, which compiles with -g (audit
+   finding IP-6).
+
+   ADMISSION is a deliberately tiny positive allowlist, and every
+   restriction below is phase-one conservatism rather than a proven
+   boundary:
+
+     - operations: SFPADD, SFPMUL, SFPMAD only, each with an
+       __xtt_vector XTT32SImode result, vector or INTEGER_CST
+       arguments, no side effects, no live-value form, nothrow;
+     - blocks: a block containing ANY explicit CC epoch operation
+       (SFPPUSHC/SFPPOPC), any CC setter, or any predicated live-value
+       form is rejected WHOLE.  There is no CC-state proof here, and
+       treating such operations merely as region boundaries is not
+       sufficient;
+     - functions: the region must be the sole real basic block of a
+       straight-line function (no phis, single predecessor ENTRY,
+       single successor EXIT).  There is no CFG liveness proof here;
+     - constant LREGs (register number >= 8) are encoded as operands,
+       consume none of L0-L7, and are excluded from the model as free.
+
+   THE MODEL is a per-value record over the region: where in the region
+   a value is defined (-1 = outside), how many region operations use
+   it, and whether it is live past the region.  A value untouched by
+   the region but live across the span occupies an LREG throughout and
+   is counted.  A destructive result becomes live only after all its
+   operands have been read.
+
+   THE CANDIDATES, tried only when the original order's peak exceeds
+   eight:
+
+     1. A deterministic pressure-first list schedule (capped at 32
+	operations).  It is the pre-solver phase: a materializable
+	upper bound and a small, independently checkable rescue for
+	graphs that exceed eight only because independent work is
+	issued too late.
+     2. Under -mtt-tensix-pressure-schedule-use-milp, the exact
+	solver, whose OPTIMAL order supersedes the list one.  The
+	primary engine is the always-compiled branch-and-bound solver
+	(rvtt-bnb.cc) over exactly the model rvtt-lpsolve.cc
+	formulates as a MILP: a permutation of the region, every
+	dependence edge issuing its def strictly earlier, at most
+	eight values live after every slot, minimizing operations
+	displaced from their list-scheduler slots.  A capped search
+	contributes no incumbent.  When GCC is configured
+	--with-lp-solve the adapter runs as an independent CROSS-CHECK
+	only and its answer is never selected, so code generation is
+	byte-identical across build configurations.
+
+   ACCEPTANCE.  A candidate order is committed only after an
+   INDEPENDENT validator -- a from-scratch rebuild of the vector
+   liveness model over the proposed order, not a reuse of the
+   scheduler's bookkeeping -- accepts it, AND after a rejection
+   self-test that feeds deliberately malformed certificates through the
+   same validator and confirms they are rejected.  The region verdict
+   is dumped either way
+   ("SFPU pressure schedule: ... old-peak=... new-peak=... validated=...
+   reason=... rejection-selftest=... applied=...").  The commit moves
+   the region's operations, in scheduled order, into the span the
+   region already occupied and re-emits the span's debug binds after
+   them; an unchanged order touches no IL.
+
+   LINEAGE.
+     technique  R. Sethi and J. D. Ullman, "The generation of optimal
+                code for arithmetic expressions", Journal of the ACM
+                17(4):715-728, October 1970.
+                The idea taken is the one this pass rests on entirely:
+                that the number of registers an expression needs is a
+                property of the EVALUATION ORDER and not of the
+                expression, so a computation that does not fit the
+                machine in one order may fit it in another -- and the
+                order can be chosen for that alone.
+                What is NOT taken: the Sethi-Ullman numbering itself
+                and its optimality.  That result is about expression
+                TREES, where every value has exactly one consumer;
+                these regions are DAGs (a value may feed several
+                operations, and may be live out of the region), which
+                is a different and much harder problem.  So the list
+                schedule here carries NO optimality claim -- it is a
+                heuristic offering a materializable bound -- and when
+                the exact answer is actually wanted it comes from the
+                branch-and-bound search under
+                -mtt-tensix-pressure-schedule-use-milp, not from a
+                numbering.  Nor is the goal minimal registers: the goal
+                is a threshold, eight, past which no amount of extra
+                cleverness is worth anything and below which none is
+                needed.
+     modelled on  none.  GCC has no GIMPLE-level scheduler to model
+                this on: its register-pressure-aware scheduling lives
+                in gcc/haifa-sched.cc (SCHED_PRESSURE_MODEL,
+                model_set_excess_costs), which runs on RTL after
+                expansion -- downstream of this seat -- and prices
+                pressure as a COST in cycles, which is the wrong shape
+                for a file with no spill path, where the eighth
+                register is free and the ninth is a compile error.
+                The RTL sibling that does adapt haifa's model, for the
+                stalls rather than the ceiling, is
+                rtl-rvtt-lp-schedule-prera.cc.
+
+   HARDWARE.  The eight architectural SFPU vector registers L0-L7
+   (riscv.h SFPU_REG_NUM), counted as simultaneously live __xtt_vector
+   XTT32SImode SSA values; constant LREGs (number >= 8) are encoded in
+   the instruction word, occupy none of the eight, and are free.  The
+   cost is charged in LREG live ranges and in NOTHING ELSE: the pass
+   delivers no word, removes no word, and changes no instruction, so
+   issue slots, delivered words and the emitted encoding are invariant
+   across a commit -- which is also why it needs no interlock or
+   latency model at all.  The ceiling is a cliff rather than a slope,
+   because an LREG has no memory spill path: peak eight costs nothing
+   and peak nine costs the whole compilation.
+     - eight allocatable LREGs      riscv.h SFPU_REG_NUM
+     - no LREG memory spill path    the over-pressure outcome is the
+                                    rtl-rvtt-spill-diag.cc named error
+                                    lreg-pressure-exceeded
+     - constant LREGs are free      register number >= 8, encoded as
+                                    an operand of the SFPU builtin
+     - solver capacity bound        REGISTER_CAPACITY = 8 in the
+                                    rvtt-lpsolve.cc MILP and the
+                                    rvtt-bnb.cc search
+     - scope caps                   list scheduler 32 operations;
+                                    exact solver 24 operations and
+                                    32 values, plus a deterministic
+                                    node cap
+
+   BIRTH KERNEL.  welford (the twin rows
+   g++.target/riscv/tt/sfpi/welford-pressure-reorder-{bh,wh}.C, which
+   pin old-peak=9 new-peak=8 applied=yes on the Welford
+   mean/M2 update).  Ledger: there is NO FIRE-BREADTH.tsv row for this
+   pass at all -- the live flag -mtt-tensix-optimize-pressure-schedule
+   does not appear in the ledger, so there is no birth row and no
+   birth_share to report, and no claim about generality can be
+   supported or refuted from it.  The two nearby rows are NOT this
+   pass: `milp', the sub-knob
+   -mtt-tensix-pressure-schedule-use-milp, is recorded as a
+   measurement instrument (EM-era; lane IZ) with no birth_share, and
+   `prera', the pre-allocation RTL sibling
+   -mtt-tensix-optimize-pressure-schedule-prera, has its own row
+   (addrsqrt probes, birth_share 0.00).  What the tree records instead
+   is the test inventory: 28 rows under
+   g++.target/riscv/tt/sfpi/ (lp-schedule-{cfg,compare-debug,
+   constant-lreg,debug-g-fire,duplicate-use,live-across,milp-cap,
+   milp-fire,milp-off,o0-gate,predicated}, pressure-schedule-fused-dag
+   and the welford-pressure rows, each in a BH and a WH twin).  */
+
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"

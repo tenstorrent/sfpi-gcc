@@ -103,7 +103,61 @@ along with GCC; see the file COPYING3.  If not see
    the mask's live range, so the invariant pass's own pressure-bounded
    greedy selection then hoists what fits and leaves the cheapest
    rematerializations in the loop with no further mechanism here.
-   Every miss refuses by name with the program bytes unchanged.  */
+   Every miss refuses by name with the program bytes unchanged.
+
+   LINEAGE.
+     technique  J. R. Allen, K. Kennedy, C. Porterfield and J. Warren,
+                "Conversion of control dependence to data dependence",
+                POPL 1983, pp. 177-189.
+                If-conversion: a control-dependent region is replaced
+                by a branch-free computation guarded by a boolean
+                mask, and the merge becomes an ordinary data
+                operation.  What is NOT taken: the classical rule
+                converts branches INTO predicates, introducing the
+                mask.  Here the region arrives already predicated in
+                the SFPU's CC form, and the transform runs the
+                conversion the other way -- the lane predicate is
+                demoted to an ordinary vector value and the merge is
+                spelled SFPAND, so the serial CC dependence spine
+                disappears instead of being created.
+     admission  exhaustive host sweeps over all 2^32 x encodings per
+                direction: tt/proofs/ccmask-direction-complete/ (the
+                four order directions) and tt/proofs/ccmask-eqne-zero/
+                (the EQ/NE two-compare compositions).  Per the
+                tt/proofs README contract each fold may fire ONLY
+                while its RESULT is EQUAL.  Proof and admission stay
+                separate here: the EQ/NE compositions are proven and
+                still refuse, on price.
+     modelled on  none.  GCC's if-conversion (gcc/tree-if-conv.cc)
+                runs long before the CC skeleton exists and has no
+                model of the SFPU lane mask.
+
+   HARDWARE.  The Blackhole native compares SFPGT / SFPLE in SET_DEST
+   mode (mod1=8), which write the keep-mask into the FIRST compare
+   operand, plus one SFPAND.  Two delivered words replace the
+   five-word CC spine (SETCC pair, COMPC, predicated move, ENCC), and
+   the two are independent and shadow-fillable where the spine is a
+   serial flag dependence every row waits on.  SET_DEST needs a
+   WRITABLE zero operand, so the region's own zero materialization is
+   consumed as that operand instead of occupying an LREG; the
+   read-only CREG_IDX_0 cannot serve.
+     - SFPGT/SFPLE mod1=8   TENSIX_EXECUTE_SFPGT/SFPLE (pinned sim)
+     - the CC spine         TENSIX_EXECUTE_SFPSETCC / SFPCOMPC /
+                            SFPMOV / SFPENCC
+   SFPGT/SFPLE do not exist before Blackhole; every other target keeps
+   the CC lowering byte-identically (ccmask-target-unproven).
+
+   BIRTH KERNEL.  DISPUTED -- resolve before submission.
+   FIRE-BREADTH.tsv flag ccmask records birth_row "exp (laneBG
+   exp-win)", birth_share 0.20 -- on the ledger's reading the fold
+   generalises well beyond its birth row.  This file names no birth
+   row at all; the only kernels it names are the promotion-round-6
+   device measurements of the UNPRICED EQ/NE admission (sign +39.8%,
+   atan2 +10.0%, remainder/fmod/trigonometry/acosh ~+2%), which are
+   REGRESSIONS recorded to justify keeping that arm refused, not the
+   benefit that bore the pass.  Source and ledger name different
+   kernels; the ledger row is the measured one.
+   */
 
 #define INCLUDE_ALGORITHM
 #define INCLUDE_VECTOR

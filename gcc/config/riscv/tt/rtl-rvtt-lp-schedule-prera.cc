@@ -40,8 +40,9 @@ along with GCC; see the file COPYING3.  If not see
 	keep register pressure down" (greedy minimum-candidate-peak
 	dispatch; ties by original order).  It is not applied; it
 	records the achievable maximum pressure MP.  This is the CSR
-	half of Goodman & Hsu's integrated code scheduling and register
-	allocation (ICS 1988).
+	half of Goodman & Hsu, "Code scheduling and register allocation
+	in large basic blocks", ICS 1988, pp. 442-452 -- their
+	integrated code scheduling and register allocation.
      2. The REAL candidate is a list schedule ranked by
 	ECC (insn) + insn_delay (insn): the pressure-based excess cost
 	change, "effectively measured in cycles", plus the stall the
@@ -100,7 +101,55 @@ along with GCC; see the file COPYING3.  If not see
    phases re-verify on their own.
 
    Purely structural: no operation identity, opcode calendar,
-   coefficient value, or instruction-word fingerprint participates.  */
+   coefficient value, or instruction-word fingerprint participates.
+
+   HARDWARE.  The eight architectural SFPU vector registers L0-L7
+   (riscv.h SFPU_REG_NUM), counted here as the simultaneous liveness of
+   XTT32SI allocation units -- SFPU vector pseudos plus any live hard
+   LREG -- because at this seat the registers are still virtual and the
+   file size is the only fixed quantity.  The pass DELIVERS NOTHING: it
+   emits no instruction, deletes none, and the region's delivered word
+   count is invariant across a commit; it spends only issue ORDER.  What
+   it buys is measured in two currencies at once, and a candidate must
+   be non-worse in both with a strict gain in one: LREG live ranges (the
+   modeled peak, whose overshoot past eight is not a cost but a hard
+   compile failure -- there is no memory spill path for an LREG, so an
+   uncolourable order becomes the lreg-pressure-exceeded error) and
+   issue slots (the modeled makespan: word counts plus audited interlock
+   shadows).  The audited result-latency window is the throttle on how
+   much of the machine the makespan model is allowed to claim to
+   understand: only latency 0 or 1 producers may sit inside a region,
+   and an unaudited one bounds it by name.  The replay window is a hard
+   scheduling barrier rather than a cost: an explicit replay-buffer
+   owner ends region eligibility for the rest of the block, because a
+   fixed capture records following delivered words BY POSITION, so
+   reordering them would rewrite the recorded program.
+     - eight allocatable LREGs      riscv.h SFPU_REG_NUM
+     - no LREG memory spill path    rvtt.md rvtt_sfpassign memory
+                                    alternatives exist for constraint
+                                    matching only
+     - audited result latency       rvtt.md `xtt_result_latency'
+                                    (encoded latency+1; 0 = unaudited),
+                                    read through rvtt-timing.h
+                                    audited_latency
+     - interlock shadow, RAW/WAW    rvtt-timing.h adjacent_stall
+     - pressure ground truth        DF_LR_OUT backward recount, cross-
+                                    checked by the lane-DS oracle
+                                    (lregalloc/tools/
+                                    lreg_pressure_oracle.py)
+
+   BIRTH KERNEL.  addrsqrt probes (EM-era).  Ledger: FIRE-BREADTH.tsv
+   flag prera, birth_share 0.00 -- the opposite of a birth-row-bound
+   flag: NONE of the flag's measured benefit is attributable to the row
+   that first made it fire.  That row is probe material, not a
+   beneficiary, so no generality claim and no narrowness claim can be
+   read off it in either direction; the ledger simply does not settle
+   the question for this flag.  What the tree records instead is the
+   fire and refusal inventory in g++.target/riscv/tt/presched/
+   (raw-prera-fire10-{bh,wh}, -fire10-twin, -firefloat, -makespan,
+   -split-knot, -split-repeat, -ring10-defer, -bait-cc, -bait-swap,
+   -qsr32 and the flag-off twins) together with the device probe in
+   presched/tools/craq-probe/sfpu_prera_probe.cpp.  */
 
 #include "config.h"
 #define INCLUDE_ALGORITHM

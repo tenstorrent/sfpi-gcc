@@ -97,7 +97,82 @@ along with GCC; see the file COPYING3.  If not see
      function-granular version of this proof).
 
    Refusals never mutate the CFG: flag-off and every refusal path are
-   byte-identical.  */
+   byte-identical.
+
+   LINEAGE.
+     technique  none.  Programming a machine-global constant register
+                bank has no published antecedent, because the resource
+                has no analogue in the register-allocation literature.
+                A PRGM register is written once by an SFPCONFIG and
+                read thereafter as an operand ENCODING: it is not a
+                register the allocator colours (no live range, no
+                spill), not a rematerialization candidate (nothing is
+                recomputed), and not a promotion (nothing was ever in
+                memory).  The nearest ideas are all the wrong shape and
+                are deliberately not stretched to fit: P. Briggs,
+                K. D. Cooper and L. Torczon, "Rematerialization", PLDI
+                1992, pp. 311-321, trades a spill for a recompute,
+                where this trades a recompute for a one-time global
+                write; K. D. Cooper and J. Lu, "Register promotion in C
+                programs", PLDI 1997, pp. 308-319, moves a memory value
+                into a register over a proven-quiet region, where the
+                quiet region here is the ENTIRE translation unit and
+                the value was never in memory.
+     admission  none published either.  What licenses a fire is the
+                TU-wide freedom proof in this file, which is the real
+                content of the pass: every raw `.ttinsn' word in the
+                translation unit must decode through the audited
+                raw-word table, every MOP template-slot write is itself
+                a scanned store whose word must decode through the same
+                table (MOP is DERIVED, never trusted), every store
+                classifies by target range, every user vConstFloatPrgm
+                assignment claims its destination, and every call is
+                either a scanned body or a refusal.  Anything unaudited
+                refuses the whole TU byte-identically.
+     modelled on  none.  Generic GCC has no notion of a write-once
+                machine-global constant bank, no place to hang a
+                whole-translation-unit freedom proof (its IPA summaries
+                are per-symbol, not per-machine-resource), and no way
+                to say "this operand now reads a configuration
+                register" without a register class it can allocate.
+
+   HARDWARE.  SFPCONFIG destinations 12..14 -- sfpi CREG_IDX_PRGM1..3,
+   vConstFloatPrgm0..2 -- three programmable constant registers
+   readable as constant-register operands at ZERO allocatable-LREG
+   pressure.  That is the point of the pass: the immediate stops
+   occupying a register in the 8-LREG file, so a constant the invariant
+   hoist had to leave in a loop on pressure grounds can live outside
+   the file entirely.  The delivered saving is secondary and indirect:
+   rewriting the immediate form to the register form re-offers the pair
+   to the downstream mul+add-to-mad combine, deleting one issue slot
+   AND one result-latency stall per iteration on the exp shape.  The
+   programming is one SFPCONFIG on the loop entry edge -- and it is
+   PERSISTENT GLOBAL machine state, which is why the freedom proof is
+   TU-wide and cached at first execution, and why the programming point
+   must be proven to run under the all-lanes CC state.
+     - SFPCONFIG dest 12..14 = vConstFloatPrgm0..2
+                                     sfpi CREG_IDX_PRGM1..3
+     - audited raw-word table (TENSIX NOP, sync 0xA0-0xA7, thread-config
+       0xB0-0xB8, CLEARDVALID/SETRWC, SFPLOADI with a verified
+       allocatable destination, SFPCONFIG with a decoded constant
+       destination)               rvtt-mop-derive.cc
+                                  rvtt_mop_audited_word_p
+     - MOP template slots, instruction-FIFO aperture, PC_BUF sync
+       words, debug block, inert MMIO
+                                  rvtt-mop-tables.h
+     - 8-LREG file (the pressure this pass relieves)
+                                  rvtt-pressure
+     - fn-entry all-lanes CC model  gimple-rvtt-cc.cc
+
+   BIRTH KERNEL.  exp, MATH_ISOLATE (lane BL).  Ledger:
+   FIRE-BREADTH.tsv flag prgm-const, birth_share 0.17.  The share is
+   well below 1.00, so the flag is NOT birth-row-bound: most of its
+   measured benefit falls on rows other than the one it was born on,
+   and the mechanism is claimed to generalise within its proven scope.
+   The file's own text agrees on the row -- the mad-fusion re-offer is
+   costed "on the exp shape" -- and names no other kernel; the
+   testsuite coverage (the prgm-const-... family) is structural
+   throughout and names none.  */
 
 #define INCLUDE_VECTOR
 #include "config.h"

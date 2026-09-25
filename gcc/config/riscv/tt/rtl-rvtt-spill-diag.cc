@@ -43,7 +43,69 @@ along with GCC; see the file COPYING3.  If not see
    compiler bug still ICEs loudly.
 
    The pass changes nothing on spill-free streams: flag-off and clean
-   compilations are byte-identical.  */
+   compilations are byte-identical.
+
+   LINEAGE.
+     technique  none.  Turning an impossible reload into a located user
+                error has no published antecedent to take an idea from;
+                the whole content of the pass is the local fact that
+                for this register class the spill cannot exist, and the
+                policy decision that the resulting failure is a
+                capacity fact about the source rather than a bug in the
+                compiler.  Nothing is adapted, so nothing is claimed.
+     modelled on  none.  Generic GCC cannot diagnose this.  Its
+                allocators are built on the assumption that every
+                allocno class has a memory home to fall back to
+                (gcc/ira-color.cc: ira_color spills to memory;
+                gcc/lra-spills.cc: lra_spill assigns stack slots to
+                the pseudos LRA gave up on), and the target's only
+                chance to object is the move expander at output time,
+                which can do nothing but ICE (rvtt.cc
+                rvtt_mov_error).  There is no target hook that says
+                "this class has no spill path"; the memory
+                alternatives in rvtt.md exist precisely so that LRA's
+                constraint matching does NOT fail early.  So the
+                impossibility is only observable after allocation, by
+                MODE, on the allocated stream -- which is where this
+                pass stands.
+
+   HARDWARE.  The eight architectural SFPU vector registers L0-L7
+   (riscv.h SFPU_REG_NUM) and the absence of any memory spill path for
+   them: an LREG holds a full 32-bit-per-lane vector, the scalar stack
+   is not addressable from the SFPU datapath, and the only scratch the
+   SFPU can reach is the Dst tile file -- reachable, but only through
+   the all-lanes-CC, 32-bit-Dst-layout, LaneConfig and RWC-epoch proof
+   stack that rtl-rvtt-lp-alloc.cc discharges before allocation.  By
+   the time control reaches this pass those proofs are spent and the
+   register file is fixed, so the delivered cost of the pass is
+   nothing: it emits no word and deletes only moves that could never
+   have been emitted, on a compilation that is already doomed by a hard
+   error.  On any stream without an allocated SFPU-mode memory move it
+   is a proven no-op.
+     - eight allocatable LREGs      riscv.h SFPU_REG_NUM
+     - no LREG memory spill path    rvtt.md rvtt_sfpassign memory
+                                    alternatives ("the simple set must
+                                    accept reg-movs, loads and stores
+                                    ... otherwise reload blows up"),
+                                    emitting one is impossible
+     - the historical failure mode  rvtt.cc rvtt_mov_error, an ICE at
+                                    assembly output; retained as the
+                                    backstop for undiagnosed streams
+     - relief mechanisms named in   -mtt-tensix-optimize-const-
+       the error                    residency,
+                                    -mtt-tensix-optimize-const-remat
+
+   BIRTH KERNEL.  None, and there cannot be one: the pass is a
+   diagnostic with NO flag at all -- it gates on TARGET_XTT_TENSIX
+   unconditionally -- so it never "fires" in the sense FIRE-BREADTH.tsv
+   measures and has no ledger row and no birth_share.  What the tree
+   records instead is the lreg-pressure-exceeded error's own pinning:
+   44 tests scan for it, principally the over-pressure arsenal in
+   g++.target/riscv/tt/lregalloc/ (raw-ladder9/10/12/16 and their twin
+   and bf16 variants, raw-densedst9, raw-nofree9-rwc-twin, the
+   sfpi-victim-* rows: xielu, welford, atan2, atanh, asinh) with the
+   per-row verdicts in lregalloc/VERDICTS.tsv, plus the flag-off twins
+   in presched/ and tensix/lreg-alloc-fire-bh.C.  */
 
 #define IN_TARGET_CODE 1
 

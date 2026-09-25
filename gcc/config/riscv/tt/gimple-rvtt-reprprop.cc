@@ -101,7 +101,75 @@ along with GCC; see the file COPYING3.  If not see
    sm<->2c pairs on the two sign-magnitude zeros).  Eliding those is
    an owner CONTRACT decision (whether the boundary observer is
    value-typed), not a compiler proof; this pass only performs
-   bit-exact rewrites, so such candidates refuse.  */
+   bit-exact rewrites, so such candidates refuse.
+
+   LINEAGE.
+     technique  none.  Cancelling a PAIR of inverse representation
+                conversions across a value web has no published
+                antecedent that fits, and the obvious neighbours are
+                not it.  Global value numbering (C. Click, "Global code
+                motion, global value numbering", PLDI 1995,
+                pp. 246-257) proves two expressions compute the same
+                value; it would have to be TOLD that c(c(x)) == x, and
+                establishing that per (arch, mod) row from an audited
+                table is precisely the work this pass does.
+                Partial-redundancy elimination (E. Morel and
+                C. Renvoise, "Global optimization by suppression of
+                partial redundancies", Communications of the ACM 22(2),
+                February 1979, pp. 96-103) removes a SECOND evaluation
+                of a computation; here BOTH conversions are removed and
+                neither is redundant with the other in the PRE sense --
+                they are inverse, not equal.  What this pass actually
+                contributes is the CHOOSE-web argument: an interior
+                node that passes one input's bits through unmodified
+                makes the cancellation lanewise, and therefore
+                independent of predication history.  That is a
+                statement about the SFPU's lane semantics, not about
+                any dataflow framework, and no paper is claimed for it.
+     modelled on  none.  gcc/ree.cc (add_removable_extension,
+                find_and_remove_re) is the closest generic analogue --
+                eliminate a representation-widening whose reaching
+                definitions already guarantee the form -- but it works
+                on RTL extensions with a known machine-mode relation.
+                Here the conversion is an opaque builtin call, its
+                involution is a per-(arch, mod) TABLE fact rather than
+                a mode fact, and the web's interior includes a
+                lane-predicated merge (sfpassign_lv) whose transparency
+                no generic pass can assert.
+
+   HARDWARE.  SFPCAST and the rest of the audited conversion rows.  On
+   BH a DataLayout::SM32 access lowers to a raw INT32 SFPLOAD/SFPSTORE
+   plus an explicit SFPCAST, because the in-load conversion format is
+   architecturally inert there -- sign-magnitude-in-Dst is convention,
+   not hardware -- so the conversions exist purely to honour a type
+   contract.  Each cancelled pair removes TWO instructions; what they
+   were costing is two issue slots and two scheduling-row memberships.
+   No LREG live range is created or extended: the web's routing
+   statements are untouched and the uses simply take the raw value.
+   Lanes a predicated cast did not write are unspecified fresh-SSA bits
+   under the compiler's existing pure-builtin model, so the rewrite
+   only refines unspecified bits -- which is why, unlike the
+   transp-involution pass, this one needs NO proven all-lanes state: a
+   predicated cast under-writes only its own destination, never another
+   register's defined value.
+     - SFPCAST (arch, constant mod) bit involution
+                                     audited capability table in this
+                                     file
+     - sfpassign / sfpassign_lv lanewise choose
+                                     rvtt_insn_data, target insn table
+     - BH in-load conversion inert for SM32
+                                     sfpi DataLayout
+     - 8-LREG file                   untouched by this pass
+
+   BIRTH KERNEL.  NO KERNEL ROW.  Ledger: FIRE-BREADTH.tsv flag
+   repr-prop, birth_row "BH cast pairs (lane CN)", birth_share empty
+   ("-").  "BH cast pairs" is NOT a kernel: it names a SHAPE CLASS, not
+   a row, so this flag has no birth kernel on record -- and with an
+   empty share it has no measured breadth either, so nothing can be
+   said about whether the mechanism generalises.  The only kernel-ish
+   evidence anywhere near this pass is one testsuite file,
+   reprprop-intmul-refuse-bh.C, and it is a REFUSAL test on a mulint32
+   shape: it records where the pass declines, not a row it won.  */
 
 #include "config.h"
 #include "system.h"

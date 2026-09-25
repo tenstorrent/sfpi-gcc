@@ -60,7 +60,58 @@ along with GCC; see the file COPYING3.  If not see
        (XTT_REPLAY_LOOP_UNROLL_{MIN,MAX}_WORDS).
 
    No operation identity, opcode calendar, coefficient value, or
-   instruction-word fingerprint participates in any decision.  */
+   instruction-word fingerprint participates in any decision.
+
+   LINEAGE.
+     technique  F. E. Allen and J. Cocke, "A catalogue of optimizing
+                transformations", in Design and Optimization of
+                Compilers, Prentice-Hall, 1972.
+                Unrolling as an ENABLING transformation: the
+                unrolled body is not itself the win, it is the shape
+                in which a later phase can remove the repetition.
+                What is NOT taken: nothing is removed here, and
+                nothing is even rewritten -- the pass sets
+                loop->unroll and the repetition is removed by
+                HARDWARE, one recorded row plus seven launches.  So
+                the factor is not a heuristic but the delivery cost
+                table's group size (XTT_REPLAY_LOOP_UNROLL_FACTOR,
+                8), bounded by XTT_REPLAY_LOOP_UNROLL_MIN_WORDS and
+                _MAX_WORDS and, downstream, by the 32-slot buffer.
+     modelled on  gcc/loop-unroll.cc: unroll_loops, reached through
+                the same loop->unroll field `#pragma GCC unroll'
+                sets at gimplification (gcc/tree-cfg.cc:
+                replace_loop_annotate).  GCC performs the
+                duplication; it has no reason to CHOOSE it here,
+                because its cost model cannot see that eight copies
+                of a row deliver fewer words than one copy does.
+
+   HARDWARE.  The 32-slot REPLAY buffer and its expander, reached
+   indirectly: this pass delivers no word itself, it makes eight
+   textual copies of a row exist so the always-on replay former can
+   record one and launch seven.  The trade is seven RISC pushes per
+   group turned into seven one-word launches (PLANE_RISC_PUSH ->
+   PLANE_REPLAY_SLOT), against buffer slots held for the row and
+   static growth bounded at 256 words.
+     - REPLAY capture/launch, 32 slots per thread
+                             [SPEC] REPLAY.md functional model;
+                             [SIM] the pinned reference simulator's
+                             replay expander
+     - group factor 8, row window [4, 256] words
+                             rvtt-cost.md
+                             XTT_REPLAY_LOOP_UNROLL_FACTOR /
+                             _MIN_WORDS / _MAX_WORDS
+     - TURNAROUND / RECORD_OVERHEAD, the reason the counted-loop
+       record-once hoist refuses this row class
+                             rvtt-cost.md
+
+   BIRTH KERNEL.  the "hardshrink/hardsigmoid/softsign fresh" rows.
+   Ledger: FIRE-BREADTH.tsv flag replay-loop-unroll, birth_share
+   0.25 -- three quarters of the measured benefit lies off the birth
+   rows, so the request is not birth-row-bound.  This source names
+   no kernel of its own, only the class (the hand eltwise rows whose
+   production spelling carries `#pragma GCC unroll 8'), so there is
+   nothing here for the ledger to disagree with.
+   */
 
 #include "config.h"
 #include "system.h"
@@ -762,7 +813,56 @@ public:
    instruction-word fingerprint participates in any decision.  A user
    annotation (pragma) is never overridden.  QSR is refused wholesale,
    mirroring the row-request pass, until the QSR replay erratum
-   machinery's interaction with flattened user records is audited.  */
+   machinery's interaction with flattened user records is audited.
+
+   LINEAGE.
+     technique  none.  What is performed is the generic,
+                unconditionally sound complete unroll of a counted
+                loop, which needs no antecedent; the pass's whole
+                content is a machine-specific override of GCC's SIZE
+                estimate for bodies whose statements are DELIVERY
+                (typed replay launches, fixed `.ttinsn' words,
+                computed-word stores to the instruction FIFO) rather
+                than computation.  No published work prices an
+                unroll against an instruction-delivery path, and
+                stretching a software-pipelining or code-compaction
+                citation over this would misattribute the idea.
+     modelled on  gcc/tree-ssa-loop-ivcanon.cc:
+                tree_unroll_loops_completely, which performs the
+                unroll and honours the loop->unroll pragma contract
+                this pass borrows (bypassing the size estimate).
+                GCC's estimate counts GIMPLE statements: a one-word
+                typed swap is more than a dozen of them and a
+                one-word raw asm is one, which is exactly the
+                distortion corrected here.
+
+   HARDWARE.  The instruction-push FIFO (4 `.ttinsn' fuse in per
+   cycle, 1 dequeues) and, behind it, the REPLAY buffer's expander.
+   A delivery loop's counter update and conditional branch ride the
+   same timed issue path as the launches between them, so flattening
+   removes two loop-control words per trip from that path while the
+   dynamic word stream is unchanged by construction; per-trip
+   conditionals (a direction flip-flop, a record-once/launch-after
+   guard) additionally fold at their proven values once the trip
+   number is a constant.
+     - launch expansion out of the 32-slot buffer
+                             [SPEC] REPLAY.md functional model;
+                             [SIM] the pinned reference simulator's
+                             replay expander
+     - flattened-total word budget (256) and the row minimum (4)
+                             rvtt-cost.md
+                             XTT_REPLAY_LOOP_UNROLL_MAX_WORDS /
+                             _MIN_WORDS
+
+   BIRTH KERNEL.  topk.  DISPUTED -- resolve before submission: this
+   file names "the lane-HD topk replay-window-density gap" above and
+   the topk_xl loops below, while FIRE-BREADTH.tsv flag
+   launch-flatten records birth_row "topk-perf (laneHH, pin 30)",
+   birth_share 0.09.  The kernel family agrees; the lane id does not
+   (HD here, HH in the ledger).  The share is the honest headline
+   either way: 0.09, so nine tenths of the measured benefit is off
+   the birth row.
+   */
 
 /* Delivered-word estimate for the launch-flatten class: the shared row
    table, widened by the delivery spellings that class admits.  The
@@ -1166,7 +1266,72 @@ public:
    original registers exactly on refusal.
 
    No operation identity, opcode calendar, coefficient value, or
-   instruction-word fingerprint participates in any decision.  */
+   instruction-word fingerprint participates in any decision.
+
+   LINEAGE.
+     technique  B. R. Rau and C. D. Glaeser, "Some scheduling
+                techniques and an easily schedulable horizontal
+                architecture for high performance scientific
+                computing", MICRO-14, 1981, pp. 183-198.
+                Judging a loop schedule by the steady-state
+                initiation interval of a WRAPPED dependence model
+                rather than by one body's critical path.  That is
+                the acceptance test the cyclic extension in
+                rtl-rvtt-schedule.cc applies to the doubled body.
+     technique  M. Lam, "Software pipelining: an effective
+                scheduling technique for VLIW machines", PLDI 1988,
+                pp. 318-328.
+                Modulo variable expansion: unrolling the body and
+                RENAMING the copies is what removes the
+                storage-induced false recurrence that would
+                otherwise serialize overlapped iterations.  The
+                renaming prerequisite below
+                (ls_cyclic_rename_collisions) is that step, forced
+                on this pass by the allocator packing both copies
+                into the same LREGs.
+                What is NOT taken: no kernel, prologue or epilogue
+                is ever built.  The factor is fixed at two
+                (XTT_ROUND_INTERLEAVE_FACTOR), iterations must be
+                INDEPENDENT rather than merely pipelineable -- a
+                multi-statement recurrence circuit refuses instead
+                of being scheduled at its recurrence-bound interval
+                -- and the whole judgement is taken after register
+                allocation against an eight-register file.
+     modelled on  gcc/modulo-sched.cc: sms_schedule, for the shape
+                only.  SMS knows nothing of delivered words, of the
+                SFPU's eight LREGs in two banks, or of the post-RA
+                word classes this machine's scheduler must treat as
+                barriers.
+
+   HARDWARE.  The 8 LREGs in two banks (L0-L3 / L4-L7) and the SFPU
+   result latencies behind them.  Two independent round chains are
+   each other's filler: interleaving hides one chain's per-trip
+   result-latency stall in issue slots the other chain already
+   occupies, so the win is counted in stall cycles, not delivered
+   words -- the doubled body delivers exactly the same words.  What
+   bounds it is the register file, and the bound used here is
+   deliberately a union bound (one body's peak vector live set plus
+   the sibling copy's private peak) against the pressure engine's
+   single capacity constant.
+     - eight vector registers, two banks of four
+                             rvtt-pressure.h (rvtt_pressure_capacity,
+                             the engine's one constant)
+     - per-class result latencies, next-slot acceptance stalls and
+       the unaudited-latency families
+                             rvtt-timing.h; rvtt-cost.md
+
+   BIRTH KERNEL.  DISPUTED -- resolve before submission.
+   FIRE-BREADTH.tsv flag round-interleave records birth_row "round
+   chains, gcd class (laneJF; laneE" -- the ledger field is
+   truncated at that width -- and NO birth_share ("-").  This pass's
+   own text records the opposite outcome for half of that row: the
+   Stein-round gcd/lcm class refuses by name
+   (round-interleave-dependent-recurrence), and the measured
+   lcm/gcd two-chain interleave needs ten live registers and refuses
+   again on pressure.  The laneJF round chains are what admits; the
+   gcd class is a refusal, not a birth.  With no share recorded, no
+   generality claim is made in either direction.
+   */
 
 /* Interleave admission for one word-delivering builtin: the subset of
    the replay-loop-unroll allow table whose expansions the post-RA list
