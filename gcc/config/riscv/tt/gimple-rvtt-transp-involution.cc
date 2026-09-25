@@ -127,7 +127,44 @@ along with GCC; see the file COPYING3.  If not see
      transp-park-lane-state, transp-park-window,
      transp-park-pressure.
 
-   All refusals leave the function byte-identical.  */
+   All refusals leave the function byte-identical.
+
+   HARDWARE.  SFPTRANSP and the 8 LREGs in two banks (L0-L3 /
+   L4-L7).  The instruction permutes BOTH banks while the typed
+   tuple models four operands, so the companion bank is what this
+   pass is really about: forming the composed-identity pair as ONE
+   atomic multi-word instruction makes the mid-bundle scramble
+   unobservable, and that is what lets the allocator keep values
+   live across the transpose instead of parking them.  What is saved
+   is the park traffic -- two SFPSTOREs and two SFPLOADs a block in
+   the welford shape -- and with it the Dst tile-file round trip and
+   its format codec; what is spent is the companion bank's four
+   registers, a hard capacity bound on how many values may cross.
+   The lane-state obligation is a hardware fact and not a
+   convention: under partial lane enable the pair is not an
+   involution, so the all-lanes SFPENCC is proven or materialized.
+     - two-bank permutation: (reg B+i, lane j*8+c) swaps with
+       (reg B+j, lane i*8+c)
+                           [SPEC] SFPTRANSP.md functional model;
+                           [SIM] TENSIX_EXECUTE_SFPTRANSP
+     - lane gating of the transpose and of the four loads
+                           [SIM] TENSIX_EXECUTE_SFPTRANSP /
+                           TENSIX_EXECUTE_SFPLOAD
+     - Dst park round-trip codecs and denormal flushing
+                           [SPEC] SFPLOAD.md / SFPSTORE.md; [SIM]
+                           read_dst32b / write_dst32b /
+                           encode_fp32 / decode_fp32 /
+                           denormals_as_zeros
+
+   BIRTH KERNEL.  welford (lane BF).  Ledger: FIRE-BREADTH.tsv flag
+   transp-involution, birth_share 1.00 -- BIRTH-ROW-BOUND: the whole
+   measured benefit is that one row.  The pass is not claimed to
+   generalise, and the reason is architectural rather than
+   incidental: the composed involution is the ONLY composition under
+   which whole-register values survive a transpose at all.  The
+   source's own shape description (the welford park pattern above)
+   and the ledger name the same kernel.
+   */
 
 #define INCLUDE_VECTOR
 #define INCLUDE_ALGORITHM

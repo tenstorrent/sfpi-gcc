@@ -234,7 +234,62 @@ along with GCC; see the file COPYING3.  If not see
 					return
      mop-template-config-word-unproven	an audited MOP template slot
 					holds an SFPCONFIG-class word
-   QSR refuses by pass gate (no validated capability).  */
+   QSR refuses by pass gate (no validated capability).
+
+   LINEAGE.
+     technique  K. D. Cooper and J. Lu, "Register promotion in C
+                programs", PLDI 1997, pp. 308-319.
+                Promotion: a value repeatedly reloaded or
+                rematerialized inside a loop is placed in a register
+                once, outside the loop, and read from there for the
+                rest of its live range.  What is NOT taken: Cooper and
+                Lu promote WITHIN one procedure into registers the
+                allocator is free to choose.  Here the promotion
+                crosses the call edge, and the destination is not
+                chosen but DICTATED -- the machine description's own
+                operand constraint pins each contract value to one
+                architectural LREG -- so the transform must PROVE that
+                the caller's loop epoch and the callee's
+                liveness-extension tail leave that physical register
+                alone, rather than ask the allocator to arrange it.
+     modelled on  none.  GCC has no pass that promotes a callee's
+                values into caller-held hard registers.  The closest
+                in-tree relative is the SFPCONFIG descriptor epoch
+                discipline of rvtt-macro-epoch.cc, extended here
+                across the call edge.
+
+   HARDWARE.  The eight allocatable LREGs, carried across the call
+   edge by the zero-length sfpreadlreg / sfpwritelreg markers, and --
+   under the config-prefix widening -- the non-allocatable
+   programmable-constant registers 11..14 reached through SFPCONFIG
+   (whose value-form source operand is md-pinned to L0).  What is
+   saved is a whole per-call materialization prefix: the SFPLUTFP32
+   coefficient file is the canonical case, so an N-word prefix that
+   was delivered on EVERY call is delivered once per loop entry.  The
+   cost is LREG live range -- each contract value is live in its hard
+   register from callee entry to every return, and the consumer loop
+   must still fit inside the eight-register file (crosscall-callee-
+   pressure).
+     - operand pinning    read from the pattern's own insn_data
+                          operand constraint; the md is the
+                          authority, nothing keys on opcode identity
+     - MOP template file  the architected nine words, rvtt-mop-
+                          tables.h; SFPLOADI's destination field
+                          (bits 23:20) is the one audited word class
+                          that can write an allocatable contract LREG
+
+   BIRTH KERNEL.  Two flags, each BIRTH-ROW-BOUND, and NEITHER kernel
+   is named anywhere in this file:
+     -mtt-tensix-optimize-crosscall-hoist -- FIRE-BREADTH.tsv
+       birth_row "sigmoid_appx (crosscall contract)", birth_share
+       1.00.
+     -mtt-tensix-optimize-crosscall-config-prefix -- FIRE-BREADTH.tsv
+       birth_row "geluappx (laneHC, pin 30)", birth_share 1.00.
+   birth_share 1.00 on both means the flag's entire measured benefit
+   is that single row; neither arm is claimed to generalise.  The gap
+   is real and worth closing: a reader of this file cannot learn from
+   it which kernel bore either arm.
+   */
 
 #define INCLUDE_VECTOR
 #include "config.h"

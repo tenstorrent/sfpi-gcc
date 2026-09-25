@@ -154,7 +154,83 @@ along with GCC; see the file COPYING3.  If not see
    stated proof or refuses BY NAME through the refusal registry
    (rvtt-refuse.h), leaving the emitted bytes identical to the
    untransformed stream -- an unpriceable or unproven candidate is a
-   named refusal, never a guess.  */
+   named refusal, never a guess.
+
+   LINEAGE.
+     technique  C. W. Fraser, E. W. Myers and A. L. Wendt, "Analyzing
+                and compressing assembly code", SIGPLAN Symposium on
+                Compiler Construction, 1984, pp. 117-121.
+                Procedural abstraction: repeated instruction
+                sequences are found by matching over the emitted
+                stream, stored once, and referred to thereafter.
+                Discovery here (build_sequences, and the replay_sa
+                suffix-automaton shadow that enumerates the same
+                maximal repeats as a census) asks that question of
+                the delivery stream, and the "reference" is a
+                one-word REPLAY launch.
+                What is NOT taken: their abstraction buys code SIZE
+                and pays a control transfer at run time; this one
+                buys DELIVERED WORDS and pays buffer slots, so
+                admission is the delivery-cost inequality
+                (rvtt-delivery-cost.h) and not a size threshold, and
+                the recorded body must additionally be proven to
+                DOMINATE every launch of its span.
+     technique  S. K. Debray, W. Evans, R. Muth and B. De Sutter,
+                "Compiler techniques for code compaction",
+                ACM TOPLAS 22(2):378-415, March 2000.
+                Abstraction under a finite budget, with candidates
+                competing for it: pick_replay's greedy
+                largest-saving-first allocation over the free spans,
+                and active_invalidate retiring the losers, is that
+                competition.
+                What is NOT taken: code compaction has no RECORDING
+                phase, so nothing there prices a one-time capture
+                against per-site launches, and nothing there has to
+                retire a candidate because a competitor consumed the
+                machine resource the abstraction lives in.
+     modelled on  none.  No generic GCC pass abstracts a repeated
+                instruction run into machine-held storage: the
+                redundancy passes abstract VALUES, and none of them
+                can see a 32-slot buffer budget or price delivery.
+
+   HARDWARE.  The 32-slot per-thread REPLAY buffer and its expander,
+   behind the instruction-push FIFO (4 `.ttinsn' fuse in per cycle,
+   1 dequeues).  A launch is one pushed word that expands to LEN
+   words out of the buffer, so replacing an N-word repeat trades
+   N-1 RISC pushes (PLANE_RISC_PUSH) for replay slots
+   (PLANE_REPLAY_SLOT), plus N slots held against every later
+   candidate.  The reform placement exists for the Dst tile file's
+   RWC / ADDR_MOD auto-increment counters: the auto-increment fold
+   absorbs the per-row separator words, so repeated row bodies
+   become word-uniform only after it, and only a post-fold pass can
+   price every candidate against the one buffer.
+     - REPLAY capture/launch, 32 slots per thread
+                             [SPEC] REPLAY.md functional model;
+                             [SIM] the pinned reference simulator's
+                             replay expander
+     - start + len past the buffer is UndefinedBehavior
+                             [SIM] the same expander
+     - push-vs-slot delivery prices and their measurements
+                             rvtt-cost.md
+
+   BIRTH KERNEL.  blaze useq (lane IH, pin 40) -- the row of
+   -mtt-tensix-optimize-post-autoincr-window, the flag that selects
+   this file's reform placement.  Ledger: FIRE-BREADTH.tsv flag
+   post-autoincr-window, birth_share n/a(application): an
+   application-class row, so no per-row share was computed and no
+   generality is claimed from it in either direction.  This source
+   names no kernel for that flag; the ledger row is the only record.
+   The other flags of the same transform have DIFFERENT birth rows:
+   replay and replay-hoist are pre-pin-10 core (n/a(core)),
+   replay-exec-record an untraceable pre-pin-10 former class
+   (n/a(core)), replay-record-hoist blaze sdpa_reduce (lanes EC+FW,
+   n/a(application)), counted-row-formation welford (laneBM) at
+   0.57, record-hoist-peel reciprocal (laneGQ, pin 29) at 0.45,
+   record-hoist-lift lcm-fresh (laneIL, pin 43) at 1.00,
+   replay-window-sizing lcm-fresh (laneIM, pin 44) at 0.33, and
+   counted-capture-peel addrsqrt (laneIO, pin 45) at 0.00 -- that
+   last one fires with no measured benefit on its own birth row.
+   */
 
 #define INCLUDE_ALGORITHM
 #define INCLUDE_MAP

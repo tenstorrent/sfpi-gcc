@@ -108,7 +108,71 @@ along with GCC; see the file COPYING3.  If not see
    All refusals leave the function byte-identical.  The
    ENABLE_DEST_INDEX window model (the dest-index write restriction) is
    enforced on the FINAL RTL stream by the companion pass
-   rtl-rvtt-crosslane-window.cc, behind the same flag.  */
+   rtl-rvtt-crosslane-window.cc, behind the same flag.
+
+   LINEAGE.
+     technique  D. Nuzman, I. Rosen and A. Zaks, "Auto-vectorization
+                of interleaved data for SIMD", PLDI 2006,
+                pp. 132-143.
+                Permutation recognition: data-movement patterns are
+                normalised to a canonical form and matched against a
+                small set of machine primitives, with the ALGEBRA of
+                the permutations -- not the opcode spelling --
+                deciding what composes and what cancels.  What is NOT
+                taken: Nuzman et al. BUILD permutations in order to
+                vectorize strided access; this pass never introduces a
+                shuffle.  It only CANCELS chains the typed surface
+                already pinned, and every cancellation carries a
+                lane-state obligation their flat SIMD model has no
+                analogue for -- under a partial enable state ror1^8 is
+                not the identity, so R1, R2, R4 and R5 refuse without
+                a proven all-lanes state.
+     modelled on  the per-target recognizer-chain architecture named
+                in THE MECHANISM above: gcc/config/aarch64/aarch64.cc
+                (aarch64_expand_vec_perm_const_1, the evpc chain),
+                gcc/config/riscv/riscv-v.cc (expand_vec_perm_const),
+                and llvm/lib/IR/Instructions.cpp
+                (ShuffleVectorInst::is*Mask).  The SHAPE is theirs:
+                dual test/emit entry points, cheapest first, named
+                refusal when nothing matches.  The INPUT is not --
+                those chains read a constant VEC_PERM_EXPR mask, this
+                one reads opaque builtin calls and must recover the
+                permutation from the pinned canonical frame.
+
+   HARDWARE.  Three cross-lane engines and their issue-slot tax:
+   SFPSHFT2 in its shuffle modes (SUBVEC_SHFLROR1, SUBVEC_SHFLSHR1),
+   SFPSWAP in both its value and its ENABLE_DEST_INDEX key-value
+   compare-exchange forms, and SFPTRANSP over its two four-register
+   banks.  What is priced here is ISSUE SLOTS, not delivered words:
+   SFPSWAP and the SFPSHFT2 shuffle modes accept only SFPNOP on the
+   next cycle, so each costs 2 slots, and SFPTRANSP costs 1.  A
+   rewrite fires only when the priced after-cost does not exceed the
+   before-cost, and the dump records both sides.
+     - next-slot stall    SFPSWAP.md / SFPSHFT2.md, the same audit
+                          carried by rvtt.md xtt_next_slot_stall
+     - WH lane 0          SUBVEC_SHFLSHR1 leaves lane 0 an
+                          UnpredictableValue (WormholeB0
+                          SFPSHFT2.md), so R2 refuses on WH
+     - tie divergence     SFPSWAP.md keys tie-swaps on sign; the
+                          reference simulator uses min c<d / max
+                          c>=d.  UNRESOLVED, so indexed refolding
+                          refuses by name
+
+   BIRTH KERNEL.  NONE.  FIRE-BREADTH.tsv has NO row for the
+   crosslane flag -- not for this pass and not for its companion
+   rtl-rvtt-crosslane-window.cc, which shares the flag -- so no
+   measured-benefit record exists for any of R1..R5.  What stands in
+   its place is compile-time evidence only: the bitonic sort networks
+   and frame families under gcc/testsuite/g++.target/riscv/tt/
+   (crosslane-sortnet-compile-bh.C over bitonic_sort8 / _sort32 /
+   _sort16_kv, crosslane-sortnet-kv32-refuse-bh.C, crosslane-zip3-
+   identity-bh.C, the facetranspose and slide families, and the
+   rotate/swap/transp8 refold tests), plus the host acceptance battery
+   that is the specification of the algebra.  Those record that the
+   rewrites FIRE and are CORRECT; they record nothing about what any
+   of them is worth.  This is a real gap, not an omission from this
+   comment.
+   */
 
 #define INCLUDE_VECTOR
 #define INCLUDE_ALGORITHM

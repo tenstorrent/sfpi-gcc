@@ -190,7 +190,89 @@ along with GCC; see the file COPYING3.  If not see
 
    The pass runs beside the ccmask/int-abs folds before the invariant
    pass, while the structured CC forms are intact.  Every miss refuses
-   by name with the program bytes unchanged.  */
+   by name with the program bytes unchanged.
+
+   LINEAGE.
+     technique  J. Knoop, O. Ruthing and B. Steffen, "Partial dead code
+                elimination", PLDI 1994, pp. 147-158.
+                Assignment sinking: move a computation forward to where
+                its result is actually used, so the paths that do not
+                use it stop paying for it.  What is NOT taken: the
+                classical sink moves a statement DOWN the CFG past the
+                branches that make it partially dead.  Here the merge
+                is dead on no path -- it is fully used, by exactly one
+                store -- and what the sink crosses is not a branch but
+                a CC-region boundary: the store moves UP, INTO the
+                predicated region, so that it inherits the region's
+                narrower lane mask instead of the enclosing one.  The
+                legality question is therefore not liveness at all but
+                whether the lanes the move stops writing were having
+                their own values written back over them, which is a
+                format round-trip question no dead-code argument can
+                answer and the exhaustive sweeps above do.
+     admission  the sweeps tt/proofs/store-sink-roundtrip/ and
+                tt/proofs/stochrnd-store-round/, on the Massalin
+                exhaustive-search discipline the int-not/int-abs folds
+                use.  S1 needs no artifact: its argument is the
+                compiler's own lane-masked IR contract for assign_lv
+                and sfpstore.  Per the tt/proofs README contract a
+                NOT-EQUAL result becomes a STANDING named refusal as a
+                value-preserving fold; the two licensed knobs above
+                re-admit exactly those cells as declared value CHANGES
+                under owner ratification, scope-bounded by the proof's
+                own divergence class -- never as proofs.
+     modelled on  gcc/tree-ssa-sink.cc: statement_sink_location /
+                sink_code_in_bb -- the same "find the statement's real
+                consumer and move the statement to it" shape, and the
+                same same-block, side-effect-inert span requirement.
+                It cannot serve here: it sinks by liveness over the
+                CFG, has no notion of a lane mask, and so can neither
+                see that the move changes WHICH LANES are written nor
+                price that change.
+
+   HARDWARE.  The Dst store's own conversion path (store Mod0) and the
+   SFPU CC lane mask, standing in for the lane-predicated SFPMOV that a
+   live-value merge expands to.  Each fold removes ONE DELIVERED WORD
+   PER SIMD ROW and costs no LREG at all -- the store simply reads the
+   merge's source instead of the merge's result, so no live range is
+   created or extended.  The stochrnd fold additionally deletes an
+   SFPSTOCHRND, which is the whole reason for the entropy guard: that
+   instruction advances the SFPSTOCHRND PRNG stream, and removing it
+   removes one hidden advance observable by any other stochastic
+   consumer in the function.
+     - assign_lv to predicated SFPMOV      compiler lane-masked IR
+                                           contract
+     - store conversion modes, per (load Mod0, store Mod0) pair
+                                           tt/proofs/store-sink-
+                                           roundtrip/ (INT32/INT32
+                                           EQUAL; every float pair
+                                           NOT-EQUAL, denormal class)
+     - SFPSTOCHRND vs the store's cast     tt/proofs/stochrnd-store-
+                                           round/ (BF16 row
+                                           2,155,741,184 / 2^32;
+                                           FP16 row 268,435,456 / 2^32)
+     - SFPSTOCHRND PRNG stream             stochrnd-store-fold-entropy-
+                                           stream guard
+     - CC frame: SETCC/COMPC refine, SFPENCC widens, nested PUSHC/POPC
+       breaks the single-frame restore argument
+
+   BIRTH KERNEL.  Three flags, three different rows (FIRE-BREADTH.tsv):
+
+     store-fold           threshold/hardshrink S1 (lanes HK/HL),
+                          birth_share 0.04
+     store-sink           threshold/hardshrink (lane HL, pin 31),
+                          birth_share 0.18
+     stochrnd-store-fold  binary-float (lane HZ, pin 36),
+                          birth_share 0.11
+
+   None is birth-row-bound: every share is far below 1.00, so most of
+   each flag's measured benefit falls on rows other than the one it was
+   born on, and all three mechanisms are claimed to generalise within
+   their proven -- and, for the two licensed knobs, ratified -- scope.
+   The file's own text agrees on all three rows: the S2 float-pair
+   refusal is described as the certified word floor of the
+   threshold/hardshrink semantic class, and the stochrnd license is
+   quantified against the binary-float class's hand kernel.  */
 
 #define INCLUDE_ALGORITHM
 #define INCLUDE_VECTOR

@@ -143,7 +143,69 @@ along with GCC; see the file COPYING3.  If not see
      mop-no-scratch-gpr          no dead temporaries for the MMIO
                                  configuration block.
    QSR refuses by pass gate: its MOP encoding and expander semantics
-   are not in the capability table.  */
+   are not in the capability table.
+
+   LINEAGE.
+     technique  C. W. Fraser, E. W. Myers and A. L. Wendt, "Analyzing
+                and compressing assembly code", SIGPLAN Symposium on
+                Compiler Construction, 1984, pp. 117-121.
+                Recognizing a maximal run of identical emitted
+                sequences and issuing it from one compact
+                representation instead of N copies.  The RUN and
+                LOOP forms admitted here are that recognition,
+                performed on the final delivery stream.
+                What is NOT taken: their compact representation is
+                executed by the same processor, so the saving is
+                code size and the price is a control transfer.  Here
+                the run is handed to an AUTONOMOUS expander: static
+                size barely moves, every per-iteration RISC push
+                disappears, and admission is dominated not by
+                profitability but by proving ownership of
+                thread-shared, WRITE-ONLY template state across the
+                caller closure -- a question no code-compaction work
+                has to ask.
+     modelled on  none.  GCC has no pass that re-rolls a
+                straight-line run into a hardware-sequenced loop,
+                and no generic analysis can prove that every caller
+                re-arms device configuration registers that cannot
+                be read back.
+
+   HARDWARE.  The MOP expander, and the 32-slot REPLAY buffer it
+   co-owns.  One TTMOP word replays the template's A0 launch word
+   loop_count+1 times with no RISC involvement per iteration, so a
+   delivery-bound row costs len * SLOT instead of
+   max (len * SLOT, delivered_words * PUSH): the whole benefit is
+   pushes that never enter the instruction-push FIFO, which is why
+   execution-bound rows model <= 0 and refuse.  The configuration
+   block that arms it (mop_sync guard store, the MMIO flags and A0
+   writes, MOP_CFG 0) is serial delivery charged once, and the
+   template registers it writes are thread-shared and write-only --
+   the reason formation needs the outward ownership proof above
+   instead of a save/restore.
+     - mop0-lA template; the loop_count field proves <= 127
+                             [SPEC]/[SIM] rvtt-mop-tables.h table
+                             facts with provenance
+     - template registers are write-only from the RISC
+                             rvtt-mop-tables.h readback fact; the
+                             hardware witness is the deterministic
+                             hang of a caller-hoisted type-1
+                             template around a call into a formed
+                             function
+     - launch range start + len > 32 is UndefinedBehavior
+                             [SIM] the pinned reference simulator's
+                             replay expander
+
+   BIRTH KERNEL.  DISPUTED -- resolve before submission.  This file
+   names the production ckernel_unpack_template::lA shape of the
+   topk_xl merge loops as the row this template class was built for;
+   FIRE-BREADTH.tsv flag mop-form records birth_row "where MOP
+   delivery" and NO birth_share ("-").  The testsuite names neither
+   kernel -- it carries structural rows (mop-form-run, -counted,
+   -steps, -profit-refuse, -deep-preheader, -outward-refuse,
+   -outward-rearm) -- so the disagreement cannot be settled from the
+   tree, and with no share recorded neither a generality claim nor a
+   birth-row-bound claim can be made.
+   */
 
 #define INCLUDE_ALGORITHM
 #define INCLUDE_VECTOR

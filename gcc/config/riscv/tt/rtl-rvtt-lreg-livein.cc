@@ -17,6 +17,139 @@
    along with GCC; see the file COPYING3.  If not see
    <http://www.gnu.org/licenses/>.  */
 
+/* No flag.  The gate is TARGET_XTT_TENSIX alone, so this pass is
+   ALWAYS ON for every Tensix compilation, at every optimization level
+   including -O0.  That is deliberate and it is not an optimization
+   decision: what this pass does is make a piece of the machine state
+   visible to the register allocator, and an allocator that cannot see
+   a reservation does not allocate conservatively -- it allocates
+   wrongly.
+
+   THE HOLE.  Hand-written LLK code reaches the compiler as raw
+   .ttinsn words.  An SFPU instruction spelled that way reads and
+   writes architectural L-registers, but its RTL carries no def and no
+   use of them: to GCC's dataflow the words are opaque.  So after a
+   raw SFPLOAD into L1, nothing tells IRA that L1 is spoken for, and
+   IRA is free -- correctly, by its own information -- to hand L1 to
+   the next vFloat temporary.  The raw code's value is then silently
+   overwritten.  This is wrong code with no diagnostic: the LLK
+   sequence and the compiler-generated sequence each look locally
+   right.
+
+   THE FILLING.  Metadata builtins (rvtt_sfpreadlreg<N> /
+   rvtt_sfpwritelreg<N>, and the rvtt_sfprawlreg_access marker with its
+   release and write masks) name the raw accesses.  This pass turns
+   each raw ownership interval into an interval IRA can see:
+
+     1. A forward dataflow fixed point over per-block eight-bit masks
+	(bit N = LREG N currently holds a raw, RTL-invisible value).
+	A raw-access marker clears its release mask and sets its write
+	mask; a read or write metadata builtin for LREG N clears bit N,
+	because from that point the value has visible RTL.
+
+     2. Per block, every interval open at entry or opened by a raw
+	write is materialized as a fresh XTT32SImode pseudo defined by
+	a SENTINEL: a zero-length fixed-register read of that LREG
+	(gen_rvtt_sfpreadlreg<N>).  The interval is closed with a plain
+	USE of the pseudo at the consuming builtin, at the releasing or
+	rewriting raw access, or at block end.  A zero-length
+	fixed-register def/use pair is exactly what IRA understands as
+	"this hard register is occupied here".
+
+     3. Joins get a FRESH LOCAL TOKEN rather than a shared pseudo:
+	every block materializes its own pseudo for a value it
+	inherits.  This deliberately avoids inventing a cross-CFG
+	pseudo or a phi for a value the compiler does not actually
+	own, and is conservative in the right direction -- it reserves
+	the LREG in every block on the path without claiming to know
+	where the value came from.
+
+   Sentinels and USEs deliver NO instruction words; the emitted object
+   is unchanged by their presence, and the whole effect of the pass is
+   on what IRA and the pre-IRA allocator stack are allowed to believe.
+
+   WHAT BREAKS IF THIS PASS IS DROPPED.  Two things, both silent:
+
+     - IRA reuses a raw-owned LREG for a compiler temporary and the
+       LLK value is destroyed.  There is no error and no refusal: the
+       first symptom is wrong numerics in a kernel.
+
+     - rtl-rvtt-lp-alloc.cc loses its precolored nodes.  Its
+       interference graph is built over XTT32SI pseudo webs AFTER this
+       pass has materialized every raw reservation, precisely so that
+       raw reservations participate as ordinary precolored nodes; drop
+       them and DSATUR colours a graph that omits real interference
+       and certifies as 8-colorable a function that is not.  The
+       colorability certificate would then be false, which is worse
+       than absent.
+
+   The pass sits before ira in rvtt-passes.def, ahead of
+   rvtt_lp_alloc.  It is unconditional, it never refuses, and there is
+   no flag to turn it off.
+
+   LINEAGE.
+     technique  none.  Reserving an architecturally-owned register by
+                synthesizing a zero-length def/use interval for it has
+                no published antecedent worth citing; it is a local
+                idiom, not an adapted result, and stretching it onto a
+                register-allocation paper would misdescribe both.
+     modelled on  none, and the reason is that the two spellings
+                generic GCC does offer are each wrong here.  Marking
+                the LREG global (gcc/reginfo.cc: global_regs, and the
+                fixed-register machinery beside it) removes it from
+                allocation for the WHOLE translation unit, which costs
+                the register in every function whether or not any raw
+                word touches it -- out of eight, unaffordable.
+                Emitting a CLOBBER at the raw site
+                (gcc/emit-rtl.cc: emit_clobber) marks a POINT,
+                not an interval, so it says nothing about the span
+                between the raw producer and the raw consumer, which
+                is exactly the span that must stay reserved.  GCC has
+                no generic "this hard register is externally owned
+                between here and there" construct; an interval built
+                from a real def and a real use is the construct it
+                does have, and that is what this pass emits.
+
+   HARDWARE.  The eight architectural SFPU vector registers L0-L7
+   (riscv.h SFPU_REG_NUM), which are a SHARED resource: hand-written
+   LLK raw .ttinsn words and compiler-allocated vector values live in
+   the same eight names, in the same two banks (L0-L3 / L4-L7) the IRA
+   dual-bank binding describes, with no memory spill path to relieve
+   the contention.  The cost is paid entirely in LREG live ranges --
+   up to eight per block, exactly the ones raw code already owns --
+   and in nothing else: every sentinel read and every closing USE is
+   zero-length, so delivered words, issue slots and the emitted object
+   are unchanged.  The pass makes the register file smaller as seen by
+   the allocator, which is the point; it does not make the program
+   bigger.
+     - eight allocatable LREGs      riscv.h SFPU_REG_NUM
+     - raw words are DF-opaque      raw .ttinsn has no RTL def or use;
+                                    the metadata builtins
+                                    rvtt_sfpreadlreg<N> /
+                                    rvtt_sfpwritelreg<N> and
+                                    UNSPECV_SFPRAWLREG_ACCESS are the
+                                    only naming
+     - sentinels deliver no word    zero-length fixed-register reads;
+                                    closings are plain USEs
+     - downstream consumer          rtl-rvtt-lp-alloc.cc builds its
+                                    interference graph after this pass
+                                    so raw reservations are precolored
+                                    nodes
+
+   BIRTH KERNEL.  None, and none is possible: the pass has NO flag, so
+   it has no FIRE-BREADTH.tsv row, no birth row and no birth_share --
+   it is not a fire that can be attributed to a kernel, it is a
+   standing correctness condition.  What the tree records instead is
+   thin and worth stating plainly: ONE test,
+   g++.target/riscv/tt/tensix/raw-lreg-livein-cfg-wh.C, in a
+   1530-test suite.  That is a coverage fact, not a benefit
+   measurement, and it is a small belt for a pass whose failure mode
+   is silent wrong code in every kernel that mixes raw LLK words with
+   compiler-allocated vectors.  The real load is carried by the
+   downstream consumer's own tests (the lregalloc/ precolored-node
+   rows) and by the reference-simulator bit-exactness gate on
+   newly-compiling kernels.  */
+
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"

@@ -22,9 +22,14 @@ along with GCC; see the file COPYING3.  If not see
    on every transform that wants a value to stay resident -- residency,
    pressure-parking and store-to-load forwarding all bid for the same file.
 
-   This is Chaitin-style graph colouring with DSATUR ordering (Brelaz, CACM
-   1979): build the interference graph over SFPU pseudos, colour saturation-
-   first, and spill through scratch when a web will not fit.  It consumes the
+   This is graph colouring in the build/colour/spill formulation of
+   G. J. Chaitin, "Register allocation and spilling via graph
+   coloring", Proceedings of the SIGPLAN Symposium on Compiler
+   Construction, 1982, pp. 98-105, with the saturation-degree colour
+   order of D. Brelaz, "New methods to color the vertices of a graph",
+   Communications of the ACM 22(4):251-256, April 1979: build the
+   interference graph over SFPU pseudos, colour saturation-first, and
+   spill through scratch when a web will not fit.  It consumes the
    dst-layout-32b ABI declaration and the IRA dual-bank binding rather than
    re-deriving either.
 
@@ -39,18 +44,20 @@ along with GCC; see the file COPYING3.  If not see
    explicitly rather than mis-modelled.
 
    Gated by TARGET_XTT_TENSIX_BH / _WH; see -mtt-tensix-optimize-lreg-alloc
-   and -mtt-tensix-optimize-pressure-schedule.  */
+   and -mtt-tensix-optimize-pressure-schedule.
 
-/* The SFPU vector-register (LREG) allocator, replacing the former
-   dump-only audit stub.  It has two independent layers:
+   THE TWO LAYERS.  This is the SFPU vector-register (LREG) allocator,
+   replacing the former dump-only audit stub.  It has two independent
+   layers:
 
    1. The pre-IRA pressure audit (under
       -mtt-tensix-optimize-pressure-schedule, byte-identical to the
       historical stub's dump).
 
    2. Colorability enforcement (under the default-off
-      -mtt-tensix-optimize-lreg-alloc): a Chaitin-style
-      build/color/spill loop whose coloring engine is DSATUR over the
+      -mtt-tensix-optimize-lreg-alloc): the Chaitin build/color/spill
+      loop cited above, whose coloring engine is Brelaz's
+      saturation-degree order (DSATUR, cited above) over the
       eight-register LREG file.
 
       - The interference graph is built over XTT32SI pseudo webs after
@@ -92,8 +99,14 @@ along with GCC; see the file COPYING3.  If not see
 	remains the backstop.
 
       - Under the additional default-off
-	-mtt-tensix-optimize-lreg-coalesce, Briggs/George
-	CONSERVATIVE COALESCING merges copy-related
+	-mtt-tensix-optimize-lreg-coalesce, CONSERVATIVE COALESCING
+	in the sense of P. Briggs, K. D. Cooper and L. Torczon,
+	"Improvements to graph coloring register allocation", ACM
+	Transactions on Programming Languages and Systems
+	16(3):428-455, May 1994, and L. George and A. W. Appel,
+	"Iterated register coalescing", ACM Transactions on
+	Programming Languages and Systems 18(3):300-324, May 1996,
+	merges copy-related
 	webs on the just-built graph before the colorability verdict
 	and spill-victim selection, so a web that only spilled because
 	its copy halves were counted separately colors for free; a
@@ -204,7 +217,98 @@ along with GCC; see the file COPYING3.  If not see
    no-increment address mode).  XTT64/XTT128-mode pseudos refuse
    enforcement fail-closed.
 
-   Fire tests: g++.target/riscv/tt/tensix/lreg-alloc-*.C.  */
+   Fire tests: g++.target/riscv/tt/tensix/lreg-alloc-*.C.
+
+   LINEAGE.
+     technique  G. J. Chaitin, "Register allocation and spilling via
+                graph coloring", Proceedings of the SIGPLAN Symposium
+                on Compiler Construction, 1982, pp. 98-105.
+                The build / colour / spill iteration: colour the
+                interference graph over value webs, and when it will
+                not colour, pick a web, give it a memory home, rebuild
+                and repeat until the graph fits the file.
+                What is NOT taken: Chaitin's spill is a store and a
+                reload to the stack, and the SFPU has no memory spill
+                path for an LREG at all.  The spill home here is a
+                proven-free row of the Dst tile file, reached by an
+                SFPSTORE/SFPLOAD mod0 4 (INT32) round trip, which is
+                legal only under the all-lanes CC, 32-bit-Dst-layout,
+                LaneConfig and RWC-epoch proofs above -- so "is this
+                web spillable" is a proof obligation here, not a cost
+                question, and a web that cannot discharge it is simply
+                not a candidate.
+     colour order  D. Brelaz, "New methods to color the vertices of a
+                graph", Communications of the ACM 22(4):251-256, April
+                1979.  Saturation-degree (DSATUR) selection: colour
+                next the uncoloured node with the most distinctly
+                coloured neighbours.  What is NOT taken: Brelaz colours
+                to find a chromatic number; here the number is fixed at
+                eight by the hardware and the verdict wanted is only
+                "does it fit", so DSATUR's answer is consumed as a
+                colorability certificate and the colours themselves are
+                discarded (see `modelled on').
+     coalescing  P. Briggs, K. D. Cooper and L. Torczon, "Improvements
+                to graph coloring register allocation", ACM
+                Transactions on Programming Languages and Systems
+                16(3):428-455, May 1994; L. George and A. W. Appel,
+                "Iterated register coalescing", ACM Transactions on
+                Programming Languages and Systems 18(3):300-324, May
+                1996.  The conservative merge tests, which merge a
+                copy's two webs only when the merge cannot make a
+                colourable graph uncolourable.  What is NOT taken:
+                neither paper's iteration with freezing and repeated
+                simplification; this pass coalesces once, before the
+                verdict, because its only use for the merge is to stop
+                a web spilling that spilled only because its copy
+                halves were counted apart.
+     modelled on  none.  GCC's own colourer (gcc/ira-color.cc:
+                ira_color) cannot be the enforcement engine here: it
+                assumes every allocno class has a memory spill path, so
+                an uncolourable SFPU graph reaches it as an impossible
+                reload rather than as a verdict, and surfaces at output
+                time as the rtl-rvtt-spill-diag.cc error.  This pass
+                therefore runs BEFORE ira, makes the graph 8-colourable
+                by spilling through Dst, and leaves assignment to
+                ira_color -- which keeps IRA's coalescing and its
+                guarantees for every function this pass does not touch.
+
+   HARDWARE.  The eight architectural SFPU vector registers L0-L7
+   (riscv.h SFPU_REG_NUM), allocated as XTT32SI allocation units under
+   the IRA dual-bank binding (L0-L3 / L4-L7), with NO memory spill
+   path: the rvtt_sfpassign memory alternatives exist only so LRA's
+   constraint matching succeeds and cannot be emitted.  The resource
+   this pass spends is therefore delivered words and Dst rows in order
+   to buy back LREG live ranges: each spilled web costs one SFPSTORE
+   word after every def and one SFPLOAD word before every use, plus one
+   proven-free Dst scratch row held for the web's range.  A function
+   whose peak simultaneous pressure already fits eight is a proven
+   no-op -- no word, no rewrite, byte-identical with the flag either
+   way.
+     - eight allocatable LREGs      riscv.h SFPU_REG_NUM
+     - no LREG memory spill path    rvtt.md rvtt_sfpassign memory
+                                    alternatives (constraint matching
+                                    only); rvtt.cc rvtt_mov_error
+     - 32-bit Dst round trip        reference-simulator read_dst32b /
+                                    write_dst32b through the
+                                    encode_fp32/decode_fp32 involution
+     - Dst address is base-relative (imm + RWC_Dst + MATH_Offset +
+                                    REGW_Base) & 0x3FF, aliasing window
+                                    +/-3 modulo 256
+
+   BIRTH KERNEL.  topk / top16 (lanes DP/DS/FU).  Ledger:
+   FIRE-BREADTH.tsv flag lreg-alloc, birth_share 1.00 -- the flag's
+   entire measured benefit is that one row.  The pass is NOT claimed to
+   generalise: what is claimed is that it is a proven no-op wherever
+   pressure already fits, and that where it does fire it converts a
+   hard lreg-pressure-exceeded refusal into a compiling kernel.  The
+   companion flag -mtt-tensix-optimize-lreg-coalesce has NO ledger row
+   of its own; its in-tree evidence is the 8 rows
+   g++.target/riscv/tt/tensix/lreg-coalesce-*.C (fire, george-fire and
+   the conservative / george / interfering near-miss twins) together
+   with the named refusals coalesce-conservative-degree,
+   coalesce-george-interference, coalesce-precolor-conflict and
+   coalesce-web-class in the coalescing section comment of
+   rtl-rvtt-lp-alloc-color.cc.  */
 
 #define IN_TARGET_CODE 1
 
@@ -597,7 +701,9 @@ enforce_colorability (function *fn)
       if (g.fail)
 	return bail (g.fail, "graph-collection");
 
-      /* Conservative coalescing (Briggs/George) merges copy-related
+      /* Conservative coalescing (Briggs/Cooper/Torczon 1994 and
+	 George/Appel 1996, cited in full in the LINEAGE section of
+	 this file's header) merges copy-related
 	 webs before the colorability verdict and spill-victim
 	 selection; a conservative merge can never turn an 8-colorable
 	 graph uncolorable, so this only ever removes spills.  Graph-

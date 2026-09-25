@@ -59,7 +59,76 @@ along with GCC; see the file COPYING3.  If not see
    (TARGET_XTT_TENSIX_QSR) the analysis runs and dumps its verdicts,
    but the rewrite itself is suppressed (emit=no).
 
-   Runs under -mtt-tensix-optimize-dst-iteration-fusion.  */
+   Runs under -mtt-tensix-optimize-dst-iteration-fusion.  Both passes
+   share that one flag; the interleave has no knob of its own.
+
+   LINEAGE.
+     technique  S. Carr and K. Kennedy, "Improving the ratio of memory
+                operations to floating-point operations in loops", ACM
+                Transactions on Programming Languages and Systems
+                16(6), November 1994, pp. 1768-1810.
+                Unroll-and-jam: widen the iteration grain, then jam the
+                resulting copies into one body so their independent
+                chains overlap and the per-iteration overhead is
+                amortized over more work.  What is NOT taken: Carr and
+                Kennedy CREATE the copies by unrolling an outer loop
+                and decide legality from dependence distances under a
+                register-pressure balance model.  Here the copies
+                already exist -- an LLK row sequence is written
+                unrolled -- so the jam is RECOGNIZED, never created,
+                and legality is not a dependence question at all: it is
+                pairwise isomorphism of the two bodies under the value
+                map the pair itself establishes, plus a VRP-backed
+                proof that every typed Dst address stays in range after
+                the +2 rewrite.  The benefit taken is the TTINCRWC
+                overhead and the scheduler's straight-line window, not
+                the memory-to-compute balance the paper optimizes.
+     modelled on  none.  gcc/gimple-loop-jam.cc
+                (unroll_jam_possible_p, tree_loop_unroll_and_jam) is
+                the generic spelling, but it needs a loop NEST to
+                unroll and a data-dependence relation to consult; these
+                bodies are straight-line inside one block and the only
+                resource they share is the Dst RWC, which is not a
+                memory reference GCC's dependence machinery can see.
+
+   HARDWARE.  The Dst tile file addressed relative to the row-write
+   counter (RWC), and the TTINCRWC that advances it.  Fusion merges two
+   TTINCRWC(+2)s into one TTINCRWC(+4): one delivered word removed per
+   row pair, halving the counter-advance overhead of the iteration.
+   Interleave then reorders the fused group
+   load/load/compute/compute/drain/drain so the two rows' independent
+   chains overlap -- it removes no word at all; it buys filled issue
+   slots and pays in LREG live ranges, lengthened across the group out
+   of the 8-register file before IRA assigns physical LREGs.  That is
+   why the two are separate passes with separate legality: the
+   interleave drops the group-internal virtual operands, so the +2
+   row's accesses must be provably disjoint from the first row's store
+   under the new order, which is exactly what the 4-byte alignment
+   requirement on the first row's typed addresses buys.
+     - RWC-relative Dst addressing, constant TTINCRWC stride
+                                             typed insn data
+     - no-auto-increment address mode, in-range address
+                                             VRP
+     - 8-LREG file, pre-IRA live ranges      rvtt-pressure
+   On Quasar (TARGET_XTT_TENSIX_QSR) the analysis runs and dumps its
+   verdicts but the rewrite is suppressed (emit=no).
+
+   BIRTH KERNEL (pass_rvtt_dst_iteration, the fusion).  No recorded
+   provenance.  Ledger: FIRE-BREADTH.tsv flag dst-iteration-fusion,
+   birth_row "pre-pin-10 core", birth_share n/a(core) -- UNTRACEABLE.
+   There is no kernel name in this file, none in its testsuite coverage
+   (dst-iteration-bh.C, dst-iteration-wh.C, dst-iteration-qsr.C,
+   dst-iteration-dynamic-bh.C, dst-iteration-dynamic-wh.C,
+   dst-iteration-body.h), and none in the ledger.  Nothing is claimed
+   about which row this fusion was born on.
+
+   BIRTH KERNEL (pass_rvtt_dst_interleave).  No recorded provenance
+   either.  The interleave owns no flag, so it has no ledger row of its
+   own and inherits the same UNTRACEABLE pre-pin-10 core row as the
+   fusion it consumes.  Its testsuite coverage
+   (dst-interleave-negative-bh.C, dst-interleave-negative-wh.C) is
+   negative-only and names no kernel.  Nothing is claimed about its
+   birth row.  */
 
 
 #define INCLUDE_UNORDERED_MAP

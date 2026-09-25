@@ -352,7 +352,114 @@ along with GCC; see the file COPYING3.  If not see
    self-loop row request storage-collision chain renames through the
    service before candidate generation (rvtt_lreg_rename_web records
    the committed web so a scheduling refusal undoes it exactly via
-   rvtt_lreg_rename_web_undo).  */
+   rvtt_lreg_rename_web_undo).
+
+   LINEAGE.
+     technique  none.  Post-allocation register renaming over def-use
+                chains is compiler folklore with no single paper this
+                implementation takes an idea from, and naming one
+                would be decoration rather than attribution.  The
+                antecedent that actually exists is GCC's own, below.
+                What IS specific here, and is not from anywhere, is
+                the direction of the payoff: a rename buys nothing by
+                itself -- it moves register fields and changes no
+                delivered word -- so every question the pass answers
+                is about what a LATER pass can then do, which is why
+                legality and pricing are decoupled (the service export
+                proves legality; the consumer prices) and why the
+                standalone sweep needs guards that a classical
+                renamer does not.
+     modelled on  gcc/regrename.cc: build_def_use, regrename_analyze,
+                regrename_do_replace.  The chain formulation is taken
+                literally -- one chain is one definition plus every
+                true reader of it up to the chain close, and the whole
+                web moves together or not at all.  What is NOT taken:
+                regrename asks the recognizer whether an operand
+                admits a register (constraint queries) and takes
+                liveness at face value.  Here every fact comes from
+                the typed-effect table (rvtt_insn_effects) instead, so
+                a chain refuses on a CC write, a config-dest write, an
+                RWC/Dst counter effect, a Dst store destination, a
+                replay owner class, a companion-coupled multi-result
+                group, a pinned zero-length LREG protocol marker or
+                any implicit non-operand register access; DF
+                hard-register liveness is trusted ONLY in functions
+                with no opaque instruction, because raw .ttinsn words,
+                asm and calls are invisible to it (the demonstrated
+                loop-carried-live-through wrong code); and every
+                commit is re-proved on the actual stream afterwards.
+
+   HARDWARE.  The eight architectural SFPU vector registers L0-L7
+   (riscv.h SFPU_REG_NUM), after allocation, in the two banks
+   (L0-L3 / L4-L7) the IRA dual-bank binding describes, with no memory
+   spill path -- so a rename is only ever a permutation of the eight
+   names and can never manufacture storage.  The pass spends NO
+   delivered words: only register fields move, and the unchanged
+   delivered-word count of every edited instruction is ASSERTED after
+   the commit.  What it spends instead is downstream scheduling
+   currency, and this is where the real cost lives:
+     - LREG live ranges.  A whole-block-free target is genuinely free
+       storage (dead across the block, colliding with nothing).  A
+       temporal target is BORROWED from a register with a live
+       downstream story, and the loan is charged against the borrower.
+     - issue slots.  Priced through the shared timing engine
+       (rvtt-timing.h rvtt_timing::interlock_sim) under strict
+       acceptance: nothing unpriceable is ever accepted.  For a
+       temporal target the priced window extends THROUGH the target's
+       first post-span touch, so the new scoreboard dependence at that
+       fresh definition is charged in the row it taxes.  Measured on
+       silicon: a hot row's interlock fill moves fell from 48 to 16
+       under temporal renames, worth +7.1% kernel cycles.
+     - the REPLAY WINDOW, which is not a cost but a scheduling
+       barrier and the most expensive thing a rename can break.  A
+       recorded window is monetized by replaying it k-1 times, and it
+       exists only while the k unrolled bodies are textually
+       identical.  A rename cannot be applied uniformly to all k
+       copies -- the whole-block-free tier proves a target untouched
+       ACROSS the block, so once one repetition takes a target no
+       other can -- and a partial rename diverges bodies that were
+       byte-identical.  Measured: a 16-repetition block whose 6 free
+       LREGs were spent on repetitions 1-2 (42 no-free-lreg refusals
+       for the rest) split one replay recording into two, +5 text
+       words and +0.93% kernel cycles, for renames the span slot model
+       priced NEUTRAL; and one temporal rename turned 8 replay
+       launches into 0, +4.2% kernel cycles.  Hence the standalone
+       periodic-window guard and the temporal tier's strict-gain bar.
+     - eight allocatable LREGs      riscv.h SFPU_REG_NUM
+     - delivered words unchanged    asserted post-commit; every edited
+                                    pattern re-recognized with its word
+                                    count re-checked
+     - issue-slot pricing           rvtt-timing.h
+                                    rvtt_timing::interlock_sim
+     - typed-effect veto            rvtt-effects.h / rvtt_insn_effects
+     - the wrong-code cases are     hardware runs plus two independent
+       not modeled but MEASURED     reference simulators
+
+   BIRTH KERNEL.  None recorded.  This pass carries FOUR flags --
+   -mtt-tensix-optimize-lreg-rename (the frozen-API historical
+   spelling), -mtt-tensix-optimize-lreg-rename-chains (the general
+   du-chain engine), -mtt-tensix-optimize-rename-temporal and
+   -mtt-tensix-optimize-rename-cc-region -- and FIRE-BREADTH.tsv has
+   NO ROW FOR ANY OF THEM.  There is therefore no birth row and no
+   birth_share, and nothing about this pass's breadth can be settled
+   from the ledger.  What the source and the tests record instead, and
+   it is a more interesting record than a share would be:
+     - 30 flag-carrying tests (g++.target/riscv/tt/tensix/
+       lreg-rename-*, rename-temporal-*), the majority of them
+       REFUSAL rows pinning named refusals rather than fires;
+     - the v1 retirement adjudication: 13 corpus fires under the
+       retired pass's own flag, of which 11 severed dataflow
+       (calculate_cube_root x2, calculate_sine, calculate_i0 split
+       constant pair, calculate_lcm_fresh_cpp x3, plus run_kernel
+       inline copies) and only the 2 pure-LOADI cosine fires were
+       correct -- and those are general-engine fires too.  No shipped
+       bytes ever carried a v1 rename;
+     - the temporal tier's honest verdict: over its priced window the
+       two worlds are isomorphic through the close, so
+       slots[1] >= slots[0] identically and the bar admits NOTHING
+       today outside the shape-owning MVE realization.  A birth_share
+       for that tier would be meaningless because its fire count is
+       zero by construction, and the twins pin the refusal by name.  */
 
 #define INCLUDE_ALGORITHM
 #define INCLUDE_VECTOR

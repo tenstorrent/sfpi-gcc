@@ -113,7 +113,77 @@
    so the fold is refused unless the maximum simultaneous SFPU pressure
    over the extension span, plus one, fits the allocatable SFPU variable
    register budget (minus any raw-LREG reservations present in the
-   function, counted conservatively function-wide).  */
+   function, counted conservatively function-wide).
+
+   LINEAGE.
+     technique  K. D. Cooper and J. Lu, "Register promotion in C
+                programs", PLDI 1997, pp. 308-319.
+                Promote a memory location's value into a register over
+                a region the compiler can prove no other access
+                disturbs, and rewrite the redundant reload as a
+                register reference.  What is NOT taken: Cooper and Lu
+                promote over loop nests driven by alias analysis and
+                pay for the promotion with load/store code at the
+                region boundary.  Here nothing is promoted and no
+                boundary code is ever inserted -- the earlier load's
+                value is already in an LREG.  The "region" is not a
+                loop but an RWC epoch intersected with a layout epoch,
+                and the proof is SYNTACTIC identity of the full typed
+                operand tuple: no address arithmetic is performed and
+                disjointness is never claimed, so the aliasing question
+                is answered by refusing rather than by analysis.
+     modelled on  none.  Generic GCC's redundant-load elimination
+                (gcc/gcse.cc, gcc/postreload.cc) keys on MEM rtxes it
+                can alias-analyse; every Dst access here is an
+                UNSPEC_VOLATILE with no MEM, so those passes see only
+                an ordering barrier and stop.  The dataflow skeleton is
+                instead a pre-IRA mirror of this tree's own
+                rtl-rvtt-lreg-livein.cc -- the same forward union-join
+                fixpoint, with state tokens in place of sentinel
+                pseudos, because Dst faces and RWC counters are not
+                IRA-allocatable resources and need no register interval
+                materialized.
+
+   HARDWARE.  The Dst accumulator tile file and its read-write-clear
+   (RWC) counters, together with the CFG-state Dst layout
+   (ALU_ACC_CTRL_* and dst_32bit_addr_en) and the CC lane mask that
+   bound when two reads are the same read.  A proven-identity reload
+   becomes a plain XTT32SI copy, which the backend emits as the
+   unconditional SFPMOV or coalesces away entirely: the saving is one
+   delivered Dst load word, and the price is the earlier load's LREG
+   live range stretched across the intervening computation.  That price
+   is the binding constraint, not the word: XTT32SI values have NO
+   spill path (rvtt_sfpassign's BADLOAD/BADSTORE alternatives are
+   compile errors), so the fold refuses unless peak simultaneous SFPU
+   pressure over the extension span, plus one, fits the allocatable
+   budget of the 8-register file less any function-wide raw-LREG
+   reservations.
+     - Dst rows; RWC counters dst_rwc / dst_rwc_cr
+                                        typed effect attributes via
+                                        rvtt_insn_effects
+     - ALU_ACC_CTRL_* and dst_32bit_addr_en
+                                        memory-mapped configuration;
+                                        any store may start a fresh
+                                        layout epoch
+     - SFPPUSHC / SFPPOPC flag stack, word-exact all-lanes SFPENCC
+                                        xtt_effect_set::
+                                        cc_write_all_lanes
+     - 8-LREG file, no spill path       rvtt-pressure
+   QSR has no faithful RWC model (unified counter field, untested sim
+   path): the whole pass hard-refuses there.
+
+   BIRTH KERNEL.  erfinv and addcmul, EM era.  Ledger: FIRE-BREADTH.tsv
+   flag dst-ownership, birth_row "pre-pin-10 core (erfinv/addcmul EM
+   fires)", birth_share 1.00, verdict BIRTH-ROW-BOUND.  A birth_share
+   of 1.00 means the whole measured benefit is that one row: this pass
+   is NOT claimed to generalise.  The row's "pre-pin-10 core" prefix
+   says the mechanism itself predates the pin-10 ledger, so the named
+   kernels are where its benefit was measured rather than, necessarily,
+   where it was born; no kernel is named in this file or in a dedicated
+   testsuite file (there is no dst-ownership-*.C).  The ledger's
+   evidence column records where the boundary sits: laneIZ ip2-probe
+   (pin 48) -- the solo fold fires, but at ON-36 it refuses with
+   lreg-pressure-exceeded 9>8.  */
 
 #include "config.h"
 #include "system.h"
