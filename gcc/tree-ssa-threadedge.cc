@@ -252,7 +252,7 @@ jump_threader::record_temporary_equivalences_from_stmts_at_dest (edge e)
 #if 1
       // probably nearly all our builtins?
       if (auto *insnd = rvtt_get_insn_data (stmt))
-	if (insnd->has_iptr ())
+	if (insnd->id == rvtt_insn_data::ttinsn)
 	  return NULL;
 #endif
       /* We cannot thread through __builtin_constant_p, because an
