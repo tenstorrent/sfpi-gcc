@@ -89,7 +89,41 @@ along with GCC; see the file COPYING3.  If not see
    CC-setting statement (the loop-scoped barrier that otherwise forces
    the invariant immediate hoist to refuse the containing loop) and
    shortens the row's serial spine.  Every miss refuses by name with
-   the program bytes unchanged.  */
+   the program bytes unchanged.
+
+   LINEAGE.
+     technique  J. R. Allen, K. Kennedy, C. Porterfield and J. Warren,
+                "Conversion of control dependence to data dependence",
+                POPL 1983, pp. 177-189.
+                If-conversion: a predicated region is replaced by a
+                branch-free computation of the same value function.
+                What is NOT taken: the classical formulation converts
+                control flow to predication; here the region is ALREADY
+                predicated in the SFPU's CC form, and the transform
+                goes one step further, collapsing the predication
+                itself into a single instruction that computes the
+                conditional value directly.
+     admission  exhaustive sweep over all 2^32 lane values,
+                tt/proofs/int-abs-negate-select/, with REDUCTION.md
+                recording that the proof is about the value function
+                r(v), not one spelling.
+     modelled on  none.  GCC's if-conversion runs before the CC
+                skeleton exists and cannot see the SFPU lane mask.
+
+   HARDWARE.  SFPABS with mod1=INT -- one word replacing the five-word
+   CC spine (SFPPUSHC, SFPSETCC, SFPIADD, SFPENCC, SFPPOPC) plus the
+   zero materialization and its LREG.  The serial CC dependence chain
+   is what costs here, not just the word count: the spine forces each
+   row to wait on the flag write.
+     - SFPABS mod1=0        TENSIX_EXECUTE_SFPABS (pinned simulator)
+     - SFPSETCC mod1=0      raw-sign-bit select
+     - SFPIADD mod1=6       two's-complement wrap subtract
+   INT32_MIN maps to INT32_MIN in both arms; the sweep covers it.
+
+   BIRTH KERNEL.  absint32 (lanes HD/GH).  Ledger: FIRE-BREADTH.tsv
+   flag int-abs, birth_share 1.00 -- BIRTH-ROW-BOUND, one row carries
+   the whole measured benefit.
+   */
 
 #define INCLUDE_ALGORITHM
 #define INCLUDE_VECTOR

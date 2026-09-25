@@ -65,7 +65,38 @@ along with GCC; see the file COPYING3.  If not see
 				    execute on first loop entry
      crossloop-pressure		    eight-LREG file exceeded (per-load,
 				    greedy)
-   QSR refuses by pass gate (no validated capability).  */
+   QSR refuses by pass gate (no validated capability).
+
+   LINEAGE.
+     technique  F. E. Allen and J. Cocke, "A catalogue of optimizing
+                transformations", in Design and Optimization of
+                Compilers, Prentice-Hall, 1972.
+                Loop-invariant code motion, applied one level out:
+                the invariant here is not an expression but a DELIVERY
+                -- a configuration write whose value is unchanged across
+                the outer trip, so the write itself is the redundancy.
+     technique  E. Morel and C. Renvoise, "Global optimization by
+                suppression of partial redundancies",
+                Communications of the ACM 22(2):96-103, February 1979.
+                The partial-redundancy formulation is what admits the
+                motion when the inner loop is entered on only some
+                paths: availability and anticipability are computed
+                over the CC-region skeleton rather than the CFG alone.
+     modelled on  gcc/tree-ssa-loop-im.cc (the invariant-motion
+                driver's shape), but the cost side is entirely local:
+                GCC prices an expression, this prices delivered words
+                through rvtt-delivery-cost.h.
+
+   HARDWARE.  The instruction-push FIFO and the MOP expander.  What is
+   hoisted is a launch or a configuration prefix whose re-issue costs
+   delivered words on every outer trip; the 8-LREG file bounds how much
+   may be kept live across the hoist, and RWC state must be provably
+   unchanged across the motion or the hoist refuses by name.
+
+   BIRTH KERNEL.  exp (R9 vehicle).  Ledger: FIRE-BREADTH.tsv flag
+   crossloop-hoist, birth_share 0.27 -- it generalises beyond its birth
+   row, unlike the int-abs/int-not pair above.
+   */
 
 #define INCLUDE_VECTOR
 #define INCLUDE_ALGORITHM
