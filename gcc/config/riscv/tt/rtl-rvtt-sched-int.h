@@ -1,7 +1,10 @@
 /* Private interface between the Tensix scheduler units.
    Copyright (C) 2022-2026 Tenstorrent Inc.
-   Originated by Paul Keller (pkeller@tenstorrent.com).
-   Rewritten Nathan Sidwell (nsidwell@tenstorrent.com, nathan@acm.org).
+   Split out of the tensix scheduler originated by Paul Keller
+   (pkeller@tenstorrent.com) and rewritten by Nathan Sidwell
+   (nsidwell@tenstorrent.com, nathan@acm.org).  The code in this
+   file is new work of the craq campaign and should not be
+   attributed to them.
 
 This file is part of GCC.
 

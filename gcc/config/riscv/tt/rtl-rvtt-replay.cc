@@ -156,6 +156,16 @@ along with GCC; see the file COPYING3.  If not see
    untransformed stream -- an unpriceable or unproven candidate is a
    named refusal, never a guess.
 
+   SCOPE OF THE NOTES BELOW.  This file is not ours.  The replay pass
+   was originated by Paul Keller and rewritten by Nathan Sidwell, and
+   that base -- recognising a repeated record, emitting TT_REPLAY,
+   managing the 32 slots -- is their work and is documented by them
+   above.  The LINEAGE / HARDWARE / BIRTH KERNEL notes that follow
+   describe only what the craq campaign ADDED on top of it: the
+   formation policy, the hoisting and canonicalization tiers, and the
+   twelve -mtt-tensix-optimize-replay-* flags that gate them.  Read
+   them as an appendix to the pass, not as a description of it.
+
    LINEAGE.
      technique  C. W. Fraser, E. W. Myers and A. L. Wendt, "Analyzing
                 and compressing assembly code", SIGPLAN Symposium on
