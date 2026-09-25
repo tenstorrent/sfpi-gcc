@@ -1,412 +1,274 @@
-<!-- Copyright (C) 2026 Tenstorrent Inc.
+<!--
+   Copyright (C) 2026 Tenstorrent Inc.
 
-     This file is part of GCC.
+   This file is part of GCC.
 
-     GCC is free software; you can redistribute it and/or modify it under
-     the terms of the GNU General Public License as published by the Free
-     Software Foundation; either version 3, or (at your option) any later
-     version.
+   GCC is free software; you can redistribute it and/or modify it under
+   the terms of the GNU General Public License as published by the Free
+   Software Foundation; either version 3, or (at your option) any later
+   version.
 
-     GCC is distributed in the hope that it will be useful, but WITHOUT ANY
-     WARRANTY; without even the implied warranty of MERCHANTABILITY or
-     FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
-     for more details.
+   GCC is distributed in the hope that it will be useful, but WITHOUT ANY
+   WARRANTY; without even the implied warranty of MERCHANTABILITY or
+   FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+   for more details.
 
-     You should have received a copy of the GNU General Public License
-     along with GCC; see the file COPYING3.  If not see
-     <http://www.gnu.org/licenses/>.  -->
+   You should have received a copy of the General Public License along
+   with GCC; see the file COPYING3.  If not see
+   <http://www.gnu.org/licenses/>.
+-->
 
-# Getting this branch into reviewable shape
+# Landing the 31 new passes on `tenstorrent/sfpi-gcc`
 
-Measured 2026-09-19 against `origin/main`.  Every number here came from a
-command, not an estimate; the command is named so it can be re-run.
+Revised 2026-09-25.  The previous revision planned a 28-patch *refactoring*
+stack aimed at upstream GCC's contribution gates.  That was the wrong target
+in two ways: the gates it optimised for are not the ones this fork runs, and a
+refactoring series does not land a single pass.  The goal is 31 passes in
+`main`.  This revision plans for that, and for nothing else.
 
-## 1. Why the branch cannot be submitted as it stands
+The deliverable of each submission is **one pass, compiled in, defaulted off,
+with its tests**.  Nothing else travels with it.
 
-    git rev-list --count origin/main..HEAD        552 commits ahead
-    git rev-list --count HEAD..origin/main         36 commits behind
-    git diff --shortstat origin/main...HEAD      1700 files, +167232 -5524
 
-Broken down:
+## 1. The two facts that set the whole strategy
 
-| Area | Files | Insertions | New files |
-|---|---|---|---|
-| `gcc/config/riscv/tt` | 177 | 107,662 | 146 |
-| `gcc/testsuite/g++.target/riscv/tt` | 1,491 | 49,566 | 1,481 |
-| `gcc/docs` | 19 | 6,984 | 19 |
-| `riscv.opt` / `riscv.cc` / `riscv-ftypes.def` | 3 | 491 | 0 |
+**The maintainer has never heard from us.**  Zero pull requests have ever been
+opened against `tenstorrent/sfpi-gcc` or `tenstorrent/sfpi` from this account
+(`gh api search/issues?q=author:nkapreTT+repo:tenstorrent/sfpi-gcc` →
+`total_count: 0`, same for `sfpi`).  `grep -ri 'sidwell\|nathan'` over every
+campaign document and `WORKLOG.md` returns nothing.  168,691 insertions exist
+that the one person who can merge them has not seen.
 
-No maintainer reviews 167k insertions in one request.  **Size is the blocker,
-and nothing else on this page matters until it is fixed.**  The branch is also
-36 commits behind, so it would not apply cleanly either.
+Everything in this plan is downstream of fixing that, and the fix is a
+conversation, not a patch series.
 
-## 2. The two mechanical gates GCC already ships
+**22 of the 31 new passes land inert.**  They are gated on a
+`-mtt-tensix-optimize-*` option that is `Init(0)`, and the backend's standing
+rule (`gcc/config/riscv/tt/README`) is that with the flag off the emitted
+binary is bit-for-bit identical to the previous build.  That is the entire
+argument for why a 31-pass series is acceptable at all: **each one is provably
+a no-op until somebody asks for it.**  A reviewer is being asked to accept new
+code, not new behaviour.
 
-Both live in this tree and are what gcc.gnu.org runs.  Neither currently
-passes.
+The remaining 9 are a different conversation and are deliberately last (§5).
 
-**ChangeLog.** `contrib/gcc-changelog/git_check_commit.py <sha>` fails on every
-commit on this branch, including the recent cleanup ones, with `changed file
-not mentioned in a ChangeLog`.  Upstream this is an automatic bounce with no
-human involved.  The accepted form is a trailer in the commit message itself;
-this exact shape was validated against the checker and returns `OK`:
 
-    rvtt: one-line summary
+## 2. What the maintainer actually gates on
 
-    Free prose explaining the change.
+Measured from his last 50 commits on `main` (2026-08-11 → 2026-09-24) and from
+the 21 pull requests on the fork, 18 of which he merged.
 
-    gcc/ChangeLog:
-
-    	* config/riscv/tt/rvtt-effects.cc (rvtt_call_int_arg): New function.
-    	* config/riscv/tt/rvtt-effects.h (rvtt_call_int_arg): Declare.
-
-Note the literal tab before `*`, the blank line after `gcc/ChangeLog:`, and
-that every touched file must appear.  Test files go under a
-`gcc/testsuite/ChangeLog:` heading.
-
-**GNU style.** `contrib/check_GNU_style.py <patch>` reports 2,449 findings over
-the 100 campaign-added `.cc`/`.h` files.  That number is badly inflated and
-should not be quoted without the breakdown, because the checker treats comment
-prose as code:
-
-| Class | Raw | Assessment |
+| | his practice | our branch |
 |---|---|---|
-| dot, space, space, end of comment | 1,204 | real, trivial (`/* as given */` wants `/* As given.  */`) |
-| trailing operator | 351 | mostly false: em-dashes ending comment lines |
-| 8 spaces should be tabs | 357 | mostly false: comment ASCII diagrams |
-| function name / paren spacing | 141 | **partly real** — see below |
-| lines over 80 characters | 144 | real, but only 74 in the files themselves |
-| space before `[` | 105 | mostly false: `[per-arch]`, `[region exit]` in comments |
-| braces on a separate line | 50 | mostly false: `: gimple_opt_pass (...) {}` is GCC idiom |
+| subject | median 34 chars, max 60 | median 73, max 203 |
+| body | **empty in 50 of 50** | median 26 lines |
+| issue ref `#NNNNN:` | 38 of 50 | **0 of 442** |
+| files per commit | median 3, p90 11 | median 6, p90 19, max 548 |
+| insertions | median 97, p90 448 | p90 1210; 14 over 2000 |
+| tests in the same commit | 39 of 50 | broadly yes |
+| merge commits | **0 — `main` is linear** | 129 |
+| comment style | `//` | `/* */` |
+| ChangeLog | **none** | none — *we match; not a gap* |
 
-A further 405 findings land in the 32 `tt/` files shared with `origin/main`;
-those are upstream's and are not ours to change.
+Two corrections to the previous revision, both material:
 
-Counting only real code lines, the genuine work is small and concentrated:
+- **ChangeLog entries are not a gate.**  The old plan treated
+  `contrib/gcc-changelog/git_check_commit.py` as an automatic bounce.  All 50
+  of his commits have empty bodies and would fail it.  The fork does not use
+  ChangeLogs.  Stop spending effort here.
+- **GNU style is not a gate either.**  His current `gimple-rvtt-combine.cc`
+  carries 25 over-80-column lines.  `check_GNU_style.py` is not run.
 
-    over-80-column lines, whole backend            74
-      of which gimple-rvtt-expand.cc               34
-      of which gimple-rvtt-dst-iteration.cc        17
-    missing space before '(' on code lines        214
-      of which gimple-rvtt-expand.cc              131
+**The gate he does run** is a full build and test of the superproject.  He
+pushes `nsidwell/<topic>-<issue#>` to `tenstorrent/sfpi` and manually
+dispatches the "Development" workflow — `scripts/build.sh --gdb --tt-built`,
+`--dejagnu`, `--test-tt`.  He did this 15+ times in the window this branch ran
+**zero** builds.  A submission that has not been through it is unreviewable on
+its face.
 
-`gimple-rvtt-expand.cc` is the outlier: it was written in a non-GNU style and
-accounts for most of both counts on its own.
+**His test form is `dg-do compile` + `check-function-bodies "**" ""`**, which
+pins the exact expected assembly of the whole function.  His `tt/` suite on
+`main`: 166 `check-function-bodies`, 22 `scan-assembler`, **0 `scan-rtl-dump`,
+0 `scan-tree-dump`**.  Ours is the inverse — 839 `scan-rtl-dump`, 423
+`scan-tree-dump`, 6 `check-function-bodies`.  Per-pass dump scanning is
+legitimate and we should keep it in our own tree, but **every pass we submit
+needs at least one `check-function-bodies` test**, because that is the form he
+reads.
 
-## 3. Can each pass be its own submission?
+He also does not watch the repo.  From PR #19, in his own words:
 
-Yes — as a stack, in dependency order.  Each pass ends up as one patch
-containing the pass, its `riscv.opt` flag, its `rvtt-passes.def` registration
-and its tests.  What follows is not a limit on how many passes can be
-reviewed separately; it is only the order they have to go in.
+> "For the future, for some reason I don;t get emails about PRs here, and
+> they're so rare I don't actively look.  Feel free to ping after, say, a week."
 
-First, a correction to an earlier count.  There are 42 files matching
-`{gimple,rtl}-rvtt-*.cc`, but they are not 42 passes:
 
-    registered-pass translation units (define make_pass_*)     28
-    support translation units (share the prefix, register none) 14
+## 3. Prerequisites — none of §4 starts until all four are done
 
-The 14 support files -- `rtl-rvtt-replay-crf.cc`, `rtl-rvtt-sched-pairing.cc`,
-`gimple-rvtt-prgm-residency.cc` and the rest -- are library code for a
-subsystem and belong in that subsystem's patch, not in one of their own.
+**P1 — Ask him.**  One message, before any code: here is a backend of 31
+optional passes for Tensix, all default-off, all with tests; would you rather
+see them one PR per pass, or should we talk about the shape first?  His answer
+reorders everything below and costs a day to get.
 
-The core is unavoidably shared, so it cannot be deferred: `rvtt-refuse.h` is
-included by 45 translation units, `rvtt-effects.h` by 40,
-`rvtt-raw-boundary.h` by 29.  Ten of the 28 passes need nothing beyond it.
-The rest each need one further subsystem header, which lands immediately
-before the passes it unblocks.
+**P2 — Rebase onto `main`.**  The branch is 49 commits behind and **no longer
+applies**.  `gimple-rvtt-expand.cc` was renamed to `gimple-rvtt-pred.cc` on
+2026-09-08 (`ca890f5e6f6`, "Rename confusingly-named expand pass to vif"), so
+the old plan's patch P06 targeted a file that does not exist.  `rvtt.md` has
+*grown* to 2816 lines since the merge-base.  Rebase per pass as it is
+submitted, not the whole branch at once.
 
-### Readiness of the 28
+**P3 — One green Development run.**  Push a topic branch to
+`tenstorrent/sfpi`, dispatch the workflow, get a green `--test-tt`.  This
+branch has never been built by CI: 36 runs ever, all `pin-review-lint`, each
+8-12 seconds, the most recent 2026-09-18 from a workflow deleted 38 minutes
+later.  Until one green run exists, we do not know that the series builds
+against current `main`.
 
-Re-measured 2026-09-19 after the cleanup work.  Every figure below came from a
-command run against the tree at that date.
+**P4 — Strip the false attributions.**  27 branch-new files carry
+`Rewritten Nathan Sidwell (nsidwell@tenstorrent.com, nathan@acm.org)`,
+inherited from the file they were split out of.  His `rtl-rvtt-schedule.cc`
+was 305 lines; the seven `rtl-rvtt-sched-*.cc` files now bearing his name
+total 8,515.  `rvtt.md` went 2703 → 325 lines with fourteen topic files
+carrying his header.  **Do not send him a patch signing his name to code he
+has not seen.**  Retain the attribution only on the lines genuinely his; the
+rest carry Tenstorrent copyright and no personal credit, which is already the
+convention for all 128 other new files.
 
-    fully ready                 26
-    style work outstanding       2
-    missing tests                0
 
-Size, which decides whether a reviewer can hold the patch in their head:
+## 4. The series: one pass per pull request
 
-    under 500 lines      3
-    500 - 1000          10
-    1000 - 2000         15
-    over 2000            0
-
-All 28 registered passes are under 2000 lines.  Five were over; each was split
-along a boundary its own structure suggested, as pure code movement verified
-byte-identical:
-
-    rtl-rvtt-macro-planner.cc   3462 -> 1912  + -cost.cc    1607
-    gimple-rvtt-crosscall.cc    3187 -> 1837  + -census.cc  1392
-    rtl-rvtt-lp-alloc.cc        3094 -> 1608  + -color.cc   1449
-    rtl-rvtt-dst-autoincr.cc    2763 -> 1860  + -scan.cc      738
-    rtl-rvtt-mop-form.cc        2208 -> 1351  + -outward.cc   936
-
-Be precise about the claim: it is about the 28 REGISTERED passes, the units of
-submission.  Eight SUPPORT translation units remain over 2000 lines --
-rvtt-macro-desc.cc 3276, gimple-rvtt-prgm-residency.cc 2950,
-rtl-rvtt-sched-pairing.cc 2699, rtl-rvtt-replay-hoist.cc 2666,
-rtl-rvtt-replay-crf.cc 2499, rvtt-mop-derive.cc 2176,
-rtl-rvtt-sched-region.cc 2172, rtl-rvtt-replay-discover.cc 2060.  None
-registers a pass; each is library code travelling with its subsystem's patch.
-They enlarge those later patches and should be split before those stages, but
-they are not on the critical path for the early ones.
-
-Style: 61 over-80-column lines in the passes became 31.  Ten of the thirty
-fixed were created by this work -- renaming refuse to crosscall_refuse added
-eleven characters to every call site, and the shared helper names are longer
-than the private ones they replaced.  The remaining 31, eighteen in
-gimple-rvtt-expand.cc and thirteen in gimple-rvtt-dst-iteration.cc, are long
-because of NESTING DEPTH rather than expression width; two are temporaries
-introduced to shorten a line that still exceed 80 columns at eight tabs of
-indent.  Reducing that nesting is a behaviour-carrying refactor, not a style
-pass.  Three mechanical wrapping attempts each produced worse output and were
-reverted -- do not try a fourth without a real formatter.
-
-Tests: all 28 passes have them.  An earlier version of this section claimed
-three did not.  That was a measurement error worth recording, because the same
-mistake is easy to repeat: coverage was counted by grepping for tests that
-scan a pass's DUMP NAME, so any pass that writes nothing to dump_file scored
-zero regardless of how well tested it is.  Checked properly:
-
-  - gimple-rvtt-expand.cc -- 138 tests exercise the v_if / v_elseif trees it
-    lowers, 129 assert the CC instructions it emits.  Assembly scans, which is
-    what the directory README says the lowering passes use.
-  - rtl-rvtt-spill-diag.cc -- 47 tests using dg-error or dg-warning against
-    its lreg-pressure-exceeded diagnostic.
-  - rtl-rvtt-lreg-livein.cc -- four dedicated tests, including
-    tensix/raw-lreg-livein-cfg-bh.C, which covers the block-end sentinel
-    placement edge case by name.  This pass emits no dump at all.
-
-Namespace hygiene: the three interface headers created by the splits
-(dst-autoincr, lp-alloc, macro-planner) put their declarations in named
-namespaces, after an independent review found that lifting types to global
-scope had given `struct candidate' three conflicting definitions in one link.
-Four older interface headers still export unprefixed names at global scope --
-gimple-rvtt-crosscall-int.h, gimple-rvtt-prgm-int.h, rtl-rvtt-replay-int.h and
-rtl-rvtt-sched-int.h, between them sixteen types across four to eight
-consuming translation units.  No definition of any of those sixteen names
-exists outside gcc/config/riscv/tt, so this is latent rather than live; fold
-the fix into whichever subsystem patch touches them.
-
-### Does any of this need re-measuring on silicon?
-
-No -- and the reason matters, because it is cheaper as well as stronger.
-
-Everything in this plan is reorganisation: splitting files, moving shared
-helpers, restyling.  None of it is intended to change what the compiler emits.
-For a change like that, byte-identity of the emitted code is a *stronger*
-result than a timing run: if the bytes are identical the cycle count on the
-device is identical by construction, whereas a perf sweep re-measures the same
-binaries and adds measurement noise.  The identity gate takes minutes; the
-sweep takes hours.
-
-Silicon becomes necessary only when a reorganisation *does* move codegen -- and
-the identity gate is precisely what reports that.  So the gate is the trigger
-for a silicon run, not a substitute for one.  Board performance numbers are a
-separate concern from upstreaming in any case: review turns on correctness and
-structure, not on cycle counts.
-
-## 4. Proposed order
-
-**Stage 0 — reorganisation only, no new functionality.**  These change nothing
-the compiler emits and can be justified on their own merits.
-
-  0a. Split `rvtt.md`.  Upstream's is a 2,481-line monolith; this branch
-      already splits it into 14 topic files (`+103 -2481`) with codegen
-      unchanged.  This is pure "make it not messy" and is the cheapest thing
-      to land first.
-  0b. The backend map, `gcc/config/riscv/tt/README`: what the passes are for,
-      where they run, which flags are on, how refusals work.
-  0c. Style conformance on the files the later stages touch.
-
-**Stage 1 — the shared core** (~4,650 lines of campaign additions):
-
-  - `rvtt-effects.{h,cc}` — the typed effect-classification vocabulary, the
-    single place instruction effects are decided.
-  - `rvtt-refuse.{h,cc}` + `rvtt-refusals.def` — the named-refusal registry, so
-    "the pass declined" is never silent.
-  - `rvtt-raw-boundary.{h,cc}`.
-  - The `riscv.opt` / `riscv.cc` / `riscv-ftypes.def` hooks.
-
-This stage is large for one patch and should itself be split — effects first,
-refusals second, since the second uses the first.
-
-**Stage 2 — the ten foundation-only passes**, smallest first, one patch each.
-
-**Stage 3 — the remaining 32 passes**, in dependency order.  The subsystem
-clusters (macro planner, scheduling, replay formation, LREG pressure) should
-land as their own series, each preceded by its shared header.
-
-## 5. Per-patch checklist
-
-    1.  Rebase onto current origin/main.
-    2.  ChangeLog trailer in the commit message; verify:
-          contrib/gcc-changelog/git_check_commit.py <sha>     ->  OK
-    3.  Style:
-          contrib/check_GNU_style.py <patch>
-        Judge each finding; the classes in section 2 are frequently false on
-        comment prose.  Do not bulk-apply a fix script — one was tried here and
-        it turned comment separator rules into "------.  */", capitalised a
-        filename, and appended a period to an #endif guard label.
-    4.  Codegen unchanged, for any patch that claims to be a refactor:
-        build the patched compiler and a baseline from the unmodified tree in
-        the same build directory at the same stage, compile the in-tree Tensix
-        corpus with both, and diff every emitted artifact.  Scripts on
-        tt-quietbox-0: setup-sfpi-verify.sh, build-base-cc1plus.sh,
-        corpus-identity.sh.  Normalise addresses before judging RTL dumps —
-        they print heap pointers, so ASLR alone yields ~112 spurious diffs.
-    5.  Tests accompany the pass in the same patch.
-
-## 6. What is already in reasonable shape
-
-- Per-file essays explaining what each pass does and why.
-- The backend README: pass families, pipeline anchors and their ordering trap,
-  the flag split, the refusal mechanism, a glossary.
-- Duplicate helpers: 29 definitions across 20 passes reduced to 11, each step
-  verified byte-identical on 1,543 sources.
-- The named refusal registry, build-enforced against duplicate or unregistered
-  names.
-- Documentation claims checked against the build rather than asserted — see
-  the README's section 7, which now states that two of the eleven proofs are
-  mechanically verified rather than implying all of them are.
-
-## 7. The stack, concretely
-
-Generated from the include graph; re-runnable.  Each `Pnn` is one patch: the
-pass, its `riscv.opt` flag, its `rvtt-passes.def` registration, its tests.
-Each `+ header` line is an infrastructure patch that must land before the
-passes under it.  Support translation units travel with their subsystem.
+Each PR contains exactly:
 
 ```
-  --- after the core, passes needing nothing further ---
-  P01  rtl-rvtt-spill-diag.cc               212 lines    0 tests  NEEDS TESTS
-  P02  gimple-rvtt-int-not.cc               285 lines    7 tests
-  P03  rtl-rvtt-lreg-livein.cc              349 lines    0 tests  NEEDS TESTS
-  P04  gimple-rvtt-int-abs.cc               576 lines   11 tests
-  P05  gimple-rvtt-reprprop.cc              603 lines    8 tests
-  P06  gimple-rvtt-expand.cc                847 lines    0 tests  NEEDS TESTS
-  P07  gimple-rvtt-dst-iteration.cc         947 lines    7 tests
-  P08  rtl-rvtt-dst-ownership.cc           1015 lines   22 tests
-  P09  rtl-rvtt-crosslane-window.cc        1019 lines    1 tests
-  P10  rtl-rvtt-lp-alloc.cc                3094 lines   25 tests  SPLIT FIRST
-
-  --- + rvtt-macro-ownership.h (512 lines) ---
-  P11  gimple-rvtt-crossloop.cc             532 lines   22 tests
-  P12  rtl-rvtt-dst-autoincr.cc            2763 lines  103 tests  SPLIT FIRST
-
-  --- + rvtt-macro-tables.h (1675 lines) ---
-  P13  gimple-rvtt-transp-involution.cc    1205 lines    3 tests
-  P14  gimple-rvtt-crosslane.cc            1813 lines   15 tests
-
-  --- + rvtt-cc-region.h (1532 lines) ---
-  P15  gimple-rvtt-store-fold.cc           1183 lines   30 tests
-  P16  rtl-rvtt-lreg-rename.cc             1963 lines   30 tests
-
-  --- + rvtt-trips.h (671 lines) ---
-  P17  gimple-rvtt-replay-unroll.cc        1781 lines   16 tests
-
-  --- + rvtt-lut-tables.h (461 lines) ---
-  P18  gimple-rvtt-lut-select.cc           1591 lines   52 tests
-
-  --- + rtl-rvtt-sched-int.h (115 lines) ---
-  P19  rtl-rvtt-lp-schedule-prera.cc       1349 lines   11 tests
-
-  --- + rvtt-delivery-cost.h (216 lines) ---
-  P20  gimple-rvtt-ccmask.cc                952 lines   22 tests
-  P21  gimple-rvtt-reassoc.cc              1536 lines   24 tests
-  P22  rtl-rvtt-mop-form.cc                2208 lines   14 tests  SPLIT FIRST
-  P23  gimple-rvtt-crosscall.cc            3186 lines   30 tests  SPLIT FIRST
-  P24  rtl-rvtt-macro-planner.cc           3462 lines  186 tests  SPLIT FIRST
-
-  --- + rvtt-placement.h (438 lines) ---
-  P25  gimple-rvtt-prgm-const.cc            948 lines  144 tests
-  P26  gimple-rvtt-invariant.cc            1827 lines   89 tests
-
-  --- + rvtt-schedule.h (245 lines) ---
-  P27  gimple-rvtt-delivery-shape.cc        595 lines   17 tests
-  P28  gimple-rvtt-lp-schedule.cc          1110 lines   37 tests
-
-  28 of 28 registered passes placed
+  gcc/config/riscv/tt/<pass>.cc            the pass
+  gcc/config/riscv/tt/rvtt-passes.def      one INSERT_PASS line
+  gcc/config/riscv/tt/rvtt-protos.h        one make_pass_* declaration
+  gcc/config/riscv/tt/t-riscv-tt           one object in RVTT_OBJS
+  gcc/config/riscv/riscv.opt               one Init(0) option
+  gcc/doc/invoke.texi                      one option paragraph
+  gcc/testsuite/g++.target/riscv/tt/...    tests, >=1 check-function-bodies
 ```
 
-Five are flagged SPLIT FIRST at over 2000 lines, and three need tests written.
-The other 20 are submission-shaped as they stand.
+Subject `#NNNNN: Add <pass-name> pass` if a ticket exists, else
+`Add <pass-name> pass`.  Empty body, or two sentences if the pass needs a
+sentence of motivation.  No `Co-Authored-By` trailers — he uses none.
 
----
+### Wave A — small, gated, well-tested (send these first)
 
-## 8. The gap this plan did not account for (found 2026-09-21)
+Four passes, each inside his observed review ceiling of ~840 lines.
 
-The 28 patches above are reorganisation, gated on byte-identity. That framing
-is still correct. But it silently assumes the passes being reorganised are
-passes that users actually run, and they are not.
+| pass | loc | tests | option |
+|---|---|---|---|
+| `int-not` | 286 | 8 | `-mtt-tensix-optimize-int-not` |
+| `crossloop-cc-peel` | 532 | 43 | `-mtt-tensix-optimize-crossloop-cc-peel` |
+| `int-abs` | 577 | 13 | `-mtt-tensix-optimize-int-abs` |
+| `delivery-shape` | 596 | 18 | `-mtt-tensix-optimize-delivery-shape` |
 
-### What production compiles with
+`int-not` goes first: smallest, self-contained, an obviously-correct integer
+identity, and it establishes the shape of every PR that follows.  If Wave A
+merges, the pattern is proven and the rest is throughput.  If it does not, we
+have learned that for 286 lines instead of 168,691.
 
-`tt_metal/jit_build/build.cpp` builds every kernel with:
+### Wave B — mid-size, gated
 
-    -std=c++17 -ftt-nttp -ftt-constinit -ftt-consteval -ftt-no-dyninit
-    -flto=auto -ffast-math
-    -fno-finite-math-only -fsigned-zeros -fno-associative-math
-    -fno-exceptions -fno-rtti -fno-use-cxa-atexit -MMD -Wall -Werror
+| pass | loc | tests |
+|---|---|---|
+| `prgm-const` | 948 | 37 |
+| `ccmask` | 953 | 27 |
+| `dst-iteration-fusion` | 954 | 9 |
+| `dst-ownership` | 1015 | 23 |
+| `lp-schedule` | 1110 | 13 |
+| `store-fold` | 1201 | 32 |
+| `transp-involution` | 1206 | 10 |
+| `mop-form` | 1352 | 17 |
 
-There is **no `-mtt-tensix-*` flag anywhere** in `jit_build` or in tt-metal's
-CMake. Those strings appear only inside tt-llk *test* headers. So a production
-kernel gets exactly the compiler's own defaults.
+All above his ceiling.  Each needs either a split into
+recogniser / transform / tests, or his explicit agreement to review at size.
+Ask in Wave A's thread rather than guessing.
 
-### What the compiler defaults to
+### Wave C — large, gated, needs design agreement first
 
-`gcc/config/riscv/riscv.opt` carries 15 `Init(1)` against 98 `Init(0)`. The
-default-on transform passes are:
+`reassoc` (1536), `lut-select` (1592), `round-interleave` (1781),
+`launch-flatten` (1781), `crosslane` (1813), `invariant-loadi` (1828),
+`crosscall-hoist` (1847), `dst-autoincr` (1860), `macro-planner` (1912),
+`lreg-rename-chains` (1965).
 
-    cc  dce  replay  dst-ownership  lut-select  setexp-fold
+`dst-autoincr` (124 tests) and `macro-planner` (245 tests) are the two widest
+passes on the board and the two most valuable; they are also the two least
+likely to be reviewed cold.  Open a design thread for each before sending
+code.
 
-The sweep harness's reviewed ON set is **39** flags. **Only 3 of those 39 are
-`Init(1)`**; the harness passes the other 36 explicitly on the command line.
+`reassoc` additionally changes FP results under a double key
+(`-fassociative-math` + `-mtt-tensix-optimize-reassoc`).  That is a
+documented, licensed value change, and it needs to be argued as such rather
+than buried in a series.
 
-### Consequence
+### Wave D — the 9 that are not purely flag-gated
 
-The board's 87 wins are measured in a configuration no production build
-produces. This is not a measurement error -- the numbers are real for the
-configuration named -- but it means the campaign's output is currently
-unreachable by users. Closing that is a larger and more valuable change than
-any file split in this plan.
+These do not land inert, so the Wave A argument does not cover them:
 
-Two independent routes, and they are not alternatives:
+| pass | gate | loc | tests |
+|---|---|---|---|
+| `spill-diag` | `TARGET_XTT_TENSIX` | 212 | 3 |
+| `lreg-livein` | `TARGET_XTT_TENSIX` | 349 | 1 |
+| `crosslane-window` | `TARGET_XTT_TENSIX` | 1019 | 6 |
+| `lp-schedule-prera` | `optimize > 0` | 1349 | 0 |
+| `lp-alloc` | `optimize > 0` | 1609 | 1 |
+| `reprprop` | `riscv_tt_opt_repr_prop` | 603 | 8 |
+| `dst-interleave` | `riscv_tt_opt_dst_iteration_fusion` | 954 | 0 |
+| `replay-reform` | `riscv_tt_opt_replay` | 1316 | 0 |
+| `replay-unroll` | `riscv_tt_opt_replay_loop_unroll` | 1781 | 8 |
 
-1. **Promote in the compiler** -- `Init(0)` -> `Init(1)` per pass, in
-   riscv.opt, with `invoke.texi` updated. One-line diffs; the whole cost is
-   evidence. Benefits every consumer of the toolchain.
-2. **Wire the flags in tt-metal** -- add the reviewed set to `common_flags`.
-   Benefits tt-metal only, and leaves the compiler's own default wrong.
+The last four do consult a flag, just one whose name does not match the pass —
+they are Wave B/C material once renamed or documented.  The first five change
+codegen for every Tensix compile and are the genuinely hard sell.  Three of
+them have 0 or 1 tests.  **Write the tests before proposing them.**
 
-Route 1 is the upstreamable one.
 
-### The gate for a promotion patch differs from the 28
+## 5. What is deliberately NOT in the series
 
-Byte-identity cannot gate a promotion: the whole point is that emitted code
-changes. The gate is silicon, and it must be measured the right way:
+**The `rvtt.md` split.**  The previous revision made this Stage 0a, "the
+cheapest thing to land first".  It is the opposite: it moves 2378 of his lines
+into 14 new files that then carry his name, destroys `git blame` on the file he
+edits most, and collides with in-flight work.  It is the change most likely to
+stop him reading.  Delete it from the plan; keep the split in our tree only.
 
-- **Per-knob deltas across EVERY row the pass fires on**, regressions
-  included -- not the rows where it wins. Ranking by best case inverted the
-  order entirely: `delivery-shape` looked like the top candidate at a median
-  26.9 point gain when scored on its wins, and is in fact the worst default in
-  the corpus (21 rows, 3 wins, 15 regressions, worst +64.48). See
-  `craq-sfpi/board/KNOB-PROMOTION-MATRIX-20260921.tsv`.
-- **Composition A/B**, because default-on means the promoted passes fire
-  together and they do not compose: sigmoidappx goes -10.53 to +58.95 under
-  its full firing set.
+**The deletion of `rtl-rvtt-hll.cc`** (1291 lines, "Originated by Paul
+Keller", a GS memory-arbitration erratum workaround) and the five flags turned
+into hard `error()`s.  Only two of the five pre-existed — `mtt-optimize-hll`
+and `mtt-tensix-optimize-combine`, the latter `Init(1)`, i.e. **on by default**
+at merge-base.  Retiring another engineer's erratum workaround and breaking an
+on-by-default flag are product decisions the maintainer owns.  Raise both in
+conversation; do not send them as patches.
 
-On the evidence measured so far exactly one knob is a clean promotion:
-`stochrnd-store-fold`, 25 rows, 25 wins, zero regressions, worst case -0.72.
+**The three `Undocumented` deliberate-miscompile knobs** —
+`-mtt-tensix-mve-expand-sabotage`, `-mtt-tensix-macro-planner-verify-corrupt-template`,
+`-mtt-tensix-trips-oracle-skew=`.  Defensible as red/green harnesses, but
+shipping intentional-miscompile switches in a production compiler is his call
+and needs its own patch and its own argument.
 
-### A hard constraint on two of the candidates
+**`gcc/system.h`** (+9: `INCLUDE_UNORDERED_MAP/SET/TUPLE`).  This is generic
+GCC, not the backend.  Send it to `gcc-patches@gcc.gnu.org`, or drop the
+dependency and use `hash_map`/`hash_set`, which is what upstream steers to.
 
-Production sets `-fno-associative-math` and `-fno-finite-math-only`. The
-licensed knobs need the opposite: `reassoc-mad-restructure` requires
-`-fassociative-math -fno-signed-zeros -fno-trapping-math`, and
-`lut-select-leaf-ext` requires `-ffinite-math-only`. **Neither can ever be a
-production default**, whatever its `Init()` says -- they are opt-in by
-construction, and any win booked on them is unavailable to users under the
-current numerics policy. That includes the largest single-row gain measured in
-the campaign (tanhderivlut-fresh, +161.96 -> +2.69 via lut-select-leaf-ext).
+**`--with-lp-solve`.**  Default off, never searched in the target sysroot, and
+the vendored branch-and-bound solver is the primary backend with lp_solve as a
+cross-check only.  Low risk, but an LGPL-2.1 dependency in `cc1plus` is a
+licensing question only he can answer.  Its own patch, after Wave A.
+
+
+## 6. Honest sizing
+
+- **Wave A is a week** once P1-P4 are done, and P1-P4 are a few days.
+- **Wave B and C are quarters, not weeks**, against a reviewer whose largest
+  merged PR is 843 lines and who does not watch the repo.  That is not a
+  criticism of him; it is the arithmetic of 31 passes averaging 1,200 lines.
+- The realistic outcome of asking first is that he proposes a different
+  shape — a single `config/riscv/tt` subdirectory drop, or a staged vendor
+  branch, or review-by-subsystem.  Any of those is better than this plan, and
+  we will not know until we ask.
+
+Nothing here is gated on silicon.  The promotion question — production
+compiles with **6** default-on passes while the board measured **39** flags,
+and two of the largest measured wins can never be defaults because production
+sets `-fno-associative-math` — is a separate and larger programme.  It does
+not block landing an optional pass that is off by default, and it should not
+be allowed to.
