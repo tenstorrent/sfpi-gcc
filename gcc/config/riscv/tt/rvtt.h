@@ -19,6 +19,12 @@ You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
+#include <tree.h>
+
+#include <map>
+#include <vector>
+#include "rvtt-protos.h"
+
 /* Citation rule for every file under config/riscv/tt/ (comments,
    dump strings, and docs alike): cite only files that live in this
    source tree (tt/proofs/ artifacts, tt/doc/, the .md machine
