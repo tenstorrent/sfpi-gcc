@@ -569,32 +569,6 @@ immvar_simplify (gcall *call, std::vector<gcall *> seconds)
       }
 
       // Not simplifiable
-	// If this is the sole use of the lower half, recombine the pair only
-	// after all constant-register, short-form, and scalar-immediate folds
-	// above have had their opportunity.  The late sfpxloadi expansion can
-	// then assemble both halves in one result pseudo, avoiding a reload move
-	// without bypassing the established GIMPLE optimization pipeline.
-	if (sfp_use == 0 && uppers.size () == 1)
-	  {
-	    const auto *xinsnd
-	      = rvtt_get_insn_data (rvtt_insn_data::sfpxloadi);
-	    uint32_t full_ival = ival | (upper_ival << 16);
-	    gimple *full = gimple_build_call
-	      (xinsnd->decl, xinsnd->num_args (), null_pointer_node,
-	       build_int_cst (unsigned_type_node, full_ival), integer_zero_node,
-	       integer_zero_node, build_int_cst (integer_type_node, 31));
-	    gimple_set_location (full, gimple_location (upper));
-	    gimple_call_set_lhs (full, gimple_call_lhs (upper));
-
-	    auto upper_gsi = gsi_for_stmt (upper);
-	    gsi_insert_before (&upper_gsi, full, GSI_SAME_STMT);
-	    unlink_stmt_vdef (upper);
-	    gsi_remove (&upper_gsi, true);
-	    auto lower_gsi = gsi_for_stmt (call);
-	    unlink_stmt_vdef (call);
-	    gsi_remove (&lower_gsi, true);
-	    return true;
-	  }
       sfp_use |= 1;
       continue;
 

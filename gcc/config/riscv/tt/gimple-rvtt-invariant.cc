@@ -1902,6 +1902,11 @@ transform (function *fn)
       /* Commit: all proofs hold and at least one load will move.  A
 	 shared entry edge is split only now, so every refusal above
 	 remains byte-identical to the flag-off compilation.  */
+      /* Commit: all proofs hold and at least one load will move.  A
+	 shared entry edge is split now (and only now) so every refusal
+	 above stays byte-identical to the flag-off compilation; the
+	 split keeps loop membership and dominance consistent and moves
+	 the header PHI arguments onto the new edge.  */
       basic_block preheader = rvtt_commit_hoist_preheader (entry);
 
       /* Never overwrite an explicit user unroll request (loop->unroll is
@@ -1925,13 +1930,6 @@ transform (function *fn)
 		     " loop bb %d\n",
 		     bb->index);
 	}
-
-      /* Commit: all proofs hold and at least one load will move.  Split
-	 a shared entry edge now (and only now) so refusals above remain
-	 byte-identical to the flag-off compilation.  split_edge keeps
-	 loop membership and any dominance info consistent, and moves the
-	 header PHI arguments onto the new edge.  */
-      basic_block preheader = dedicated ? src : split_edge (entry);
 
       for (gcall *call : selected)
 	{

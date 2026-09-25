@@ -1885,7 +1885,7 @@ public:
   }
 };
 
-   Lane CA: cross-call invariant-init hoist (macro-planner service).
+/* Lane CA: cross-call invariant-init hoist (macro-planner service).
 
    A noinline per-tile callee whose macro formation emits an idempotent
    init prefix -- the derived descriptor program (staged SFPLOADI +
