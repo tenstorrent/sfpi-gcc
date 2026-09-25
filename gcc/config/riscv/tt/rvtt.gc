@@ -140,9 +140,10 @@ deferred_combine () MULI_ADDI {
 deferred_combine () MULI_ADDI {
   cst|SA|OU = sfploadi (ptr, val, var, id, SFPLOADI_MOD0_FLOATB);
   res = sfpmul_lv (lv, %a, cst, 0);
-  {}
+  {
     if (madr_suppress_mul_fold_p (res_call))
       return false;
+  }
   res = sfpmuli_lv (ptr, lv, a, val, var, id, 0);
 }
 
@@ -162,9 +163,10 @@ deferred_combine () MULI_ADDI {
 deferred_combine () MULI_ADDI {
   cst|SA|OU = sfploadi (ptr, val, var, id, SFPLOADI_MOD0_FLOATB);
   res = sfpadd_lv (lv, %a, cst, 0);
-  {}
+  {
     if (madr_suppress_add_fold_p (a, res_call))
       return false;
+  }
   res = sfpaddi_lv (ptr, lv, a, val, var, id, 0);
 }
 
