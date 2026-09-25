@@ -66,11 +66,11 @@ INSERT_PASS_BEFORE (pass_expand, 1, pass_dce);
 INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_synth_renumber);
 /* Select LUT instructions from range-dispatch trees while the trees'
    structured condition form (sfpxvif/sfpxcondb) is still explicit,
-   i.e. before pass_rvtt_expand lowers it to raw CC side effects.  */
+   i.e. before pass_rvtt_vif lowers it to raw CC side effects.  */
 INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_lut_select);
 /* The cross-call prefix hoist runs right after LUT selection has formed
    the coefficient prefix and placed it in the callee's row-loop
-   preheader, and before pass_rvtt_expand lowers the builtin forms.  It
+   preheader, and before pass_rvtt_vif lowers the builtin forms.  It
    reads (and, on a complete proof, edits) the still-gimple bodies of
    the callee's callers -- callers expand after their callees, the same
    ordering fact the MOP outward-ownership proof relies on.  */
@@ -81,13 +81,13 @@ INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_crosscall);
    only audited-inert words -- the audited generalization of the
    opaque-region/sfpu-barrier refusals that stop the early invariant
    pass at the first delivered word.  It runs after the cross-call
-   hoist has settled contract placements and before pass_rvtt_expand
+   hoist has settled contract placements and before pass_rvtt_vif
    lowers the canonical builtin forms.  */
 INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_crossloop);
 /* Representation propagation cancels audited conversion-involution
    pairs across choose-only value webs (SSA proof, bit-exact).  It
    runs after the synth CSE/DCE have canonicalized duplicate
-   conversions and before pass_rvtt_expand lowers the structured CC
+   conversions and before pass_rvtt_vif lowers the structured CC
    forms, so the whole downstream pipeline -- including macro-planner
    region discovery -- sees the shorter bodies.  */
 INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_reprprop);

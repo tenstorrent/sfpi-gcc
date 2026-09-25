@@ -784,7 +784,7 @@ match_slide_region (gcall *tail, unsigned k, slide_match *m)
     if (!((a0 == sh && a1 == mk) || (a0 == mk && a1 == sh)))
       return false;
   }
-  gcall *cmp = next_call (rvtt_insn_data::sfpxiadd_i);
+  gcall *cmp = next_call (rvtt_insn_data::sfpiadd_i);
   unsigned imm, mod;
   if (!cmp
       || resolve_value (gimple_call_arg (cmp, 1)) != gimple_call_lhs (andc)
@@ -1544,7 +1544,7 @@ match_zip_frame (gcall *transp_call, zip_frame *zf)
       || resolve_value (gimple_call_arg (shft, 1)) != gimple_call_lhs (readl)
       || !rvtt_call_const_uarg (shft, 2, &shimm) || shimm != 0xfffffffcu)
     return false;		/* tileid >> 4 == lane_row */
-  gcall *cmp = next_call (rvtt_insn_data::sfpxiadd_i);
+  gcall *cmp = next_call (rvtt_insn_data::sfpiadd_i);
   unsigned imm, mod;
   if (!cmp
       || resolve_value (gimple_call_arg (cmp, 1)) != gimple_call_lhs (shft)

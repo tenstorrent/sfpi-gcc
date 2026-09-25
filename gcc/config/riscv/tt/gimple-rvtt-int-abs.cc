@@ -217,14 +217,14 @@ match_group (gimple_stmt_iterator gsi, intabs_group *g, bool *candidate)
 
       switch (insnd->id)
 	{
-	case rvtt_insn_data::sfpxvif:
+	case rvtt_insn_data::sfpxpred:
 	  if (want != WANT_XVIF)
 	    return *candidate ? refuse ("int-abs-region-shape", stmt) : false;
 	  g->xvif = call;
 	  want = WANT_ICMP;
 	  continue;
 
-	case rvtt_insn_data::sfpxicmps:
+	case rvtt_insn_data::sfpxcmp:
 	  {
 	    if (want != WANT_ICMP)
 	      return *candidate ? refuse ("int-abs-region-shape", stmt)
@@ -235,9 +235,7 @@ match_group (gimple_stmt_iterator gsi, intabs_group *g, bool *candidate)
 	    continue;
 	  }
 
-	case rvtt_insn_data::sfpxfcmps:
-	case rvtt_insn_data::sfpxfcmpv:
-	case rvtt_insn_data::sfpxicmpv:
+	case rvtt_insn_data::sfpxcmp:
 	  /* Float and vector-vector compares keep the CC lowering: the
 	     SFPABS equivalence proof here covers the signed-int sign
 	     test against literal 0 only.  (A float region is the
@@ -246,7 +244,7 @@ match_group (gimple_stmt_iterator gsi, intabs_group *g, bool *candidate)
 				      stmt)
 			    : false;
 
-	case rvtt_insn_data::sfpxcondb:
+	case rvtt_insn_data::sfpxcond:
 	  {
 	    if (want != WANT_CONDB)
 	      return *candidate ? refuse ("int-abs-region-shape", stmt)

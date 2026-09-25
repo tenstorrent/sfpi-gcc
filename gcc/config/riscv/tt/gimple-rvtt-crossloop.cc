@@ -554,7 +554,7 @@ public:
 
 /* Instantiate the pass for its rvtt-passes.def seat: after the
    cross-call hoist has settled contract placements and before
-   pass_rvtt_expand lowers the canonical builtin forms.  */
+   pass_rvtt_vif lowers the canonical builtin forms.  */
 
 gimple_opt_pass *
 make_pass_rvtt_crossloop (gcc::context *ctxt)

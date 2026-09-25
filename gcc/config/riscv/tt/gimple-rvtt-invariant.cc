@@ -171,7 +171,7 @@ along with GCC; see the file COPYING3.  If not see
                                          LaneFlags = Top.LaneFlags
                                          && !LaneFlags (SFPCOMPC.md)
      - structured markers lower to exactly that class
-                                         gimple-rvtt-expand.cc
+                                         gimple-rvtt-pred.cc
                                          process_tree /
                                          process_bool_tree
      - 8-LREG file, no spill path        rvtt-pressure
@@ -873,11 +873,11 @@ short_constant_replay_loop_p (class loop *loop, edge entry)
        against the stack top -- the region-entry save -- so its result
        is contained in the region-entry enable set (SFPCOMPC.md);
      - the structured condition markers (sfpxvif / sfpxcondb /
-       sfpxbool) lower in pass_rvtt_expand to exactly this class --
+       sfpxbool) lower in pass_rvtt_vif to exactly this class --
        compare + SFPSETCC/SFPCOMPC chains, plus balanced internal
        PUSHC/POPC pairs for De Morgan reworks -- all confined between
        the region's PUSHC and the condition anchor
-       (gimple-rvtt-expand.cc process_tree/process_bool_tree audit).
+       (gimple-rvtt-pred.cc process_tree/process_bool_tree audit).
 
    Then the enable set at the candidate's position is a SUBSET of the
    preheader's.  The hoisted load writes the constant to a superset of
@@ -934,16 +934,12 @@ cc_narrowing_modifier_p (const rvtt_insn_data *insnd)
 {
   switch (insnd->id)
     {
-    case rvtt_insn_data::sfpsetcc_i:
-    case rvtt_insn_data::sfpsetcc_v:
+    case rvtt_insn_data::sfpsetcc:
     case rvtt_insn_data::sfpcompc:
-    case rvtt_insn_data::sfpxfcmps:
-    case rvtt_insn_data::sfpxfcmpv:
-    case rvtt_insn_data::sfpxicmps:
-    case rvtt_insn_data::sfpxicmpv:
-    case rvtt_insn_data::sfpxiadd_v:
-    case rvtt_insn_data::sfpxiadd_i:
-    case rvtt_insn_data::sfpxiadd_i_lv:
+    case rvtt_insn_data::sfpxcmp:
+    case rvtt_insn_data::sfpiadd_v:
+    case rvtt_insn_data::sfpiadd_i:
+    case rvtt_insn_data::sfpiadd_i_lv:
       return true;
 
     /* R2 widening 1 (-mtt-tensix-optimize-cc-region-general): the
@@ -1032,9 +1028,9 @@ cc_restore_classify_stmt (gimple *stmt, int *depth, cc_restore_analysis &a)
 	    a.why = "cc-restore-unbalanced";
 	  return !a.why;
 
-	case rvtt_insn_data::sfpxvif:
-	case rvtt_insn_data::sfpxcondb:
-	case rvtt_insn_data::sfpxbool:
+	case rvtt_insn_data::sfpxpred:
+	case rvtt_insn_data::sfpxcond:
+	case rvtt_insn_data::sfpxlogic:
 	  /* Structured condition markers: their expander-inserted CC
 	     effects are confined to the enclosing balanced region (see
 	     block comment).  Outside a region there is no PUSHC to
@@ -1044,7 +1040,7 @@ cc_restore_classify_stmt (gimple *stmt, int *depth, cc_restore_analysis &a)
 	    a.why = "cc-restore-marker-ambient";
 	  return !a.why;
 
-	case rvtt_insn_data::sfpxcondi:
+	case rvtt_insn_data::sfpxcond:
 	  /* Condition-value materialization: its expansion inserts CC
 	     writes at its own position outside any user region; not
 	     audited here.  Fail closed.  */
@@ -1201,10 +1197,9 @@ summarize_cc_subloop (class loop *s, cc_restore_analysis &a)
 	  {
 	  case rvtt_insn_data::sfppushc:
 	  case rvtt_insn_data::sfppopc:
-	  case rvtt_insn_data::sfpxvif:
-	  case rvtt_insn_data::sfpxcondb:
-	  case rvtt_insn_data::sfpxbool:
-	  case rvtt_insn_data::sfpxcondi:
+	  case rvtt_insn_data::sfpxpred:
+	  case rvtt_insn_data::sfpxcond:
+	  case rvtt_insn_data::sfpxlogic:
 	    s_has_cc = true;
 	    break;
 	  default:

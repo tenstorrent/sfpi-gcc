@@ -921,20 +921,15 @@ rvtt_cc_writer_id_p (rvtt_insn_data::insn_id id)
 {
   switch (id)
     {
-    case rvtt_insn_data::sfpsetcc_i:
-    case rvtt_insn_data::sfpsetcc_v:
+    case rvtt_insn_data::sfpsetcc:
     case rvtt_insn_data::sfpencc:
     case rvtt_insn_data::sfpcompc:
     case rvtt_insn_data::sfppushc:
     case rvtt_insn_data::sfppopc:
-    case rvtt_insn_data::sfpxvif:
-    case rvtt_insn_data::sfpxbool:
-    case rvtt_insn_data::sfpxcondb:
-    case rvtt_insn_data::sfpxcondi:
-    case rvtt_insn_data::sfpxicmps:
-    case rvtt_insn_data::sfpxicmpv:
-    case rvtt_insn_data::sfpxfcmps:
-    case rvtt_insn_data::sfpxfcmpv:
+    case rvtt_insn_data::sfpxpred:
+    case rvtt_insn_data::sfpxlogic:
+    case rvtt_insn_data::sfpxcond:
+    case rvtt_insn_data::sfpxcmp:
     case rvtt_insn_data::sfpgt:
     case rvtt_insn_data::sfpgt_lv:
     case rvtt_insn_data::sfple:
@@ -986,9 +981,6 @@ rvtt_dst_inert_compute_id_p (rvtt_insn_data::insn_id id)
     case rvtt_insn_data::sfpiadd_v_lv:
     case rvtt_insn_data::sfpiadd_i:
     case rvtt_insn_data::sfpiadd_i_lv:
-    case rvtt_insn_data::sfpxiadd_v:
-    case rvtt_insn_data::sfpxiadd_i:
-    case rvtt_insn_data::sfpxiadd_i_lv:
     case rvtt_insn_data::sfpmul:
     case rvtt_insn_data::sfpmul_lv:
     case rvtt_insn_data::sfpmuli:

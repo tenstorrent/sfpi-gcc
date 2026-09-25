@@ -96,7 +96,7 @@ rvtt_pressure_capacity ()
 /* Declared per-insn CC-transient LREG charges: the RTL-only LREG
    temporaries CC lowering materializes at STMT's position --
    compare-immediate loads (rvtt_emit_sfpxfcmps/xicmps) and the
-   boolean-tree saved-enables value (gimple-rvtt-expand.cc
+   boolean-tree saved-enables value (gimple-rvtt-pred.cc
    process_bool_tree) -- which no SSA walk can see.  Declared here as
    data; when the typed per-insn effect table reaches gimple, these
    rows move there and this function becomes a lookup.  */
@@ -107,8 +107,19 @@ rvtt_pressure_cc_transient (gimple *stmt)
   const rvtt_insn_data *insnd = rvtt_get_insn_data (stmt);
   if (!insnd)
     return 0;
-  if (insnd->id == rvtt_insn_data::sfpxbool
-      || insnd->id == rvtt_insn_data::sfpxcondi)
+  /* main consolidated the predication builtins: the former sfpxbool is
+     now sfpxlogic, and BOTH former condition roots -- sfpxcondi (which
+     carried this charge) and sfpxcondb (which did not) -- are now the
+     single sfpxcond.  The distinction no longer exists at this level, so
+     former sfpxcondb positions now take the 2-LREG charge instead of the
+     1 they took before.  That is deliberate: this is an over-estimate,
+     and over-estimating CC-transient pressure costs at worst a
+     conservative refusal, while under-estimating it risks the 9>8 cliff,
+     which is a hard error with no spill path.  Revisit if the typed
+     per-insn effect table ever reaches gimple and can tell the two
+     condition shapes apart again.  */
+  if (insnd->id == rvtt_insn_data::sfpxlogic
+      || insnd->id == rvtt_insn_data::sfpxcond)
     return 2;
   if (insnd->id != rvtt_insn_data::sfppushc
       && insnd->id != rvtt_insn_data::sfppopc
@@ -714,7 +725,7 @@ engine_loop_legal_p (class loop *loop,
 
 	/* CC machinery materializes LREG temporaries only at RTL --
 	   compare-immediate loads (rvtt_emit_sfpxfcmps/xicmps) and the
-	   boolean-tree saved-enables value (gimple-rvtt-expand.cc
+	   boolean-tree saved-enables value (gimple-rvtt-pred.cc
 	   process_bool_tree) -- which this SSA walk cannot see.  A
 	   value hoisted to the preheader is live across those
 	   positions and would compete for the registers the

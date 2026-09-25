@@ -161,20 +161,16 @@ rvtt_replay_unroll_row_words (const rvtt_insn_data *insnd)
       return 0;
 
     /* Structured forms that lower to multi-word calendars.  */
-    case rvtt_insn_data::sfpxicmps:
-    case rvtt_insn_data::sfpxicmpv:
-    case rvtt_insn_data::sfpxfcmps:
-    case rvtt_insn_data::sfpxfcmpv:
+    case rvtt_insn_data::sfpxcmp:
       return 4;
-    case rvtt_insn_data::sfpxvif:
-    case rvtt_insn_data::sfpxbool:
-    case rvtt_insn_data::sfpxcondb:
-    case rvtt_insn_data::sfpxcondi:
+    case rvtt_insn_data::sfpxpred:
+    case rvtt_insn_data::sfpxlogic:
+    case rvtt_insn_data::sfpxcond:
       return 2;
     case rvtt_insn_data::sfpxloadi:
-    case rvtt_insn_data::sfpxiadd_v:
-    case rvtt_insn_data::sfpxiadd_i:
-    case rvtt_insn_data::sfpxiadd_i_lv:
+    case rvtt_insn_data::sfpiadd_v:
+    case rvtt_insn_data::sfpiadd_i:
+    case rvtt_insn_data::sfpiadd_i_lv:
       return 2;
 
     /* Plain one-word row members: loads/stores, immediates, compute,
@@ -261,8 +257,7 @@ rvtt_replay_unroll_row_words (const rvtt_insn_data *insnd)
     case rvtt_insn_data::sfparecip_lv:
     case rvtt_insn_data::sfpnonlinear:
     case rvtt_insn_data::sfpnonlinear_lv:
-    case rvtt_insn_data::sfpsetcc_i:
-    case rvtt_insn_data::sfpsetcc_v:
+    case rvtt_insn_data::sfpsetcc:
     case rvtt_insn_data::sfpencc:
     case rvtt_insn_data::sfpencc_all_lanes:
     case rvtt_insn_data::sfpcompc:
@@ -1375,9 +1370,6 @@ interleave_word_class_p (const rvtt_insn_data *insnd)
     case rvtt_insn_data::sfpiadd_v_lv:
     case rvtt_insn_data::sfpiadd_i:
     case rvtt_insn_data::sfpiadd_i_lv:
-    case rvtt_insn_data::sfpxiadd_v:
-    case rvtt_insn_data::sfpxiadd_i:
-    case rvtt_insn_data::sfpxiadd_i_lv:
     case rvtt_insn_data::sfpmul:
     case rvtt_insn_data::sfpmul_lv:
     case rvtt_insn_data::sfpmuli:

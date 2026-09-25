@@ -110,15 +110,11 @@ classify_stmt (gimple *stmt)
     /* The positive mask-refinement vocabulary: the structured
        condition forms and the raw SETCC/COMPC they lower to (the exact
        list the shape matchers trust; SFPENCC deliberately absent).  */
-    case rvtt_insn_data::sfpxvif:
-    case rvtt_insn_data::sfpxbool:
-    case rvtt_insn_data::sfpxcondb:
-    case rvtt_insn_data::sfpxicmps:
-    case rvtt_insn_data::sfpxicmpv:
-    case rvtt_insn_data::sfpxfcmps:
-    case rvtt_insn_data::sfpxfcmpv:
-    case rvtt_insn_data::sfpsetcc_i:
-    case rvtt_insn_data::sfpsetcc_v:
+    case rvtt_insn_data::sfpxpred:
+    case rvtt_insn_data::sfpxlogic:
+    case rvtt_insn_data::sfpxcond:
+    case rvtt_insn_data::sfpxcmp:
+    case rvtt_insn_data::sfpsetcc:
     case rvtt_insn_data::sfpcompc:
       return STMT_CC_REFINE;
     case rvtt_insn_data::sfpencc:

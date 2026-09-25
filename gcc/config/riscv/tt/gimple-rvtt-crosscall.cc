@@ -50,7 +50,7 @@ along with GCC; see the file COPYING3.  If not see
    descriptor words, extended across the call edge.
 
    Pipeline position: right after pass_rvtt_lut_select has formed the
-   coefficient prefix in the callee and before pass_rvtt_expand lowers
+   coefficient prefix in the callee and before pass_rvtt_vif lowers
    the builtin forms.  Callees run the late pipeline before their
    callers (cgraph topological order -- the ordering fact the MOP
    outward-ownership proof in rtl-rvtt-mop-form.cc relies on), so every
@@ -648,15 +648,11 @@ crossloop_cc_atom_p (const rvtt_insn_data *insnd)
 {
   switch (insnd->id)
     {
-    case rvtt_insn_data::sfpxicmps:
-    case rvtt_insn_data::sfpxicmpv:
-    case rvtt_insn_data::sfpxfcmps:
-    case rvtt_insn_data::sfpxfcmpv:
-    case rvtt_insn_data::sfpxiadd_v:
-    case rvtt_insn_data::sfpxiadd_i:
-    case rvtt_insn_data::sfpxiadd_i_lv:
-    case rvtt_insn_data::sfpsetcc_i:
-    case rvtt_insn_data::sfpsetcc_v:
+    case rvtt_insn_data::sfpxcmp:
+    case rvtt_insn_data::sfpiadd_v:
+    case rvtt_insn_data::sfpiadd_i:
+    case rvtt_insn_data::sfpiadd_i_lv:
+    case rvtt_insn_data::sfpsetcc:
     case rvtt_insn_data::sfpencc:
     case rvtt_insn_data::sfpcompc:
     case rvtt_insn_data::sfppushc:
@@ -665,10 +661,7 @@ crossloop_cc_atom_p (const rvtt_insn_data *insnd)
     case rvtt_insn_data::sfpexexp_lv:
     case rvtt_insn_data::sfplz:
     case rvtt_insn_data::sfplz_lv:
-    case rvtt_insn_data::sfpiadd_v:
     case rvtt_insn_data::sfpiadd_v_lv:
-    case rvtt_insn_data::sfpiadd_i:
-    case rvtt_insn_data::sfpiadd_i_lv:
     case rvtt_insn_data::sfpgt:
     case rvtt_insn_data::sfpgt_lv:
     case rvtt_insn_data::sfple:

@@ -785,7 +785,7 @@ match_group (const rvtt_cc_region_tree *ccr, gimple_stmt_iterator gsi,
 
       switch (insnd->id)
 	{
-	case rvtt_insn_data::sfpxvif:
+	case rvtt_insn_data::sfpxpred:
 	  if (want != WANT_XVIF)
 	    return *candidate
 	      ? refuse ("lut-structure-mismatch", stmt) : false;
@@ -793,7 +793,7 @@ match_group (const rvtt_cc_region_tree *ccr, gimple_stmt_iterator gsi,
 	  want = WANT_FCMP;
 	  continue;
 
-	case rvtt_insn_data::sfpxfcmps:
+	case rvtt_insn_data::sfpxcmp:
 	  if (want != WANT_FCMP)
 	    return *candidate
 	      ? refuse ("lut-structure-mismatch", stmt) : false;
@@ -822,7 +822,7 @@ match_group (const rvtt_cc_region_tree *ccr, gimple_stmt_iterator gsi,
 	  want = WANT_CONDB;
 	  continue;
 
-	case rvtt_insn_data::sfpxcondb:
+	case rvtt_insn_data::sfpxcond:
 	  {
 	    if (want != WANT_CONDB)
 	      return *candidate
@@ -1656,7 +1656,7 @@ public:
 
 /* Instantiate the pass for its rvtt-passes.def seat: while the
    range-dispatch trees' structured condition form is still explicit,
-   i.e. before pass_rvtt_expand lowers it to raw CC side effects.  */
+   i.e. before pass_rvtt_vif lowers it to raw CC side effects.  */
 
 gimple_opt_pass *
 make_pass_rvtt_lut_select (gcc::context *ctxt)

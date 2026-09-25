@@ -210,9 +210,6 @@ delivery_latency_class (const rvtt_insn_data *insnd)
     case rvtt_insn_data::sfpiadd_v_lv:
     case rvtt_insn_data::sfpiadd_i:
     case rvtt_insn_data::sfpiadd_i_lv:
-    case rvtt_insn_data::sfpxiadd_v:
-    case rvtt_insn_data::sfpxiadd_i:
-    case rvtt_insn_data::sfpxiadd_i_lv:
     case rvtt_insn_data::sfpdivp2:
     case rvtt_insn_data::sfpdivp2_lv:
     case rvtt_insn_data::sfpcast:
@@ -235,8 +232,7 @@ delivery_latency_class (const rvtt_insn_data *insnd)
     case rvtt_insn_data::sfpsetsgn_i_lv:
     case rvtt_insn_data::sfparecip:
     case rvtt_insn_data::sfparecip_lv:
-    case rvtt_insn_data::sfpsetcc_i:
-    case rvtt_insn_data::sfpsetcc_v:
+    case rvtt_insn_data::sfpsetcc:
     case rvtt_insn_data::sfpencc:
     case rvtt_insn_data::sfpencc_all_lanes:
     case rvtt_insn_data::sfpcompc:
@@ -245,12 +241,10 @@ delivery_latency_class (const rvtt_insn_data *insnd)
     case rvtt_insn_data::sfpnop:
     case rvtt_insn_data::ttincrwc:
     case rvtt_insn_data::ttdstface:
-    case rvtt_insn_data::sfpxvif:
-    case rvtt_insn_data::sfpxbool:
-    case rvtt_insn_data::sfpxcondb:
-    case rvtt_insn_data::sfpxcondi:
-    case rvtt_insn_data::sfpxicmps:
-    case rvtt_insn_data::sfpxicmpv:
+    case rvtt_insn_data::sfpxpred:
+    case rvtt_insn_data::sfpxlogic:
+    case rvtt_insn_data::sfpxcond:
+    case rvtt_insn_data::sfpxcmp:
     case rvtt_insn_data::sfpreadlreg:
     case rvtt_insn_data::sfpassign:
     case rvtt_insn_data::sfpassign_lv:
@@ -282,8 +276,7 @@ delivery_latency_class (const rvtt_insn_data *insnd)
        absorbed in the measured exec, one slot in the downstream
        mirror.  Integer compares lower to the audited iadd class and
        stay latency-0.  */
-    case rvtt_insn_data::sfpxfcmps:
-    case rvtt_insn_data::sfpxfcmpv:
+    case rvtt_insn_data::sfpxcmp:
       return 2;
 
     /* No audited latency fact (SFPLUTFP32's per-mode split, SFPSHFT2's

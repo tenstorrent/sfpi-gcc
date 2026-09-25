@@ -290,14 +290,14 @@ match_group (const rvtt_cc_region_tree *ccr, gimple_stmt_iterator gsi,
 
       switch (insnd->id)
 	{
-	case rvtt_insn_data::sfpxvif:
+	case rvtt_insn_data::sfpxpred:
 	  if (want != WANT_XVIF)
 	    return *candidate ? refuse ("ccmask-region-shape", stmt) : false;
 	  g->xvif = call;
 	  want = WANT_FCMP;
 	  continue;
 
-	case rvtt_insn_data::sfpxfcmps:
+	case rvtt_insn_data::sfpxcmp:
 	  {
 	    if (want != WANT_FCMP)
 	      return *candidate ? refuse ("ccmask-region-shape", stmt)
@@ -308,15 +308,14 @@ match_group (const rvtt_cc_region_tree *ccr, gimple_stmt_iterator gsi,
 	    continue;
 	  }
 
-	case rvtt_insn_data::sfpxfcmpv:
-	case rvtt_insn_data::sfpxicmps:
+	case rvtt_insn_data::sfpxcmp:
 	  /* Vector-vector and integer compares keep the CC lowering:
 	     the mask equivalence proof here covers the float order
 	     test against +0.0 only.  */
 	  return *candidate ? refuse ("ccmask-compare-kind-unsupported", stmt)
 			    : false;
 
-	case rvtt_insn_data::sfpxcondb:
+	case rvtt_insn_data::sfpxcond:
 	  {
 	    if (want != WANT_CONDB)
 	      return *candidate ? refuse ("ccmask-region-shape", stmt)
@@ -633,9 +632,9 @@ match_group_general (function *fun, const rvtt_cc_region_tree *ccr,
     return false;
   const vec<gimple *> &chain = ccr->refinement_chain (r);
   if (chain.length () != 3
-      || !rvtt_call_with_id (chain[0], rvtt_insn_data::sfpxvif)
-      || !rvtt_call_with_id (chain[1], rvtt_insn_data::sfpxfcmps)
-      || !rvtt_call_with_id (chain[2], rvtt_insn_data::sfpxcondb))
+      || !rvtt_call_with_id (chain[0], rvtt_insn_data::sfpxpred)
+      || !rvtt_call_with_id (chain[1], rvtt_insn_data::sfpxcmp)
+      || !rvtt_call_with_id (chain[2], rvtt_insn_data::sfpxcond))
     return false;
 
   g->pushc = pushc;
