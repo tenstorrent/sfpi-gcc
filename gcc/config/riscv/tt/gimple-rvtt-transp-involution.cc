@@ -30,8 +30,10 @@ along with GCC; see the file COPYING3.  If not see
    every transpose (2 stores + 2 loads a block in the welford shape).
 
    THE MECHANISM (rename-through-permutation, composed to identity).
-   The rotating-register-file lineage (Dehnert/Hsu/Bratt, "Compiling
-   for the Cydra 5"; Rau, "Iterative Modulo Scheduling", MICRO-27)
+   The rotating-register-file lineage (J. C. Dehnert, P. Y.-T. Hsu and
+   J. P. Bratt, "Overlapped loop support in the Cydra 5", ASPLOS-III,
+   1989, pp. 26-38; B. R. Rau, "Iterative modulo scheduling: an
+   algorithm for software pipelining loops", MICRO-27, 1994)
    tracks values THROUGH a deterministic hardware renaming instead of
    moving data.  For SFPTRANSP the permutation acts on (register,
    lane-subgroup) pairs -- element (reg B+i, lane j*8+c) swaps with

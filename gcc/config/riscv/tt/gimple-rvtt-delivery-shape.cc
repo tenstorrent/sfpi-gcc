@@ -75,7 +75,42 @@ along with GCC; see the file COPYING3.  If not see
        seam.
 
    No operation identity, opcode calendar, coefficient value, or
-   instruction-word fingerprint participates in any decision.  */
+   instruction-word fingerprint participates in any decision.
+
+   LINEAGE.
+     technique  C. W. Fraser, E. W. Myers and A. L. Wendt, "Analyzing
+                and compressing assembly code", SIGPLAN Symposium on
+                Compiler Construction, 1984, pp. 117-121.
+                Procedural abstraction: a repeated instruction sequence
+                is issued once and referred to thereafter.  On this
+                machine the "call" is a REPLAY launch and the "body" is
+                a recorded window, so the choice this pass makes --
+                push, launch, or record -- is the same economic question
+                Fraser et al. ask about subroutine extraction.
+     technique  S. K. Debray, W. Evans, R. Muth and B. De Sutter,
+                "Compiler techniques for code compaction",
+                ACM TOPLAS 22(2):378-415, March 2000.
+                Pricing the abstraction: the decision is profitable
+                only when the saved re-issues exceed the one-time
+                recording cost.  That inequality is evaluated here
+                through rvtt-delivery-cost.h rather than by a size
+                heuristic.
+     modelled on  none.  No generic GCC pass has a delivery model;
+                the cost engine and its constants are derived in
+                rvtt-cost.md with their measurements recorded.
+
+   HARDWARE.  The delivery path itself: the instruction-push FIFO
+   (4 .ttinsn fuse in per cycle, 1 dequeues), the 32-slot REPLAY buffer
+   and its expander, and the Dst auto-increment setup cost
+   (XTT_AUTOINCR_SETUP_COST).  This pass does not change what is
+   computed; it changes how the words arrive.
+
+   BIRTH KERNEL.  DISPUTED -- resolve before submission.  This file
+   cites sqrt-fresh, rsqrt and hardshrink (see the anatomy notes below);
+   FIRE-BREADTH.tsv flag delivery-shape records birth_row "rdiv anatomy
+   (laneEN, pin 16)", birth_share 0.10.  The ledger and the source
+   disagree about which kernel this transform was first measured on.
+   */
 
 #include "config.h"
 #include "system.h"

@@ -65,7 +65,46 @@ along with GCC; see the file COPYING3.  If not see
 
    The pass runs beside the ccmask/int-abs folds before the invariant
    pass: removing the subtract kills the all-ones use, so the loop no
-   longer carries the -1 immediate at all (instead of hoisting it).  */
+   longer carries the -1 immediate at all (instead of hoisting it).
+
+   LINEAGE.
+     technique  M. D. McKeeman, "Peephole optimization",
+                Communications of the ACM 8(7):443-444, July 1965.
+                The local single-instruction-window rewrite: a short
+                delivered sequence is replaced by a shorter one with
+                the same value function.  What is NOT taken: McKeeman
+                selects by opcode pattern; this pass selects by the
+                typed effect of the statement (an SFPIADD whose
+                minuend is an all-ones materialization), so a
+                differently spelled one's complement is admitted by
+                the same rule.
+     admission  H. Massalin, "Superoptimizer -- a look at the
+                smallest program", ASPLOS-II, 1987, pp. 122-126.
+                The exhaustive-search admission discipline: a
+                rewrite is accepted only when a complete sweep of
+                the input space shows no mismatch.  Here that sweep
+                is tt/proofs/int-not-allones-subtract/ over all 2^32
+                lane values, and the fold is gated on its RESULT.
+     modelled on  none.  GCC's generic combine cannot see this: the
+                minuend is an UNSPEC_VOLATILE materialization, not a
+                constant it can fold against.
+
+   HARDWARE.  SFPNOT -- the SFPU's one-word bitwise complement --
+   standing in for the two-word SFPIADD two's-complement-subtract arm
+   (ARG_2SCOMP_LREG_DST) plus its all-ones LREG materialization.  The
+   saving is one delivered word and one LREG live range out of the
+   eight-register file.  Neither instruction writes CC; both honour the
+   lane mask through the shared masked walk, so the fold is legal
+   inside a structured CC region.
+     - SFPNOT ~src_c            TENSIX_EXECUTE_SFPNOT (pinned simulator)
+     - SFPIADD mod1&2 subtract  TENSIX_EXECUTE_SFPIADD src(C) -= LReg[dest]
+
+   BIRTH KERNEL.  bitwisenot (lane HD).  Ledger: FIRE-BREADTH.tsv flag
+   int-not, birth_share 1.00 -- the flag's entire measured benefit is
+   that one row, and it is BIRTH-ROW-BOUND in the generality census.
+   This pass is not claimed to generalise; it is claimed to be correct
+   and free.
+   */
 
 #define INCLUDE_ALGORITHM
 #define INCLUDE_VECTOR
