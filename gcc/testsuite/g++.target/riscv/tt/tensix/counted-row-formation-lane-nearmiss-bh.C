@@ -23,7 +23,7 @@ void lane_nearmiss ()
   ROW (0x3e80);
   ROW (0x3e2a);
   __builtin_rvtt_sfppushc (0);
-  __builtin_rvtt_sfpsetcc_v (x, 0);
+  __builtin_rvtt_sfpsetcc (x, 0);
   x = __builtin_rvtt_sfpmad (x, mean, m2, 0);
   __builtin_rvtt_sfppopc (0);
   ROW (0x3e00);

@@ -6,7 +6,7 @@
 // varied distances.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -I [SFPI]/include -fno-exceptions -fno-rtti -mtt-tensix-optimize-crosslane -mno-tt-tensix-optimize-replay -fdump-tree-rvtt_crosslane" }
 
-namespace ckernel { unsigned *instrn_buffer; }
+namespace ckernel { volatile unsigned long *instrn_buffer; }
 #include <sfpi.h>
 using namespace sfpi;
 

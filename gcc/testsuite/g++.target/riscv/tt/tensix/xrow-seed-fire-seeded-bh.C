@@ -22,7 +22,7 @@ void seeded_root_row ()
       auto x = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 7);
       auto e = __builtin_rvtt_sfpexexp (x, 0);
       __builtin_rvtt_sfppushc (0);
-      __builtin_rvtt_sfpsetcc_v (e, 0);
+      __builtin_rvtt_sfpsetcc (e, 0);
       auto c = __builtin_rvtt_sfpassign_lv (x, x);
       c = __builtin_rvtt_sfpadd (c, x, 0);
       __builtin_rvtt_sfppopc (0);

@@ -15,12 +15,12 @@ void arbitrary_packet_transform ()
       auto east = __builtin_rvtt_sfpabs (north, 1);
       auto west = __builtin_rvtt_sfpmul (east, north, 0);
       __builtin_rvtt_sfppushc (0);
-      __builtin_rvtt_sfpsetcc_v (west, 0);
+      __builtin_rvtt_sfpsetcc (west, 0);
       east = __builtin_rvtt_sfpadd (east, north, 0);
       __builtin_rvtt_sfppopc (0);
       west = __builtin_rvtt_sfpmad (east, west, north, 0);
       __builtin_rvtt_sfppushc (0);
-      __builtin_rvtt_sfpsetcc_v (west, 0);
+      __builtin_rvtt_sfpsetcc (west, 0);
       east = __builtin_rvtt_sfpxor (east, west);
       __builtin_rvtt_sfppopc (0);
       __builtin_rvtt_sfpstore (nullptr, east, 4, 0, 0, 0, 7);

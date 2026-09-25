@@ -1,4 +1,4 @@
-namespace ckernel { unsigned *instrn_buffer; }
+namespace ckernel { volatile unsigned long *instrn_buffer; }
 #include <sfpi.h>
 using namespace sfpi;
 

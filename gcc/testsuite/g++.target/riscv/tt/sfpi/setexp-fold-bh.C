@@ -3,7 +3,7 @@
 // { dg-options "-mcpu=tt-bh-tensix -O2 -I [SFPI]/include -fno-exceptions -fno-rtti -mtt-tensix-optimize-setexp-fold" }
 
 namespace ckernel{
-  extern volatile unsigned instrn_buffer[];
+  extern volatile unsigned long instrn_buffer[];
 }
 #include <sfpi.h>
 

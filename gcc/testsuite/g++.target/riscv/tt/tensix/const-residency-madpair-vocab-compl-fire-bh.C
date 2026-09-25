@@ -30,7 +30,7 @@ void vocab_compl_fire (void)
       auto neg = __builtin_rvtt_sfpmov (prod, 1);
       x = __builtin_rvtt_sfpadd (lift, neg, 0);
       __builtin_rvtt_sfppushc (0);
-      __builtin_rvtt_sfpsetcc_v (x, 0);
+      __builtin_rvtt_sfpsetcc (x, 0);
       __builtin_rvtt_sfppopc (0);
     }
   __builtin_rvtt_sfpwritelreg (x, 0);
@@ -47,7 +47,7 @@ void renamed_edge_ramp (void)
       auto flipped = __builtin_rvtt_sfpmov (scaled, 1);
       acc = __builtin_rvtt_sfpadd (bias, flipped, 0);
       __builtin_rvtt_sfppushc (0);
-      __builtin_rvtt_sfpsetcc_v (acc, 0);
+      __builtin_rvtt_sfpsetcc (acc, 0);
       __builtin_rvtt_sfppopc (0);
     }
   __builtin_rvtt_sfpwritelreg (acc, 2);

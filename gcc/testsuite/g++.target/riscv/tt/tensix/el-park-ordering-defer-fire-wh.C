@@ -14,7 +14,7 @@ void ordering_defer_fire_wh (void)
   for (unsigned ix = 0; ix != 32; ++ix)
     {
       __builtin_rvtt_sfppushc (0);
-      __builtin_rvtt_sfpsetcc_v (x, 0);
+      __builtin_rvtt_sfpsetcc (x, 0);
       auto gain = __builtin_rvtt_sfpxloadi (nullptr, 0x3e4b1a3d, 0, 0, 31);
       __builtin_rvtt_sfppopc (0);
       x = __builtin_rvtt_sfpmul (x, gain, 0);

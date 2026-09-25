@@ -15,7 +15,7 @@ void cis_fire_wh ()
   for (unsigned r = 0; r != 32; ++r)
     {
       __builtin_rvtt_sfppushc (0);
-      __builtin_rvtt_sfpsetcc_v (x, 0);
+      __builtin_rvtt_sfpsetcc (x, 0);
       auto t1 = __builtin_rvtt_sfpmul (x, x, 0);
       auto t2 = __builtin_rvtt_sfpmul (t1, t1, 0);
       auto t3 = __builtin_rvtt_sfpmul (t2, t2, 0);

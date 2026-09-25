@@ -11,7 +11,7 @@
 // { dg-final { scan-tree-dump "SFPU MILP: requested=yes backend=bnb.*status=optimal.*selected=yes" "rvtt_lp_schedule" } }
 
 namespace ckernel {
-unsigned *instrn_buffer;
+volatile unsigned long *instrn_buffer;
 }
 
 #include <sfpi.h>

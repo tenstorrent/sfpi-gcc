@@ -13,7 +13,7 @@
 // { dg-error "lreg-pressure-exceeded" "" { target *-*-* } 0 }
 // { dg-message "proven-constant values" "" { target *-*-* } 0 }
 namespace ckernel {
-unsigned *instrn_buffer;
+volatile unsigned long *instrn_buffer;
 }
 
 #include <sfpi.h>

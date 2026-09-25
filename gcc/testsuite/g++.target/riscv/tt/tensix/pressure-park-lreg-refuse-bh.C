@@ -24,7 +24,7 @@ void park_lreg_refuse (void)
   for (unsigned ix = 0; ix != 32; ++ix)
     {
       __builtin_rvtt_sfppushc (0);
-      __builtin_rvtt_sfpsetcc_v (a0, 0);
+      __builtin_rvtt_sfpsetcc (a0, 0);
       __builtin_rvtt_sfppopc (0);
       auto c0 = __builtin_rvtt_sfpxloadi (nullptr, 0x3e4b1a3d, 0, 0, 31);
       a0 = __builtin_rvtt_sfpmul (a0, c0, 0);

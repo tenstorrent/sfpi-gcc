@@ -27,7 +27,7 @@ __attribute__((noinline)) void where_shape ()
   auto on_true = __builtin_rvtt_sfpload (nullptr, 0, 0, 32, 6, 7);
   auto on_false = __builtin_rvtt_sfpload (nullptr, 0, 0, 64, 6, 7);
   __builtin_rvtt_sfppushc (0);
-  __builtin_rvtt_sfpsetcc_v (condition, 2);
+  __builtin_rvtt_sfpsetcc (condition, 2);
   auto result = __builtin_rvtt_sfpassign_lv (on_false, on_true);
   __builtin_rvtt_sfppopc (0);
   __builtin_rvtt_sfpstore (nullptr, result, 0, 0, 0, 6, 7);

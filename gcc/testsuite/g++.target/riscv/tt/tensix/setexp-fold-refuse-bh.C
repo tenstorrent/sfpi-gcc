@@ -30,7 +30,7 @@ void refuse_cc_between () {
   auto man = __builtin_rvtt_sfpreadlreg (1);
   auto e = __builtin_rvtt_sfpexexp (z, 1);
   __builtin_rvtt_sfppushc (0);
-  __builtin_rvtt_sfpsetcc_v (man, 0);
+  __builtin_rvtt_sfpsetcc (man, 0);
   auto r = __builtin_rvtt_sfpsetexp_v (man, e, 0);
   __builtin_rvtt_sfppopc (0);
   __builtin_rvtt_sfpwritelreg (r, 0);

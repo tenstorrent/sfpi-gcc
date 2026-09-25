@@ -32,7 +32,7 @@ void ccpeel_consumer_refuse (int tiles)
 	  auto shuf = __builtin_rvtt_sfpshft2_subvec_shfl1 (twist, 3);
 	  x = __builtin_rvtt_sfpmul (x, shuf, 0);
 	  __builtin_rvtt_sfppushc (0);
-	  __builtin_rvtt_sfpsetcc_v (x, 0);
+	  __builtin_rvtt_sfpsetcc (x, 0);
 	  __builtin_rvtt_sfppopc (0);
 	  /* Post-CC candidate: audited consumer; lifts.  */
 	  auto gain = __builtin_rvtt_sfpxloadi (nullptr, 0x3e4b1a3d,

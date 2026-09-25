@@ -17,7 +17,7 @@ void qzkd_rows_rev ()
     {
       auto g = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 4, 7);
       __builtin_rvtt_sfppushc (0);
-      __builtin_rvtt_sfpsetcc_v (g, 2);
+      __builtin_rvtt_sfpsetcc (g, 2);
       auto a1 = __builtin_rvtt_sfpmul (g, g, 0);
       auto a2 = __builtin_rvtt_sfpmul (a1, a1, 0);
       auto b1 = __builtin_rvtt_sfpmad (g, g, g, 0);
@@ -25,7 +25,7 @@ void qzkd_rows_rev ()
       auto y  = __builtin_rvtt_sfpadd (a2, b2, 0);
       __builtin_rvtt_sfppopc (0);
       __builtin_rvtt_sfppushc (0);
-      __builtin_rvtt_sfpsetcc_v (y, 0);
+      __builtin_rvtt_sfpsetcc (y, 0);
       auto t1 = __builtin_rvtt_sfpmul (y, y, 0);
       auto t2 = __builtin_rvtt_sfpmul (t1, t1, 0);
       auto t3 = __builtin_rvtt_sfpmul (t2, t2, 0);

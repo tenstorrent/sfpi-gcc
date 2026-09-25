@@ -24,7 +24,7 @@ latency_fill_cc_rejected ()
   auto p0 = __builtin_rvtt_sfpmul (a, b, 0);
   auto r0 = __builtin_rvtt_sfpmad (p0, c, d, 0);
   __builtin_rvtt_sfppushc (0);
-  __builtin_rvtt_sfpsetcc_v (b, 0);
+  __builtin_rvtt_sfpsetcc (b, 0);
   __builtin_rvtt_sfppopc (0);
   auto p1 = __builtin_rvtt_sfpmul (c, d, 0);
   __builtin_rvtt_sfpwritelreg (r0, 0);

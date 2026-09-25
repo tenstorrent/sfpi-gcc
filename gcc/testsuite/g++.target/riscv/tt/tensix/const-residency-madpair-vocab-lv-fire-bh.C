@@ -29,7 +29,7 @@ void vocab_lv_fire (void)
       auto prod = __builtin_rvtt_sfpmul (x, gain, 0);
       x = __builtin_rvtt_sfpadd_lv (keep, prod, lift, 0);
       __builtin_rvtt_sfppushc (0);
-      __builtin_rvtt_sfpsetcc_v (x, 0);
+      __builtin_rvtt_sfpsetcc (x, 0);
       __builtin_rvtt_sfppopc (0);
     }
   __builtin_rvtt_sfpwritelreg (x, 0);
@@ -46,7 +46,7 @@ void renamed_masked_ramp (void)
       auto scaled = __builtin_rvtt_sfpmul (acc, slope, 0);
       acc = __builtin_rvtt_sfpadd_lv (park, scaled, bias, 0);
       __builtin_rvtt_sfppushc (0);
-      __builtin_rvtt_sfpsetcc_v (acc, 0);
+      __builtin_rvtt_sfpsetcc (acc, 0);
       __builtin_rvtt_sfppopc (0);
     }
   __builtin_rvtt_sfpwritelreg (acc, 2);

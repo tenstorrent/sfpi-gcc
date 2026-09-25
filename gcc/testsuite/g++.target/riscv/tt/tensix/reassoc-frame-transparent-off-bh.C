@@ -15,11 +15,11 @@ ra_frame_off (void)
   auto x2 = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 6, 7);
   auto x3 = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 6, 7);
   __builtin_rvtt_sfppushc (0);
-  __builtin_rvtt_sfpsetcc_v (x0, 0);
+  __builtin_rvtt_sfpsetcc (x0, 0);
   auto s1 = __builtin_rvtt_sfpadd (x0, x1, 0);
   auto s2 = __builtin_rvtt_sfpadd (s1, x2, 0);
   __builtin_rvtt_sfppushc (0);
-  __builtin_rvtt_sfpsetcc_v (x1, 0);
+  __builtin_rvtt_sfpsetcc (x1, 0);
   auto zz = __builtin_rvtt_sfpassign_lv (x2, x1);
   __builtin_rvtt_sfpstore (nullptr, zz, 0, 0, 0, 6, 7);
   __builtin_rvtt_sfppopc (0);

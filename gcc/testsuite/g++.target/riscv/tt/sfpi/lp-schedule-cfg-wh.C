@@ -4,7 +4,7 @@
 // { dg-final { scan-tree-dump-not "applied=yes" "rvtt_lp_schedule" } }
 
 namespace ckernel {
-unsigned *instrn_buffer;
+volatile unsigned long *instrn_buffer;
 }
 
 #include <sfpi.h>

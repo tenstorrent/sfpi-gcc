@@ -27,7 +27,7 @@ void peel_fire (void)
       auto gain = __builtin_rvtt_sfpxloadi (nullptr, 0x3e4b1a3d, 0, 0, 31);
       x = __builtin_rvtt_sfpmul (x, gain, 0);
       __builtin_rvtt_sfppushc (0);
-      __builtin_rvtt_sfpsetcc_v (x, 0);
+      __builtin_rvtt_sfpsetcc (x, 0);
       __builtin_rvtt_sfppopc (0);
     }
   __builtin_rvtt_sfpwritelreg (x, 0);
@@ -41,7 +41,7 @@ void renamed_varied_scale (void)
       auto bias = __builtin_rvtt_sfpxloadi (nullptr, 0x40e90fdb, 0, 0, 31);
       west = __builtin_rvtt_sfpmul (west, bias, 0);
       __builtin_rvtt_sfppushc (0);
-      __builtin_rvtt_sfpsetcc_v (west, 0);
+      __builtin_rvtt_sfpsetcc (west, 0);
       __builtin_rvtt_sfppopc (0);
     }
   __builtin_rvtt_sfpwritelreg (west, 2);

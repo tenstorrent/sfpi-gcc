@@ -28,7 +28,7 @@ void nonvulnerable_wrapper (void)
       auto neg = __builtin_rvtt_sfpmov (prod, 1);
       x = __builtin_rvtt_sfpadd (lift, neg, 0);
       __builtin_rvtt_sfppushc (0);
-      __builtin_rvtt_sfpsetcc_v (x, 0);
+      __builtin_rvtt_sfpsetcc (x, 0);
       __builtin_rvtt_sfppopc (0);
     }
   __builtin_rvtt_sfpwritelreg (x, 0);
@@ -46,7 +46,7 @@ void multiuse_wrapper (void)
       auto sum = __builtin_rvtt_sfpadd (lift, neg, 0);
       x = __builtin_rvtt_sfpmul (sum, neg, 0);
       __builtin_rvtt_sfppushc (0);
-      __builtin_rvtt_sfpsetcc_v (x, 0);
+      __builtin_rvtt_sfpsetcc (x, 0);
       __builtin_rvtt_sfppopc (0);
     }
   __builtin_rvtt_sfpwritelreg (x, 2);
@@ -64,7 +64,7 @@ void shared_vulnerable (void)
       auto other = __builtin_rvtt_sfpadd (lift, gain, 0);
       x = __builtin_rvtt_sfpadd_lv (keep, prod, other, 0);
       __builtin_rvtt_sfppushc (0);
-      __builtin_rvtt_sfpsetcc_v (x, 0);
+      __builtin_rvtt_sfpsetcc (x, 0);
       __builtin_rvtt_sfppopc (0);
     }
   __builtin_rvtt_sfpwritelreg (x, 4);

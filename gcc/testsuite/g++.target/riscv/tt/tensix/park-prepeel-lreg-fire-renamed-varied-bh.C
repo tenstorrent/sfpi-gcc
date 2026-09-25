@@ -21,7 +21,7 @@ void audit_ip_ladder (void)
   for (unsigned step = 0; step != 17; ++step)
     {
       __builtin_rvtt_sfppushc (0);
-      __builtin_rvtt_sfpsetcc_v (acc, 0);
+      __builtin_rvtt_sfpsetcc (acc, 0);
       __builtin_rvtt_sfppopc (0);
       auto k0 = __builtin_rvtt_sfpxloadi (nullptr, 0x3d8f5c29, 0, 0, 31);
       auto k1 = __builtin_rvtt_sfpxloadi (nullptr, 0x3fb504f3, 0, 0, 31);

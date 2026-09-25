@@ -17,7 +17,7 @@ void irn_undo ()
     {
       auto v = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 7);
       __builtin_rvtt_sfppushc (0);
-      __builtin_rvtt_sfpsetcc_v (v, 0);
+      __builtin_rvtt_sfpsetcc (v, 0);
       auto t1 = __builtin_rvtt_sfpmul (v, v, 0);
       auto u1 = __builtin_rvtt_sfpmad (v, v, v, 0);
       auto t2 = __builtin_rvtt_sfpmul (t1, t1, 0);

@@ -32,7 +32,7 @@ void kernel_no_reuse (void)
       auto gain = __builtin_rvtt_sfpxloadi (nullptr, 0x3f317218, 0, 0, 31);
       x = __builtin_rvtt_sfpmul (x, gain, 0);
       __builtin_rvtt_sfppushc (0);
-      __builtin_rvtt_sfpsetcc_v (x, 0);
+      __builtin_rvtt_sfpsetcc (x, 0);
       __builtin_rvtt_sfppopc (0);
     }
   __builtin_rvtt_sfpwritelreg (x, 0);

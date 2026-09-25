@@ -23,7 +23,7 @@ void merge_rename_placement_refuse (void)
     {
       a0 = __builtin_rvtt_sfpmul (a0, a1, 0);
       __builtin_rvtt_sfppushc (0);
-      __builtin_rvtt_sfpsetcc_v (a1, 0);
+      __builtin_rvtt_sfpsetcc (a1, 0);
       a0 = __builtin_rvtt_sfploadi_lv (nullptr, a0, 0x7fc0, 0, 0, 0);
       __builtin_rvtt_sfppopc (0);
     }

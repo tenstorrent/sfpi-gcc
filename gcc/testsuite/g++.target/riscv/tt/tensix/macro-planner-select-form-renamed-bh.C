@@ -31,7 +31,7 @@
       auto lhs = __builtin_rvtt_sfpload (nullptr, 0, 0, 32, 6, 7);            \
       auto rhs = __builtin_rvtt_sfpload (nullptr, 0, 0, 64, 6, 7);            \
       __builtin_rvtt_sfppushc (0);                                            \
-      __builtin_rvtt_sfpsetcc_v (gate, 2);                                    \
+      __builtin_rvtt_sfpsetcc (gate, 2);                                    \
       auto chosen = __builtin_rvtt_sfpassign_lv (rhs, lhs);                   \
       __builtin_rvtt_sfppopc (0);                                             \
       __builtin_rvtt_sfpstore (nullptr, chosen, 0, 0, 0, 6, 7);               \

@@ -14,7 +14,7 @@ void atom_dominant_row ()
     {
       auto x = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 7);
       __builtin_rvtt_sfppushc (0);
-      __builtin_rvtt_sfpsetcc_v (x, 0);
+      __builtin_rvtt_sfpsetcc (x, 0);
       x = __builtin_rvtt_sfpmad (x, x, x, 0);
       x = __builtin_rvtt_sfpmad (x, x, x, 0);
       x = __builtin_rvtt_sfpmad (x, x, x, 0);

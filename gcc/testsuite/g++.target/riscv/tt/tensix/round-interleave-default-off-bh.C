@@ -35,7 +35,7 @@ void iso_pair_off ()
   p = __builtin_rvtt_sfpmad (p, x, p, 0);
   q = __builtin_rvtt_sfpmad (q, x, q, 0);
   __builtin_rvtt_sfppushc (0);
-  __builtin_rvtt_sfpsetcc_v (b, 0);
+  __builtin_rvtt_sfpsetcc (b, 0);
   __builtin_rvtt_sfppopc (0);
   p = __builtin_rvtt_sfpmad (p, x, p, 0);
   p = __builtin_rvtt_sfpmad (p, x, p, 0);

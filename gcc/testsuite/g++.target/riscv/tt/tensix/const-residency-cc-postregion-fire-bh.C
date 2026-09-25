@@ -20,7 +20,7 @@ void residency_postcc_fire (void)
   /* A CC region after the loop: no CFG path leads from it back to the
      programming point.  */
   __builtin_rvtt_sfppushc (0);
-  __builtin_rvtt_sfpsetcc_v (x, 0);
+  __builtin_rvtt_sfpsetcc (x, 0);
   __builtin_rvtt_sfppopc (0);
   __builtin_rvtt_sfpwritelreg (x, 0);
 }
@@ -34,7 +34,7 @@ void renamed_epilogue_masked (void)
       acc = __builtin_rvtt_sfpmul (acc, blend, 0);
     }
   __builtin_rvtt_sfppushc (0);
-  __builtin_rvtt_sfpsetcc_v (acc, 0);
+  __builtin_rvtt_sfpsetcc (acc, 0);
   __builtin_rvtt_sfppopc (0);
   __builtin_rvtt_sfpwritelreg (acc, 2);
 }

@@ -25,7 +25,7 @@ void prefix_kept_fire (void)
       auto magic = __builtin_rvtt_sfpxloadi (nullptr, 0x4b000000, 0, 0, 31);
       x = __builtin_rvtt_sfpmul (x, magic, 0);
       __builtin_rvtt_sfppushc (0);
-      __builtin_rvtt_sfpsetcc_v (x, 0);
+      __builtin_rvtt_sfpsetcc (x, 0);
       __builtin_rvtt_sfppopc (0);
     }
   __builtin_rvtt_sfpwritelreg (x, 0);
@@ -39,7 +39,7 @@ void renamed_varied_prefix (void)
       auto scale = __builtin_rvtt_sfpxloadi (nullptr, 0x3e99f042, 0, 0, 31);
       north = __builtin_rvtt_sfpmul (north, scale, 0);
       __builtin_rvtt_sfppushc (0);
-      __builtin_rvtt_sfpsetcc_v (north, 0);
+      __builtin_rvtt_sfpsetcc (north, 0);
       __builtin_rvtt_sfppopc (0);
     }
   __builtin_rvtt_sfpwritelreg (north, 2);

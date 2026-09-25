@@ -41,7 +41,7 @@ void orr_rolled_fire (int tiles)
 	{
 	  auto x = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 6, 7);
 	  __builtin_rvtt_sfppushc (0);
-	  __builtin_rvtt_sfpsetcc_v (x, 0);
+	  __builtin_rvtt_sfpsetcc (x, 0);
 	  __builtin_rvtt_sfppopc (0);
 	  auto gain = __builtin_rvtt_sfpxloadi (nullptr, 0x3fb504f3,
 						0, 0, 31);

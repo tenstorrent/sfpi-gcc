@@ -16,7 +16,7 @@ __attribute__((noinline)) void merge_signed_rows ()
   b = __builtin_rvtt_sfpcast (b, 3);
   auto gate = __builtin_rvtt_sfpload (nullptr, 128, 0, 0, 4, 7);
   __builtin_rvtt_sfppushc (0);
-  __builtin_rvtt_sfpsetcc_v (gate, 0);
+  __builtin_rvtt_sfpsetcc (gate, 0);
   auto r = __builtin_rvtt_sfpassign_lv (a, b);
   __builtin_rvtt_sfppopc (0);
   r = __builtin_rvtt_sfpcast (r, 3);

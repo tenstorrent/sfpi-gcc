@@ -24,14 +24,14 @@ void renc_ccr_balanced ()
     {
       auto g = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 6, 7);
       __builtin_rvtt_sfppushc (0);
-      __builtin_rvtt_sfpsetcc_v (g, 0);
+      __builtin_rvtt_sfpsetcc (g, 0);
       auto t = __builtin_rvtt_sfpmul (k1, k2, 0);
       auto p = __builtin_rvtt_sfpmul (x, x, 0);
       /* The nested frame the balanced chain span straddles.  */
       {
 	auto xg = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 6, 7);
 	__builtin_rvtt_sfppushc (0);
-	__builtin_rvtt_sfpsetcc_v (xg, 0);
+	__builtin_rvtt_sfpsetcc (xg, 0);
 	auto zg = __builtin_rvtt_sfpassign_lv (xg, xg);
 	__builtin_rvtt_sfpstore (nullptr, zg, 0, 0, 0, 6, 7);
 	__builtin_rvtt_sfppopc (0);

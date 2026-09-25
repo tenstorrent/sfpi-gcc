@@ -21,7 +21,7 @@ void atom_web_to_store_row ()
       auto b = __builtin_rvtt_sfpmul (a, x, 0);
       auto c = __builtin_rvtt_sfpmad (b, a, x, 0);
       __builtin_rvtt_sfppushc (0);
-      __builtin_rvtt_sfpsetcc_v (c, 0);
+      __builtin_rvtt_sfpsetcc (c, 0);
       c = __builtin_rvtt_sfpadd (c, x, 0);
       __builtin_rvtt_sfppopc (0);
       __builtin_rvtt_sfpstore (nullptr, c, 0, 0, 0, 0, 7);

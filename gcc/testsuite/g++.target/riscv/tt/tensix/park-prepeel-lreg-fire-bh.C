@@ -22,7 +22,7 @@ void park_prepeel_fire (void)
   for (unsigned ix = 0; ix != 32; ++ix)
     {
       __builtin_rvtt_sfppushc (0);
-      __builtin_rvtt_sfpsetcc_v (x, 0);
+      __builtin_rvtt_sfpsetcc (x, 0);
       __builtin_rvtt_sfppopc (0);
       auto c0 = __builtin_rvtt_sfpxloadi (nullptr, 0x3e11a3b7, 0, 0, 31);
       auto c1 = __builtin_rvtt_sfpxloadi (nullptr, 0x3f337ab1, 0, 0, 31);

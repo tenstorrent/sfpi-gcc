@@ -20,7 +20,7 @@
       auto yes_bits = __builtin_rvtt_sfpload (nullptr, 32, 0, 0, 6, 7);       \
       auto no_bits = __builtin_rvtt_sfpload (nullptr, 64, 0, 0, 6, 7);        \
       __builtin_rvtt_sfppushc (0);                                            \
-      __builtin_rvtt_sfpsetcc_v (gate, 2);                                    \
+      __builtin_rvtt_sfpsetcc (gate, 2);                                    \
       auto merged = __builtin_rvtt_sfpassign_lv (no_bits, yes_bits);          \
       __builtin_rvtt_sfppopc (0);                                             \
       __builtin_rvtt_sfpstore (nullptr, merged, 0, 0, 0, 6, 7);               \

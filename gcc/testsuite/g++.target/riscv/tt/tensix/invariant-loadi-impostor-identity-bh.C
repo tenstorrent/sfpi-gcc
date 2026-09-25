@@ -5,7 +5,7 @@ namespace impostor {
 extern volatile unsigned long __instrn_buffer[];
 }
 
-static volatile unsigned __instrn_buffer[1];
+static volatile unsigned long __instrn_buffer[1];
 
 void invariant_loadi_wrong_namespace ()
 {

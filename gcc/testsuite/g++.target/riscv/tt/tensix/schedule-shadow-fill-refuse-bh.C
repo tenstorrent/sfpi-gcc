@@ -16,7 +16,7 @@ void cc_write_blocks_crossing ()
   auto p1 = __builtin_rvtt_sfpselect2 (r, 0);
   auto b1 = __builtin_rvtt_sfpselect2 (r, 1);
   __builtin_rvtt_sfppushc (0);
-  __builtin_rvtt_sfpsetcc_v (b1, 0);
+  __builtin_rvtt_sfpsetcc (b1, 0);
   __builtin_rvtt_sfppopc (0);
   auto f = __builtin_rvtt_sfpmul (c, c, 0);
   __builtin_rvtt_sfpwritelreg (p1, 0);

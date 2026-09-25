@@ -22,7 +22,7 @@ void demand_defers_wholesale (void)
       auto scale = __builtin_rvtt_sfpxloadi (nullptr, 0x3f2a7c11, 0, 0, 31);
       x = __builtin_rvtt_sfpmul (x, scale, 0);
       __builtin_rvtt_sfppushc (0);
-      __builtin_rvtt_sfpsetcc_v (x, 0);
+      __builtin_rvtt_sfpsetcc (x, 0);
       auto c0 = __builtin_rvtt_sfpxloadi (nullptr, 0x3da6b50b, 0, 0, 31);
       auto c1 = __builtin_rvtt_sfpxloadi (nullptr, 0x3e194af5, 0, 0, 31);
       auto c2 = __builtin_rvtt_sfpxloadi (nullptr, 0x3e7b15b5, 0, 0, 31);

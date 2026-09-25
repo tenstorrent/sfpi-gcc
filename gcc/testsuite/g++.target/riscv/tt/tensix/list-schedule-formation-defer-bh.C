@@ -44,7 +44,7 @@ void unrolled_copies_defer ()
   p = __builtin_rvtt_sfpmad (p, x, p, 0);
   q = __builtin_rvtt_sfpmad (q, x, q, 0);
   __builtin_rvtt_sfppushc (0);
-  __builtin_rvtt_sfpsetcc_v (b, 0);
+  __builtin_rvtt_sfpsetcc (b, 0);
   __builtin_rvtt_sfppopc (0);
   // Copy 2: the same region shape -- both defer by name.
   p = __builtin_rvtt_sfpmad (p, x, p, 0);

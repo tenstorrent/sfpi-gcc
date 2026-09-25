@@ -23,7 +23,7 @@ xlh_ccgeneral_fire (int tiles)
   {
     auto xs = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 6, 7);
     __builtin_rvtt_sfppushc (0);
-    __builtin_rvtt_sfpsetcc_v (xs, 0);
+    __builtin_rvtt_sfpsetcc (xs, 0);
     auto zs = __builtin_rvtt_sfpassign_lv (xs, xs);
     __builtin_rvtt_sfpstore (nullptr, zs, 0, 0, 0, 6, 7);
     __builtin_rvtt_sfppopc (0);
@@ -37,7 +37,7 @@ xlh_ccgeneral_fire (int tiles)
       {
 	auto xg = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 6, 7);
 	__builtin_rvtt_sfppushc (0);
-	__builtin_rvtt_sfpsetcc_v (xg, 0);
+	__builtin_rvtt_sfpsetcc (xg, 0);
 	auto zg = __builtin_rvtt_sfpassign_lv (xg, xg);
 	__builtin_rvtt_sfpstore (nullptr, zg, 0, 0, 0, 6, 7);
 	__builtin_rvtt_sfppopc (0);

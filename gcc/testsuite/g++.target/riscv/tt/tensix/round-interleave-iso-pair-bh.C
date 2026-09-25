@@ -24,7 +24,7 @@ void iso_pair_fires ()
   p = __builtin_rvtt_sfpmad (p, x, p, 0);
   q = __builtin_rvtt_sfpmad (q, x, q, 0);
   __builtin_rvtt_sfppushc (0);
-  __builtin_rvtt_sfpsetcc_v (b, 0);
+  __builtin_rvtt_sfpsetcc (b, 0);
   __builtin_rvtt_sfppopc (0);
   // Copy 2: the same region shape and the same dataflow.
   p = __builtin_rvtt_sfpmad (p, x, p, 0);
@@ -46,7 +46,7 @@ void iso_bait_refuses ()
   q = __builtin_rvtt_sfpmad (q, x, q, 0);
   r = __builtin_rvtt_sfpmad (r, x, r, 0);
   __builtin_rvtt_sfppushc (0);
-  __builtin_rvtt_sfpsetcc_v (b, 0);
+  __builtin_rvtt_sfpsetcc (b, 0);
   __builtin_rvtt_sfppopc (0);
   // Copy 2: same insn codes, different dataflow (p-chain first).
   p = __builtin_rvtt_sfpmad (p, x, p, 0);

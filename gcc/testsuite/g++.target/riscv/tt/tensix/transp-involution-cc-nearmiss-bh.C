@@ -23,7 +23,7 @@ void involution_cc_region ()
   __builtin_rvtt_sfpstore (nullptr, acc, 320, 0, 0, 3, 7);
   auto probe = __builtin_rvtt_sfpload (nullptr, 64, 0, 0, 0, 7);
   __builtin_rvtt_sfppushc (0);
-  __builtin_rvtt_sfpsetcc_v (probe, 0);
+  __builtin_rvtt_sfpsetcc (probe, 0);
   probe = __builtin_rvtt_sfpmul (probe, probe, 0);
   __builtin_rvtt_sfppopc (0);
   __builtin_rvtt_sfpstore (nullptr, probe, 448, 0, 0, 3, 7);

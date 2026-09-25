@@ -16,7 +16,7 @@ void residency_cc_refuse (void)
   auto x = __builtin_rvtt_sfpreadlreg (0);
   /* A CC write before every candidate materialization.  */
   __builtin_rvtt_sfppushc (0);
-  __builtin_rvtt_sfpsetcc_v (x, 0);
+  __builtin_rvtt_sfpsetcc (x, 0);
   __builtin_rvtt_sfppopc (0);
   auto c0 = __builtin_rvtt_sfpxloadi (nullptr, 0x3e4b0000, 0, 0, 31);
   auto c1 = __builtin_rvtt_sfpxloadi (nullptr, 0x3e4b0001, 0, 0, 31);

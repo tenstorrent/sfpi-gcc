@@ -27,7 +27,7 @@ void park_failclosed_keep (void)
       auto d2 = __builtin_rvtt_sfpxloadi (nullptr, 0x40490fdb, 0, 0, 31);
       x2 = __builtin_rvtt_sfpmul (x2, d2, 0);
       __builtin_rvtt_sfppushc (0);
-      __builtin_rvtt_sfpsetcc_v (x3, 0);
+      __builtin_rvtt_sfpsetcc (x3, 0);
       auto g0 = __builtin_rvtt_sfpxloadi (nullptr, 0x3e4b1a3d, 0, 0, 31);
       x4 = __builtin_rvtt_sfpmul (x4, g0, 0);
       __builtin_rvtt_sfppopc (0);

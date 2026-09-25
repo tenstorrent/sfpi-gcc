@@ -1,7 +1,7 @@
 // X6 named refusal: face row beyond Dst.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -std=c++17 -I [SFPI]/include -fno-exceptions -fno-rtti" }
 
-namespace ckernel { unsigned *instrn_buffer; }
+namespace ckernel { volatile unsigned long *instrn_buffer; }
 #include <sfpi.h>
 
 void out_of_dst ()

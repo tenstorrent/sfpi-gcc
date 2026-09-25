@@ -15,7 +15,7 @@
 // { dg-final { scan-assembler-not "SFPNOP" } }
 // { dg-final { scan-rtl-dump-times "List-schedule: bb \\d+ nodes=22 makespan 40 -> 22 target=wh" 1 "rvtt_schedule" } }
 
-namespace ckernel { unsigned *instrn_buffer; }
+namespace ckernel { volatile unsigned long *instrn_buffer; }
 #include <sfpi.h>
 using namespace sfpi;
 

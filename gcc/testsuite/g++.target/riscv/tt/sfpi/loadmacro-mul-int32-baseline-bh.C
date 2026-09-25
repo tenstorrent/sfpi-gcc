@@ -3,7 +3,7 @@
 // { dg-final { scan-assembler-not "SFPLOADMACRO" } }
 
 namespace ckernel {
-unsigned *instrn_buffer;
+volatile unsigned long *instrn_buffer;
 }
 #include <sfpi.h>
 

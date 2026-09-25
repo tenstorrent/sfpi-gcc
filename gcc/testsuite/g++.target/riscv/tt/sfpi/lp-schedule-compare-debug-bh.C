@@ -9,7 +9,7 @@
 // debug_info_level == DINFO_LEVEL_NONE gate would FAIL this test.
 
 namespace ckernel {
-unsigned *instrn_buffer;
+volatile unsigned long *instrn_buffer;
 }
 
 #include <sfpi.h>

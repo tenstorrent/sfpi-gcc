@@ -31,7 +31,7 @@ kernel_framed (unsigned n)
     {
       vec_t a = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 7);
       __builtin_rvtt_sfppushc (0);
-      __builtin_rvtt_sfpsetcc_v (a, 0);
+      __builtin_rvtt_sfpsetcc (a, 0);
       vec_t p = __builtin_rvtt_sfpmul (a, a, 0);
       __builtin_rvtt_sfpstore (nullptr, p, 0, 0, 0, 0, 7);
       __builtin_rvtt_sfppopc (0);

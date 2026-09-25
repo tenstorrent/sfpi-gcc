@@ -3,7 +3,7 @@
 // { dg-final { scan-tree-dump "SFPU pressure region:.*ops=2.*live-in=4.*peak=4" "rvtt_lp_schedule" } }
 
 namespace ckernel {
-unsigned *instrn_buffer;
+volatile unsigned long *instrn_buffer;
 }
 
 #include <sfpi.h>

@@ -16,7 +16,7 @@ void full_lane_root_row ()
       auto e = __builtin_rvtt_sfpexexp (x, 0);
       auto b = __builtin_rvtt_sfpmul (x, x, 0);
       __builtin_rvtt_sfppushc (0);
-      __builtin_rvtt_sfpsetcc_v (e, 0);
+      __builtin_rvtt_sfpsetcc (e, 0);
       auto c = __builtin_rvtt_sfpassign_lv (x, x);
       c = __builtin_rvtt_sfpassign_lv (c, b);
       __builtin_rvtt_sfppopc (0);

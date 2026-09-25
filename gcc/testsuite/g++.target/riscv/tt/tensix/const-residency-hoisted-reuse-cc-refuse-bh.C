@@ -24,7 +24,7 @@ void kernel_cc_before_point (void)
   /* A CC region ahead of the hoisted materialization: the reach test
      covers the in-place programming point.  */
   __builtin_rvtt_sfppushc (0);
-  __builtin_rvtt_sfpsetcc_v (x, 0);
+  __builtin_rvtt_sfpsetcc (x, 0);
   x = __builtin_rvtt_sfpadd (x, x, 0);
   __builtin_rvtt_sfppopc (0);
   auto gain = __builtin_rvtt_sfpxloadi (nullptr, 0x3f317218, 0, 0, 31);
@@ -32,7 +32,7 @@ void kernel_cc_before_point (void)
     {
       x = __builtin_rvtt_sfpmul (x, gain, 0);
       __builtin_rvtt_sfppushc (0);
-      __builtin_rvtt_sfpsetcc_v (x, 0);
+      __builtin_rvtt_sfpsetcc (x, 0);
       __builtin_rvtt_sfppopc (0);
     }
   __builtin_rvtt_sfpwritelreg (x, 0);

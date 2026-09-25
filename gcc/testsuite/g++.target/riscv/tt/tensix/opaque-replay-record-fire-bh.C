@@ -47,7 +47,7 @@ void orr_fire (int tiles)
 	{
 	  auto x = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 6, 7);
 	  __builtin_rvtt_sfppushc (0);
-	  __builtin_rvtt_sfpsetcc_v (x, 0);
+	  __builtin_rvtt_sfpsetcc (x, 0);
 	  __builtin_rvtt_sfppopc (0);
 	  auto gain = __builtin_rvtt_sfpxloadi (nullptr, 0x3e4b1a3d,
 						0, 0, 31);
@@ -82,7 +82,7 @@ void renamed_varied_scale (int faces)
 	{
 	  auto west = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 6, 7);
 	  __builtin_rvtt_sfppushc (0);
-	  __builtin_rvtt_sfpsetcc_v (west, 0);
+	  __builtin_rvtt_sfpsetcc (west, 0);
 	  __builtin_rvtt_sfppopc (0);
 	  auto bias = __builtin_rvtt_sfpxloadi (nullptr, 0x40e90fdb,
 						0, 0, 31);

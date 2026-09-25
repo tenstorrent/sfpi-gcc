@@ -18,7 +18,7 @@ void mixed_prefix_and_postcc (void)
       auto magic = __builtin_rvtt_sfpxloadi (nullptr, 0x4b400000, 0, 0, 31);
       x = __builtin_rvtt_sfpmul (x, magic, 0);
       __builtin_rvtt_sfppushc (0);
-      __builtin_rvtt_sfpsetcc_v (x, 0);
+      __builtin_rvtt_sfpsetcc (x, 0);
       auto gain = __builtin_rvtt_sfpxloadi (nullptr, 0x40490fdb, 0, 0, 31);
       __builtin_rvtt_sfppopc (0);
       x = __builtin_rvtt_sfpmul (x, gain, 0);

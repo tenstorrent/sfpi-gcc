@@ -16,7 +16,7 @@ void wharf_prepeel_scale (void)
   for (unsigned step = 0; step != 24; ++step)
     {
       __builtin_rvtt_sfppushc (0);
-      __builtin_rvtt_sfpsetcc_v (north, 0);
+      __builtin_rvtt_sfpsetcc (north, 0);
       __builtin_rvtt_sfppopc (0);
       auto k0 = __builtin_rvtt_sfpxloadi (nullptr, 0x3d8f5db9, 0, 0, 31);
       auto k1 = __builtin_rvtt_sfpxloadi (nullptr, 0x3ea7c04f, 0, 0, 31);

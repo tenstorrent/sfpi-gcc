@@ -17,7 +17,7 @@ void peel_trip_unproven (unsigned n)
       auto gain = __builtin_rvtt_sfpxloadi (nullptr, 0x40490fdb, 0, 0, 31);
       x = __builtin_rvtt_sfpmul (x, gain, 0);
       __builtin_rvtt_sfppushc (0);
-      __builtin_rvtt_sfpsetcc_v (x, 0);
+      __builtin_rvtt_sfpsetcc (x, 0);
       __builtin_rvtt_sfppopc (0);
     }
   __builtin_rvtt_sfpwritelreg (x, 1);
@@ -31,7 +31,7 @@ void peel_two_trips (void)
       auto gain = __builtin_rvtt_sfpxloadi (nullptr, 0x3f000000, 0, 0, 31);
       x = __builtin_rvtt_sfpmul (x, gain, 0);
       __builtin_rvtt_sfppushc (0);
-      __builtin_rvtt_sfpsetcc_v (x, 0);
+      __builtin_rvtt_sfpsetcc (x, 0);
       __builtin_rvtt_sfppopc (0);
     }
   __builtin_rvtt_sfpwritelreg (x, 2);

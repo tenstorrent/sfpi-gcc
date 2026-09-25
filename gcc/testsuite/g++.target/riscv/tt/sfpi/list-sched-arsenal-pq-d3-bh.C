@@ -36,7 +36,7 @@
 // whole-function 27 -> 17 == lower bound (gap 0).
 // { dg-final { scan-rtl-dump-times "List-schedule: bb \\d+ nodes=14 makespan 24 -> 14 target=bh" 1 "rvtt_schedule" } }
 
-namespace ckernel { unsigned *instrn_buffer; }
+namespace ckernel { volatile unsigned long *instrn_buffer; }
 #include <sfpi.h>
 using namespace sfpi;
 

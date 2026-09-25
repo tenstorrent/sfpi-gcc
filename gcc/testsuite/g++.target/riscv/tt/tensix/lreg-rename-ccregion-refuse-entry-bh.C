@@ -22,7 +22,7 @@ void renc_ccr_entry ()
       {
 	auto xg = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 6, 7);
 	__builtin_rvtt_sfppushc (0);
-	__builtin_rvtt_sfpsetcc_v (xg, 0);
+	__builtin_rvtt_sfpsetcc (xg, 0);
 	auto zg = __builtin_rvtt_sfpassign_lv (xg, xg);
 	__builtin_rvtt_sfpstore (nullptr, zg, 0, 0, 0, 6, 7);
 	__builtin_rvtt_sfppopc (0);

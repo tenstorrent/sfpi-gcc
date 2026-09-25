@@ -11,7 +11,7 @@
 // { dg-final { scan-tree-dump "const-remat: rematerialized " "rvtt_prgm_const" } }
 // { dg-final { scan-tree-dump "const-remat: pressure resolved: \\d+ -> \\d+" "rvtt_prgm_const" } }
 
-namespace ckernel { unsigned *instrn_buffer; }
+namespace ckernel { volatile unsigned long *instrn_buffer; }
 #include <sfpi.h>
 
 namespace {

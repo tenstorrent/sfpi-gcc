@@ -23,7 +23,7 @@ void predicated_accumulation_row ()
       auto e = __builtin_rvtt_sfpmad (a, d, c, 0);
       auto f = __builtin_rvtt_sfpmad (b, e, d, 0);
       __builtin_rvtt_sfppushc (0);
-      __builtin_rvtt_sfpsetcc_v (f, 0);
+      __builtin_rvtt_sfpsetcc (f, 0);
       f = __builtin_rvtt_sfpadd (f, a, 0);
       f = __builtin_rvtt_sfpadd (f, b, 0);
       f = __builtin_rvtt_sfpadd (f, c, 0);

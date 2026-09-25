@@ -40,7 +40,7 @@ void orr_default_off (int tiles)
 	{
 	  auto x = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 6, 7);
 	  __builtin_rvtt_sfppushc (0);
-	  __builtin_rvtt_sfpsetcc_v (x, 0);
+	  __builtin_rvtt_sfpsetcc (x, 0);
 	  __builtin_rvtt_sfppopc (0);
 	  auto gain = __builtin_rvtt_sfpxloadi (nullptr, 0x3e4b1a3d,
 						0, 0, 31);

@@ -32,7 +32,7 @@ void cc_writer_blocks ()
   auto x = __builtin_rvtt_sfpreadlreg (2);
   auto s = __builtin_rvtt_sfpreadlreg (3);
   __builtin_rvtt_sfppushc (0);
-  __builtin_rvtt_sfpsetcc_v (s, 0);
+  __builtin_rvtt_sfpsetcc (s, 0);
   __builtin_rvtt_sfppopc (0);
   for (unsigned ix = 0; ix != 32; ++ix)
     {

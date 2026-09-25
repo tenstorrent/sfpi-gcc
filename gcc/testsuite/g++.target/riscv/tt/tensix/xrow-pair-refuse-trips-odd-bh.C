@@ -13,12 +13,12 @@ void odd_trip_row ()
       auto a = __builtin_rvtt_sfpabs (x, 1);
       auto b = __builtin_rvtt_sfpmul (a, x, 0);
       __builtin_rvtt_sfppushc (0);
-      __builtin_rvtt_sfpsetcc_v (b, 0);
+      __builtin_rvtt_sfpsetcc (b, 0);
       a = __builtin_rvtt_sfpadd (a, x, 0);
       __builtin_rvtt_sfppopc (0);
       b = __builtin_rvtt_sfpmad (a, b, x, 0);
       __builtin_rvtt_sfppushc (0);
-      __builtin_rvtt_sfpsetcc_v (b, 0);
+      __builtin_rvtt_sfpsetcc (b, 0);
       a = __builtin_rvtt_sfpxor (a, b);
       __builtin_rvtt_sfppopc (0);
       __builtin_rvtt_sfpstore (nullptr, a, 0, 0, 0, 0, 7);

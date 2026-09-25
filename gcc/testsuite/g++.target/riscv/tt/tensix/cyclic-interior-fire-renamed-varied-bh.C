@@ -16,7 +16,7 @@ void audit_ip_interior_row ()
     {
       auto v = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 7);
       __builtin_rvtt_sfppushc (0);
-      __builtin_rvtt_sfpsetcc_v (v, 0);
+      __builtin_rvtt_sfpsetcc (v, 0);
       auto c1 = __builtin_rvtt_sfpmul (v, v, 0);
       auto c2 = __builtin_rvtt_sfpmul (c1, c1, 0);
       auto c3 = __builtin_rvtt_sfpmul (c2, c2, 0);

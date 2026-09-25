@@ -17,7 +17,7 @@ void peel_dead_lanes_tail (void)
       auto gain = __builtin_rvtt_sfpxloadi (nullptr, 0x3e4b1a3d, 0, 0, 31);
       x = __builtin_rvtt_sfpmul (x, gain, 0);
       __builtin_rvtt_sfppushc (0);
-      __builtin_rvtt_sfpsetcc_v (x, 0);
+      __builtin_rvtt_sfpsetcc (x, 0);
       __builtin_rvtt_sfppopc (0);
       __builtin_rvtt_sfpencc (8, 0);
     }
@@ -32,7 +32,7 @@ void peel_noncanonical_word (void)
       auto gain = __builtin_rvtt_sfpxloadi (nullptr, 0x40490fdb, 0, 0, 31);
       x = __builtin_rvtt_sfpmul (x, gain, 0);
       __builtin_rvtt_sfppushc (0);
-      __builtin_rvtt_sfpsetcc_v (x, 0);
+      __builtin_rvtt_sfpsetcc (x, 0);
       __builtin_rvtt_sfppopc (0);
       __builtin_rvtt_sfpencc (3, 10);
     }

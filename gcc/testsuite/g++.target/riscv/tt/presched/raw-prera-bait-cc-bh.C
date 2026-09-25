@@ -15,7 +15,7 @@ void bait_cc (void)
   auto u1 = __builtin_rvtt_sfpxor (b, c);
   auto u2 = __builtin_rvtt_sfpxor (a, c);
   __builtin_rvtt_sfppushc (0);
-  __builtin_rvtt_sfpsetcc_v (u0, 0);
+  __builtin_rvtt_sfpsetcc (u0, 0);
   auto m = __builtin_rvtt_sfpxor (u1, u2);
   __builtin_rvtt_sfppopc (0);
   auto v = __builtin_rvtt_sfpxor (m, u0);

@@ -20,7 +20,7 @@ void prgm_postcc_fire ()
       x = __builtin_rvtt_sfpaddi (nullptr, prod, 0x42fe, 0, 0, 0);
     }
   __builtin_rvtt_sfppushc (0);
-  __builtin_rvtt_sfpsetcc_v (x, 0);
+  __builtin_rvtt_sfpsetcc (x, 0);
   __builtin_rvtt_sfppopc (0);
   __builtin_rvtt_sfpwritelreg (x, 0);
 }
@@ -35,7 +35,7 @@ void renamed_masked_tail ()
       north = __builtin_rvtt_sfpaddi (nullptr, blended, 0x3f81, 0, 0, 0);
     }
   __builtin_rvtt_sfppushc (0);
-  __builtin_rvtt_sfpsetcc_v (north, 0);
+  __builtin_rvtt_sfpsetcc (north, 0);
   __builtin_rvtt_sfppopc (0);
   __builtin_rvtt_sfpwritelreg (north, 2);
 }

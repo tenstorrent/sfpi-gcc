@@ -25,7 +25,7 @@
 // interleaved 34 = word count.  Oracle: 67 -> 37 == lower bound.
 // { dg-final { scan-rtl-dump-times "List-schedule: bb \\d+ nodes=34 makespan 64 -> 34 target=bh" 1 "rvtt_schedule" } }
 
-namespace ckernel { unsigned *instrn_buffer; }
+namespace ckernel { volatile unsigned long *instrn_buffer; }
 #include <sfpi.h>
 using namespace sfpi;
 

@@ -17,7 +17,7 @@ ccr_gtsetcc_fire ()
       auto c0 = __builtin_rvtt_sfpxloadi (nullptr, 0x3e4b1a3d, 0, 0, -32);
       auto y = __builtin_rvtt_sfpmad (x, c0, x, 0);
       __builtin_rvtt_sfppushc (0);
-      __builtin_rvtt_sfpsetcc_v (x, 0);
+      __builtin_rvtt_sfpsetcc (x, 0);
       auto g = __builtin_rvtt_sfpgt (x, y, 1);
       auto ck = __builtin_rvtt_sfpxloadi (nullptr, 0x3f2e8ba3, 0, 0, -32);
       auto z = __builtin_rvtt_sfpmad (g, ck, y, 0);

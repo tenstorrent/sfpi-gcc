@@ -14,7 +14,7 @@ void madpair_cc_refuse (void)
 {
   auto x = __builtin_rvtt_sfpreadlreg (0);
   __builtin_rvtt_sfppushc (0);
-  __builtin_rvtt_sfpsetcc_v (x, 0);
+  __builtin_rvtt_sfpsetcc (x, 0);
   __builtin_rvtt_sfppopc (0);
   auto gain = __builtin_rvtt_sfpxloadi (nullptr, 0x3e2aaaab, 0, 0, 31);
   auto half = __builtin_rvtt_sfpxloadi (nullptr, 0x3f000000, 0, 0, 31);

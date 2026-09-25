@@ -17,7 +17,7 @@ void merge_rename_form_refuse (void)
     {
       y = __builtin_rvtt_sfpmul (y, x, 0);
       __builtin_rvtt_sfppushc (0);
-      __builtin_rvtt_sfpsetcc_v (x, 0);
+      __builtin_rvtt_sfpsetcc (x, 0);
       y = __builtin_rvtt_sfploadi_lv (nullptr, y, 0x3c00, 0, 0, 1);
       __builtin_rvtt_sfppopc (0);
     }

@@ -6,7 +6,7 @@
 // constant -- exactly what the raw-word arm's unroll has always done.
 // { dg-final { scan-tree-dump "launch-flatten: requested complete unroll of loop \[0-9\]+ \\(~\[0-9\]+ delivery words/trip, trips 8\\)" "rvtt_launch_flatten" } }
 
-extern volatile unsigned lf_instrn_buffer[];
+extern volatile unsigned long lf_instrn_buffer[];
 
 void lf_computed_word ()
 {

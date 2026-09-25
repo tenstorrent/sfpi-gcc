@@ -24,7 +24,7 @@ void lut_body_defers_wholesale (void)
       auto coeff = __builtin_rvtt_sfpxloadi (nullptr, 0x3e9c0d51, 0, 0, 31);
       x = __builtin_rvtt_sfpmul (x, coeff, 0);
       __builtin_rvtt_sfppushc (0);
-      __builtin_rvtt_sfpsetcc_v (x, 0);
+      __builtin_rvtt_sfpsetcc (x, 0);
       __builtin_rvtt_sfppopc (0);
       x = __builtin_rvtt_sfplutfp32_3r (t0, t1, t2, x, 0);
     }

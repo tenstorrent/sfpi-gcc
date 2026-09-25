@@ -46,7 +46,7 @@ void cc_region_bait ()
   p = __builtin_rvtt_sfpmad (p, x, p, 0);
   p = __builtin_rvtt_sfpmad (p, x, p, 0);
   __builtin_rvtt_sfppushc (0);
-  __builtin_rvtt_sfpsetcc_v (b, 0);
+  __builtin_rvtt_sfpsetcc (b, 0);
   /* Lane-predicated region: independent of P by LREG values -- the
      bait fillers a naive scheduler would hoist.  */
   q = __builtin_rvtt_sfpmad (q, x, q, 0);

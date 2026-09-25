@@ -26,7 +26,7 @@ void cc_loop_without_candidates (void)
   for (unsigned ix = 0; ix != 8; ++ix)
     {
       __builtin_rvtt_sfppushc (0);
-      __builtin_rvtt_sfpsetcc_v (x, 0);
+      __builtin_rvtt_sfpsetcc (x, 0);
       __builtin_rvtt_sfppopc (0);
       x = __builtin_rvtt_sfpmul (x, y, 0);
     }

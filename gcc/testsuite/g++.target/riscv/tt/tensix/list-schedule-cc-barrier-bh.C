@@ -20,7 +20,7 @@ void cc_barrier_splits_regions ()
   p = __builtin_rvtt_sfpmad (p, x, p, 0);
   p = __builtin_rvtt_sfpmad (p, x, p, 0);
   __builtin_rvtt_sfppushc (0);
-  __builtin_rvtt_sfpsetcc_v (b, 0);
+  __builtin_rvtt_sfpsetcc (b, 0);
   q = __builtin_rvtt_sfpmul (q, x, 0);
   q = __builtin_rvtt_sfpmul (q, x, 0);
   q = __builtin_rvtt_sfpmul (q, x, 0);

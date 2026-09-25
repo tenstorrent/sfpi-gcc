@@ -33,7 +33,7 @@ void cc_round_loop ()
     {
       auto t1 = __builtin_rvtt_sfpmul (x, x, 0);
       __builtin_rvtt_sfppushc (0);
-      __builtin_rvtt_sfpsetcc_v (t1, 0);
+      __builtin_rvtt_sfpsetcc (t1, 0);
       __builtin_rvtt_sfppopc (0);
       s = __builtin_rvtt_sfpxor (s, t1);
     }

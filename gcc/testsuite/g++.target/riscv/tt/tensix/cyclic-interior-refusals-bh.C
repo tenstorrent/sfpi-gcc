@@ -38,7 +38,7 @@ void cis_noimprove ()
     {
       auto v = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 7);
       __builtin_rvtt_sfppushc (0);
-      __builtin_rvtt_sfpsetcc_v (v, 0);
+      __builtin_rvtt_sfpsetcc (v, 0);
       auto t1 = __builtin_rvtt_sfpmul (v, v, 0);
       auto t2 = __builtin_rvtt_sfpmul (t1, t1, 0);
       auto t3 = __builtin_rvtt_sfpmul (t2, t2, 0);
@@ -55,7 +55,7 @@ void cis_repeated ()
     {
       auto v = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 7);
       __builtin_rvtt_sfppushc (0);
-      __builtin_rvtt_sfpsetcc_v (v, 0);
+      __builtin_rvtt_sfpsetcc (v, 0);
       auto a1 = __builtin_rvtt_sfpmul (v, v, 0);
       auto a2 = __builtin_rvtt_sfpmul (a1, a1, 0);
       auto a3 = __builtin_rvtt_sfpmad (a2, v, v, 0);
@@ -76,7 +76,7 @@ void cis_opaque ()
     {
       auto v = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 7);
       __builtin_rvtt_sfppushc (0);
-      __builtin_rvtt_sfpsetcc_v (v, 0);
+      __builtin_rvtt_sfpsetcc (v, 0);
       auto t1 = __builtin_rvtt_sfpmul (v, v, 0);
       auto t2 = __builtin_rvtt_sfpmul (t1, t1, 0);
       auto u1 = __builtin_rvtt_sfpmad (v, v, v, 0);

@@ -33,7 +33,7 @@
       auto on_false = __builtin_rvtt_sfpload                                  \
 	(nullptr, SELECT_FALSE_ADDR, 0, 0, 6, SELECT_ADDR_MODE);             \
       __builtin_rvtt_sfppushc (0);                                            \
-      __builtin_rvtt_sfpsetcc_v (condition, SELECT_SETCC_MOD);                \
+      __builtin_rvtt_sfpsetcc (condition, SELECT_SETCC_MOD);                \
       auto result = __builtin_rvtt_sfpassign_lv (on_false, on_true);          \
       __builtin_rvtt_sfppopc (0);                                             \
       __builtin_rvtt_sfpstore (nullptr, result, SELECT_COND_ADDR, 0, 0, 6,    \

@@ -27,7 +27,7 @@
 // { dg-final { scan-assembler-times "SFPSTORE" 1 } }
 // { dg-final { scan-assembler-times "TTINCRWC" 8 } }
 
-namespace ckernel { unsigned *instrn_buffer; }
+namespace ckernel { volatile unsigned long *instrn_buffer; }
 #include <sfpi.h>
 using namespace sfpi;
 
