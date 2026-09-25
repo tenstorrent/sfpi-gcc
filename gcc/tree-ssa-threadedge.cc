@@ -39,6 +39,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "vr-values.h"
 #include "gimple-range.h"
 #include "gimple-range-path.h"
+#include "config/riscv/tt/rvtt.h"
 
 /* To avoid code explosion due to jump threading, we limit the
    number of statements we are going to copy.  This variable
@@ -248,7 +249,12 @@ jump_threader::record_temporary_equivalences_from_stmts_at_dest (edge e)
 	  && gimple_call_internal_p (stmt)
 	  && gimple_call_internal_unique_p (stmt))
 	return NULL;
-
+#if 1
+      // probably nearly all our builtins?
+      if (auto *insnd = rvtt_get_insn_data (stmt))
+	if (insnd->has_iptr ())
+	  return NULL;
+#endif
       /* We cannot thread through __builtin_constant_p, because an
 	 expression that is constant on two threading paths may become
 	 non-constant (i.e.: phi) when they merge.  */
