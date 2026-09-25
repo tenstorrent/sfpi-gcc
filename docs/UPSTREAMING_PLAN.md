@@ -18,24 +18,36 @@
    <http://www.gnu.org/licenses/>.
 -->
 
-# Landing the 32 new passes on `tenstorrent/sfpi-gcc`
+# Landing the 31 new passes on `tenstorrent/sfpi-gcc`
 
 Revised 2026-09-25.  The previous revision planned a 28-patch *refactoring*
 stack aimed at upstream GCC's contribution gates.  That was the wrong target
 in two ways: the gates it optimised for are not the ones this fork runs, and a
-refactoring series does not land a single pass.  The goal is 32 passes in
+refactoring series does not land a single pass.  The goal is 31 passes in
 `main`.  This revision plans for that, and for nothing else.
 
 The deliverable of each submission is **one pass, compiled in, defaulted off,
 with its tests**.  Nothing else travels with it.
 
 One framing point that the plan turns on: the branch registers 54 passes, but
-**22 of those were already in the backend when we forked it** (merge-base
-`48ba20142`, 2026-08-11 — Nathan Sidwell's and Paul Keller's work).  Only 32
-are ours.  We are not proposing a backend; we are proposing 32 optional
-additions to one he already maintains, 23 of which are inert until a flag is
-passed.  That is a much smaller thing to ask for, and it is what the cover
-message should say.
+**23 of those were already in the backend when we forked it** (merge-base
+`48ba20142`, 2026-08-11 — Nathan Sidwell's and Paul Keller's work; one more,
+`rvtt_hll`, we retired).  Only **31** are ours.  We are not proposing a
+backend; we are proposing 31 optional additions to one he already maintains,
+26 of which are inert until a flag is passed.  That is a much smaller thing to
+ask for, and it is what the cover message should say.
+
+Counted from `rvtt-passes.def` at both ends, anchored on the `rvtt_` prefix:
+54 registered today, 24 at the merge-base, 23 common, 31 new, `rvtt_hll`
+retired.  An earlier revision of this document said 32/22.  That was off by
+one in both halves: it counted `pass_rvtt_replay` as ours.  The replay *pass*
+is Keller's and Sidwell's.  The replay *work* is overwhelmingly ours — the
+family is 8,842 lines today against 834 at the merge-base, three of its four
+files did not exist, 91% of the substantive lines in `rtl-rvtt-replay.cc`
+itself are new, and all seven replay flags in the FIRE-BREADTH census are
+ours — but the pass was already registered, so it is not one of the 31 we are
+asking him to accept.  It travels as a modification to a pass he owns, which
+is a different and harder review; plan it late in the series, not early.
 
 
 ## 1. The two facts that set the whole strategy
@@ -50,13 +62,26 @@ that the one person who can merge them has not seen.
 Everything in this plan is downstream of fixing that, and the fix is a
 conversation, not a patch series.
 
-**23 of the 32 new passes land inert.**  They are gated on a
+**26 of the 31 new passes land inert.**  They are gated on a
 `-mtt-tensix-optimize-*` option that is `Init(0)`, and the backend's standing
 rule (`gcc/config/riscv/tt/README`) is that with the flag off the emitted
 binary is bit-for-bit identical to the previous build.  That is the entire
-argument for why a 32-pass series is acceptable at all: **each one is provably
+argument for why a 31-pass series is acceptable at all: **each one is provably
 a no-op until somebody asks for it.**  A reviewer is being asked to accept new
 code, not new behaviour.
+
+**The five exceptions must be in the cover message, not discovered.**  Three
+are gated on an `Init(1)` option, so merging them changes the default output:
+`pass_rvtt_dst_ownership` (`-mtt-tensix-optimize-dst-ownership`),
+`pass_rvtt_lut_select` (`-mtt-tensix-optimize-lut-select`) and
+`pass_rvtt_replay_reform` (`-mtt-tensix-optimize-replay`, which is *his*
+flag — a further reason to hold the replay work back).  Two have no option at
+all and run unconditionally under `TARGET_XTT_TENSIX`:
+`pass_rvtt_lreg_livein`, which is a correctness/visibility pass whose absence
+is silent wrong code, and `pass_rvtt_spill_diag`, a diagnostic that is a
+proven no-op on a clean stream.  Those two are defensible as always-on and
+their headers say why; the three `Init(1)` ones need either a measured
+justification for the default or a flip to `Init(0)` before submission.
 
 The remaining 9 are a different conversation and are deliberately last (§5).
 
@@ -111,7 +136,7 @@ He also does not watch the repo.  From PR #19, in his own words:
 
 ## 3. Prerequisites — none of §4 starts until all four are done
 
-**P1 — Ask him.**  One message, before any code: here are 32 optional passes for an
+**P1 — Ask him.**  One message, before any code: here are 31 optional passes for an
 SFPU backend you already maintain, all default-off, all with tests; would you rather
 see them one PR per pass, or should we talk about the shape first?  His answer
 reorders everything below and costs a day to get.
@@ -170,7 +195,7 @@ benefit is one kernel row.  That is the worst possible opening: it makes a
 year of work look like a bag of one-off hacks, which is exactly the charge the
 generality census exists to answer.
 
-Reach, for all 32 (kernels touched of 134, source lines):
+Reach, for all 31 (kernels touched of 134, source lines):
 
 ```
  85  1860  dst-autoincr          10  1781  launch-flatten
