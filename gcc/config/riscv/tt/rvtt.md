@@ -4791,39 +4791,6 @@
    (set_attr "xtt_config_effect" "none")
    (set_attr "xtt_rwc_effect" "set")])
 
-;; Typed architectural Dst/RWC face advance: one face is two architectural
-;; Dst += 8 counter steps with no LREG, CC, or configuration effect.  Late
-;; analyses recognize the run-separator effect by this typed identity; raw
-;; `.ttinsn' words are never decoded (they remain opaque and refuse).
-(define_expand "rvtt_ttdstface"
-  [(unspec_volatile:XTT32SI [(const_int 0)] UNSPECV_TTDSTFACE)]
-  "TARGET_XTT_TENSIX"
-{
-  if (TARGET_XTT_TENSIX_QSR)
-    {
-      /* QSR's unified-RWC model has no defined Dst face-step form; refuse
-         rather than approximate.  */
-      error ("QSR cannot represent the Dst face advance");
-      DONE;
-    }
-  emit_insn (gen_rvtt_ttdstface_wh_bh ());
-  DONE;
-})
-
-;; This volatile pattern is the compiler-visible architectural RWC/Dst state
-;; boundary; it must remain a replay barrier.  The architectural mnemonic and
-;; its field values are emission data owned by this pattern and the
-;; assembler, never decision logic: the CR-mode Dst += 8 step (SETRWC CR=4,
-;; D=8, mask=4) is issued twice to advance exactly one face.
-(define_insn "rvtt_ttdstface_wh_bh"
-  [(unspec_volatile:XTT32SI [(const_int 0)] UNSPECV_TTDSTFACE)]
-  "TARGET_XTT_TENSIX_WH || TARGET_XTT_TENSIX_BH"
-  "TTSETRWC\t0, 4, 8, 0, 0, 4\;TTSETRWC\t0, 4, 8, 0, 0, 4"
-  [(set_attr "type" "tensix")
-   (set_attr "length" "8")
-   (set_attr "xtt_issue" "sync")
-   (set_attr "xtt_replay" "barrier")])
-
 (define_insn "rvtt_ttincrwc"
   [(unspec_volatile:XTT32SI [
      (match_operand:SI    0 "const_int_operand" "n")
