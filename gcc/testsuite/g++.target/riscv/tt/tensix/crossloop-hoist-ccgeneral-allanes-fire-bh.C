@@ -11,7 +11,7 @@
 // { dg-final { scan-tree-dump-times "crossloop-hoist: hoisted across loop" 2 "rvtt_crossloop" } }
 // { dg-final { scan-tree-dump-not "refused" "rvtt_crossloop" } }
 
-#define XLH_TILE_EXTRA() __builtin_rvtt_sfpencc (0, 10)
+#define XLH_TILE_EXTRA() __builtin_rvtt_sfpencc (10, 0)
 #define XLH_KERNEL xlh_ccgeneral_allanes
 #define XLH_TILES tiles
 #define XLH_T t

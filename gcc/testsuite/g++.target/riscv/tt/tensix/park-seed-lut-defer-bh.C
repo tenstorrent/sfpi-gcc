@@ -26,7 +26,7 @@ void lut_body_defers_wholesale (void)
       __builtin_rvtt_sfppushc (0);
       __builtin_rvtt_sfpsetcc (x, 0);
       __builtin_rvtt_sfppopc (0);
-      x = __builtin_rvtt_sfplutfp32_3r (t0, t1, t2, x, 0);
+      x = __builtin_rvtt_sfplutfp32_3r (t0, t1, t2, x, 10);
     }
   __builtin_rvtt_sfpwritelreg (x, 3);
 }

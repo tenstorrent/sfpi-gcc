@@ -1107,14 +1107,14 @@ discover_config_prefix (function *fn,
 	  const rvtt_insn_data *uinsnd
 	    = write ? rvtt_get_insn_data (write) : nullptr;
 	  if (!uinsnd || uinsnd->id != rvtt_insn_data::sfpwriteconfig_v
-	      || gimple_call_num_args (write) < 2
+	      || gimple_call_num_args (write) < 3
 	      || gimple_call_arg (write, 0) != lhs
 	      || gimple_call_lhs (write))
 	    continue;
 	  basic_block wbb = gimple_bb (write);
 	  if (!wbb || wbb != bb)
 	    continue;		/* pair stays block-local (v1 shape) */
-	  tree dest = gimple_call_arg (write, 1);
+	  tree dest = gimple_call_arg (write, 2);
 	  if (TREE_CODE (dest) != INTEGER_CST)
 	    continue;
 	  unsigned d = TREE_INT_CST_LOW (dest) & 0xf;
@@ -1165,7 +1165,7 @@ discover_config_prefix (function *fn,
 		is_pair = true;
 	    if (is_pair)
 	      continue;
-	    tree dest = gimple_call_arg (call, 1);
+	    tree dest = gimple_call_arg (call, 2);
 	    if (TREE_CODE (dest) != INTEGER_CST
 		|| ((dest_mask >> (TREE_INT_CST_LOW (dest) & 0xf)) & 1))
 	      unique = false;
@@ -1537,7 +1537,7 @@ commit_caller (cgraph_node *caller, edge entry,
       tree val = make_ssa_name (TREE_TYPE (gimple_call_lhs (p.load)));
       gimple_call_set_lhs (load, val);
       gcall *write = gimple_build_call
-	(gimple_call_fndecl (p.write), 2, val,
+	(gimple_call_fndecl (p.write), 3, val, build_int_cst (unsigned_type_node, 0),
 	 build_int_cst (integer_type_node, (int) p.dest));
       insert_in_preheader (ph, load);
       insert_in_preheader (ph, write);
@@ -1571,7 +1571,7 @@ commit_caller (cgraph_node *caller, edge entry,
 	 chain) belongs to the callee's lexical tree and must not leak
 	 into another function.  */
       gcall *write = gimple_build_call
-	(write_d->decl, 2, val,
+	(write_d->decl, 3, val, build_int_cst (unsigned_type_node, 0),
 	 build_int_cst (integer_type_node, e.lreg));
       insert_in_preheader (ph, load);
       insert_in_preheader (ph, write);
@@ -1670,7 +1670,7 @@ commit_callee (function *fn, const auto_vec<contract_entry> &contract,
       for (const contract_entry &c : contract)
 	{
 	  gcall *write = gimple_build_call
-	    (write_d->decl, 2, c.value,
+	    (write_d->decl, 3, c.value, build_int_cst (unsigned_type_node, 0),
 	     build_int_cst (integer_type_node, c.lreg));
 	  gsi_insert_before (&gsi, write, GSI_SAME_STMT);
 	}
@@ -2906,7 +2906,7 @@ init_commit_caller (cgraph_node *caller, edge entry,
       tree staged = make_ssa_name (vec_type);
       gimple_call_set_lhs (load, staged);
       gcall *wrcfg = gimple_build_call
-	(wrcfg_d->decl, 2, staged,
+	(wrcfg_d->decl, 3, staged, build_int_cst (unsigned_type_node, 0),
 	 build_int_cst (unsigned_type_node, prog.words[i].dest));
       place (load);
       place (wrcfg);

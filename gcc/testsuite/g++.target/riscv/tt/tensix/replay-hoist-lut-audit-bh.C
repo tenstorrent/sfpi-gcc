@@ -75,9 +75,9 @@ void lutfp32_still_refuses ()
     {
       // SFPLUTFP32: audit deliberately deferred -- the loop stays
       // effect-opaque by name.
-      x = __builtin_rvtt_sfplutfp32_3r (c0, c1, c2, x, 0);
+      x = __builtin_rvtt_sfplutfp32_3r (c0, c1, c2, x, 10);
       d = __builtin_rvtt_sfpmul (d, d, 0);
-      x = __builtin_rvtt_sfplutfp32_3r (c0, c1, c2, x, 0);
+      x = __builtin_rvtt_sfplutfp32_3r (c0, c1, c2, x, 10);
       d = __builtin_rvtt_sfpmul (d, d, 0);
     }
   __builtin_rvtt_sfpwritelreg (x, 3);

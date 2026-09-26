@@ -36,6 +36,6 @@ ccs_caller (int batches, int tiles)
     {
       for (int t = 0; t != tiles; ++t)
 	ccs_callee ();
-      __builtin_rvtt_sfpencc (0, 10);	/* CC writer in the batch loop */
+      __builtin_rvtt_sfpencc (10, 0);	/* CC writer in the batch loop */
     }
 }

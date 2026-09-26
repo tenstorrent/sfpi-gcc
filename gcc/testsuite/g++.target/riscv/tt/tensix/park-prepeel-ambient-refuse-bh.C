@@ -20,7 +20,7 @@ void ambient_refuse (int faces)
       /* Ambient lane-state rewrite on the path into the canonical
 	 loop: a lane-clearing (non-all-lanes-word) SFPENCC with no
 	 all-lanes SFPENCC between it and the loop entry.  */
-      __builtin_rvtt_sfpencc (8, 0);
+      __builtin_rvtt_sfpencc (0, 8);
       for (unsigned ix = 0; ix != 32; ++ix)
 	{
 	  __builtin_rvtt_sfppushc (0);

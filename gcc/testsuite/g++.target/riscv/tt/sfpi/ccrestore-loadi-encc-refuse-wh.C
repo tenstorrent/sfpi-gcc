@@ -22,7 +22,7 @@ ccrestore_encc_inregion_wh ()
       sfpi::vFloat r = v * 0.8125f;
       v_if (v == 0.0f)
 	{
-	  __builtin_rvtt_sfpencc (3, 10);
+	  __builtin_rvtt_sfpencc (10, 3);
 	  r = v * 5.5f;
 	}
       v_endif;

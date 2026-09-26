@@ -19,7 +19,7 @@ helper ()
   for (int d = 0; d < 32; ++d)
     {
       sfpi::vFloat v = sfpi::dst_reg[0];
-      __builtin_rvtt_sfpencc (3, 10);
+      __builtin_rvtt_sfpencc (10, 3);
       sfpi::vFloat c = sfpi::vFloat (7.5f) * v;
       sfpi::dst_reg[0] = c;
       sfpi::dst_reg++;

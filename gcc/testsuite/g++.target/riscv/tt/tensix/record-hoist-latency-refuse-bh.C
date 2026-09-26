@@ -24,14 +24,14 @@ void rerecord_unaudited (volatile int *out)
     {
       a = __builtin_rvtt_sfpmul (a, a, 0);
       b = __builtin_rvtt_sfpmul (b, b, 0);
-      d = __builtin_rvtt_sfplutfp32_3r (a, b, c, d, 0);
+      d = __builtin_rvtt_sfplutfp32_3r (a, b, c, d, 10);
       a = __builtin_rvtt_sfpmul (a, d, 0);
       b = __builtin_rvtt_sfpmul (b, c, 0);
       c = __builtin_rvtt_sfpmul (c, a, 0);
       *out = (int) ix;
       a = __builtin_rvtt_sfpmul (a, a, 0);
       b = __builtin_rvtt_sfpmul (b, b, 0);
-      d = __builtin_rvtt_sfplutfp32_3r (a, b, c, d, 0);
+      d = __builtin_rvtt_sfplutfp32_3r (a, b, c, d, 10);
       a = __builtin_rvtt_sfpmul (a, d, 0);
       b = __builtin_rvtt_sfpmul (b, c, 0);
       c = __builtin_rvtt_sfpmul (c, a, 0);

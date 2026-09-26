@@ -21,7 +21,7 @@
 
 __attribute__((noinline)) void lanes_off_face_loop (unsigned faces)
 {
-  __builtin_rvtt_sfpencc (0, 10);
+  __builtin_rvtt_sfpencc (10, 0);
   for (unsigned face = 0; face < faces; ++face)
     FACE ();
 }

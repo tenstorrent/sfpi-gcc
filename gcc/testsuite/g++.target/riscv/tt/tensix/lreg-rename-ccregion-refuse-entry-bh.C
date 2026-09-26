@@ -14,7 +14,7 @@ void renc_ccr_entry ()
   auto x = __builtin_rvtt_sfpreadlreg (2);
   /* Entry spoiler: every path into the loop carries an unproven
      lane-enable state.  */
-  __builtin_rvtt_sfpencc (0, 10);
+  __builtin_rvtt_sfpencc (10, 0);
   for (unsigned row = 0; row != 20; ++row)
     {
       auto t = __builtin_rvtt_sfpmul (k1, k2, 0);

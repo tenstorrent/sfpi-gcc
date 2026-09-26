@@ -20,7 +20,7 @@ void cc_barrier ()
   auto x = __builtin_rvtt_sfpreadlreg (0);
   for (unsigned ix = 0; ix != 8; ++ix)
     {
-      __builtin_rvtt_sfpencc (3, 10);
+      __builtin_rvtt_sfpencc (10, 3);
       auto c = __builtin_rvtt_sfpxloadi (nullptr, 0x3e4b1a3d, 0, 0, 31);
       x = __builtin_rvtt_sfpmul (x, c, 0);
     }

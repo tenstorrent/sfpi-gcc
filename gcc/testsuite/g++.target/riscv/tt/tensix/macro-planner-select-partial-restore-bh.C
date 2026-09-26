@@ -19,7 +19,7 @@
       __builtin_rvtt_sfpsetcc (condition, 2);                               \
       auto result = __builtin_rvtt_sfpassign_lv (on_false, on_true);          \
       __builtin_rvtt_sfppopc (0);                                             \
-      __builtin_rvtt_sfpencc (0, 10);                                         \
+      __builtin_rvtt_sfpencc (10, 0);                                         \
       __builtin_rvtt_sfpstore (nullptr, result, 0, 0, 0, 6, 7);               \
       __builtin_rvtt_ttincrwc (0, 2, 0, 0);                                   \
     }                                                                         \

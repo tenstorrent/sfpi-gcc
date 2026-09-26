@@ -21,7 +21,7 @@ void latency_unproved ()
       a = __builtin_rvtt_sfpmul (a, a, 0);
       b = __builtin_rvtt_sfpmul (b, b, 0);
       c = __builtin_rvtt_sfpmul (c, c, 0);
-      d = __builtin_rvtt_sfplutfp32_3r (a, b, c, d, 0);
+      d = __builtin_rvtt_sfplutfp32_3r (a, b, c, d, 10);
       a = __builtin_rvtt_sfpmul (a, a, 0);
       b = __builtin_rvtt_sfpmul (b, b, 0);
       c = __builtin_rvtt_sfpmul (c, c, 0);

@@ -19,7 +19,7 @@ void peel_dead_lanes_tail (void)
       __builtin_rvtt_sfppushc (0);
       __builtin_rvtt_sfpsetcc (x, 0);
       __builtin_rvtt_sfppopc (0);
-      __builtin_rvtt_sfpencc (8, 0);
+      __builtin_rvtt_sfpencc (0, 8);
     }
   __builtin_rvtt_sfpwritelreg (x, 0);
 }
@@ -34,7 +34,7 @@ void peel_noncanonical_word (void)
       __builtin_rvtt_sfppushc (0);
       __builtin_rvtt_sfpsetcc (x, 0);
       __builtin_rvtt_sfppopc (0);
-      __builtin_rvtt_sfpencc (3, 10);
+      __builtin_rvtt_sfpencc (10, 3);
     }
   __builtin_rvtt_sfpwritelreg (x, 1);
 }

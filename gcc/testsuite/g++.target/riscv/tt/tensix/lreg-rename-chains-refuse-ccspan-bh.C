@@ -14,7 +14,7 @@ void renc_ccspan ()
     {
       auto t = __builtin_rvtt_sfpmul (k1, k2, 0);
       auto p = __builtin_rvtt_sfpmul (x, x, 0);
-      __builtin_rvtt_sfpencc (0, 10);
+      __builtin_rvtt_sfpencc (10, 0);
       auto r = __builtin_rvtt_sfpxor (p, t);
       auto u = __builtin_rvtt_sfpmul (k2, k1, 0);
       x = __builtin_rvtt_sfpxor (r, u);

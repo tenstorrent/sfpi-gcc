@@ -64,7 +64,7 @@ __attribute__((noinline)) void gale_ambient_lanesoff_refuse ()
 {
   /* Lanes-off pure CC write, then a Dst store so the trailing-enable
      probe sees a non-CC tensix word and defers to the ambient walk.  */
-  __builtin_rvtt_sfpencc (0, 10);
+  __builtin_rvtt_sfpencc (10, 0);
   auto seed = __builtin_rvtt_sfpload (nullptr, 64, 0, 0, 0, 7);
   __builtin_rvtt_sfpstore (nullptr, seed, 64, 0, 0, 0, 7);
 #pragma GCC unroll 8

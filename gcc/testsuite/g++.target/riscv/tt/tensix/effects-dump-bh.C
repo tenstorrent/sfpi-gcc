@@ -39,7 +39,7 @@ __attribute__((noinline)) void effects_probe ()
   __builtin_rvtt_ttincrwc (0, 2, 0, 0);
   __builtin_rvtt_ttdstface ();
   __builtin_rvtt_sfpnop ();
-  __builtin_rvtt_sfpencc (0, 10);	/* lanes-off: cc=w, no proof */
+  __builtin_rvtt_sfpencc (10, 0);	/* lanes-off: cc=w, no proof */
   asm volatile (".ttinsn %0" :: "n" (0x37120004)); /* decoded: pure Dst/RWC */
   asm volatile (".ttinsn %0" :: "n" (0x91000000)); /* SFPCONFIG-class: opaque */
 }

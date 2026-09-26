@@ -19,7 +19,7 @@ void ccpeel_entrycc_refuse (int tiles)
      error).  The reach test is conservative over every CC writer --
      the value written does not matter, only that fn-entry state no
      longer provably reaches the lifted point.  */
-  __builtin_rvtt_sfpencc (0, 10);
+  __builtin_rvtt_sfpencc (10, 0);
   for (int t = 0; t != tiles; ++t)
     {
       __asm__ __volatile__ (".ttinsn %0" : : "n" (0x37000104));

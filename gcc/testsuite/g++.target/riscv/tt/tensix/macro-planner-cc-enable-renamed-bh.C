@@ -17,7 +17,7 @@
 // { dg-final { scan-assembler "SFPSWAP" } }
 
 #define CC_ENABLE_FN zephyr_gate_probe
-#define CC_ENABLE_STMT __builtin_rvtt_sfpencc (0, 10)
+#define CC_ENABLE_STMT __builtin_rvtt_sfpencc (10, 0)
 #define CC_ENABLE_LOAD1_ADDR 96
 #define CC_ENABLE_STORE_ADDR 160
 #include "macro-planner-cc-enable-body.h"

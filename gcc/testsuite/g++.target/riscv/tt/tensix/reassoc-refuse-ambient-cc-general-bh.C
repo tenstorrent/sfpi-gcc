@@ -8,7 +8,7 @@
 // { dg-final { scan-tree-dump-not "licensed rebalance" "rvtt_reassoc" } }
 #define RA_KERNEL ra_ambient_cc_general
 #define RA_N 4
-#define RA_MID() __builtin_rvtt_sfpencc (0, 10)
+#define RA_MID() __builtin_rvtt_sfpencc (10, 0)
 #define RA_X0 x0
 #define RA_X1 x1
 #define RA_X2 x2

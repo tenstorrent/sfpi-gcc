@@ -10,5 +10,5 @@
 // { dg-final { scan-rtl-dump-not "exit compensation" "rvtt_macro_planner" } }
 
 #define SELECT_ADDR_MODE 7
-#define DRAIN_LOOP_TAIL() __builtin_rvtt_sfpencc (3, 10)
+#define DRAIN_LOOP_TAIL() __builtin_rvtt_sfpencc (10, 3)
 #include "drain-backedge-select-loop-body.h"

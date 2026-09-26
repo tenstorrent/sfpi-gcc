@@ -17,7 +17,7 @@ ra_loop_split_cc (int rows)
       auto y = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 6, 7);
       acc = __builtin_rvtt_sfpadd (acc, x, 0);
       acc = __builtin_rvtt_sfpadd (acc, y, 0);
-      __builtin_rvtt_sfpencc (0, 10);
+      __builtin_rvtt_sfpencc (10, 0);
       __builtin_rvtt_ttincrwc (0, 2, 0, 0);
     }
   __builtin_rvtt_sfpstore (nullptr, acc, 0, 0, 0, 6, 7);

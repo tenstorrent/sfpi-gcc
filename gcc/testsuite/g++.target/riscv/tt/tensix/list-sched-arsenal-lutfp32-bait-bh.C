@@ -44,7 +44,7 @@ void lutfp32_bait ()
   p = __builtin_rvtt_sfpmad (p, x, p, 0);
   /* Chain-independent LUT word: the tempting filler.  Latency
      unaudited by name -- must not move, must not be guessed.  */
-  auto r = __builtin_rvtt_sfplutfp32_3r (t0, t1, t2, v, 0);
+  auto r = __builtin_rvtt_sfplutfp32_3r (t0, t1, t2, v, 10);
   __builtin_rvtt_sfpwritelreg (p, 4);
   __builtin_rvtt_sfpwritelreg (r, 3);
 }

@@ -27,7 +27,7 @@ xlh_ccgeneral_encc (int tiles)
       __asm__ __volatile__ (".ttinsn %0" : : "n" (0x37000104));
       __asm__ __volatile__ (".ttinsn %0" : : "n" (0xa2820010));
       __instrn_buffer[0] = 0xb2020000u | ((unsigned) t & 0x1ffu);
-      __builtin_rvtt_sfpencc (0, 10);
+      __builtin_rvtt_sfpencc (10, 0);
       for (int row = 0; row != 8; ++row)
 	{
 	  auto c0 = __builtin_rvtt_sfpxloadi (nullptr, 0x3e4b1a3d, 0, 0, -32);

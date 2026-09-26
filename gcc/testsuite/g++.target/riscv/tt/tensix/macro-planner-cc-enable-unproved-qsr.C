@@ -11,5 +11,5 @@
 // { dg-final { scan-assembler "SFPSWAP" } }
 // { dg-final { scan-assembler-times "TTINCRWC" 8 } }
 
-#define CC_ENABLE_STMT __builtin_rvtt_sfpencc (0, 10)
+#define CC_ENABLE_STMT __builtin_rvtt_sfpencc (10, 0)
 #include "macro-planner-cc-enable-body.h"

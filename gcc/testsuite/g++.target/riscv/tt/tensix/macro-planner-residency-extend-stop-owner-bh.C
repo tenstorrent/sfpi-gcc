@@ -14,7 +14,7 @@
 // { dg-final { scan-assembler-times "SFPCONFIG" 5 } }
 
 #define BLOCK_PRE()                                                           \
-  __builtin_rvtt_sfpencc (0, 10)
+  __builtin_rvtt_sfpencc (10, 0)
 #include "macro-planner-residency-block-body.h"
 
 BLOCK_KERNEL (cc_blocked_select_kernel)

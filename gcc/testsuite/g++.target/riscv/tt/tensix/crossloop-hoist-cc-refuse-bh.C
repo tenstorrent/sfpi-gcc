@@ -5,7 +5,7 @@
 // { dg-final { scan-tree-dump "refused .crossloop-cc-unproven." "rvtt_crossloop" } }
 // { dg-final { scan-tree-dump-not "hoisted across" "rvtt_crossloop" } }
 
-#define XLH_TILE_EXTRA() __builtin_rvtt_sfpencc (0, 10)
+#define XLH_TILE_EXTRA() __builtin_rvtt_sfpencc (10, 0)
 #define XLH_KERNEL xlh_cc_kernel
 #define XLH_TILES tiles
 #define XLH_T t
