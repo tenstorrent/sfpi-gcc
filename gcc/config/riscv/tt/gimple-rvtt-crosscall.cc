@@ -1650,8 +1650,7 @@ commit_caller (cgraph_node *caller, edge entry,
 	 chain) belongs to the callee's lexical tree and must not leak
 	 into another function.  */
       gcall *write = gimple_build_call
-	(write_d->decl, 3, val, build_int_cst (unsigned_type_node, 0),
-	 build_int_cst (integer_type_node, e.lreg));
+	(write_d->decl, 2, val, build_int_cst (integer_type_node, e.lreg));
       /* The caller's own inline transform has not run yet (it runs at
 	 the head of its late pipeline); every call statement it walks
 	 must carry a cgraph edge.  */
@@ -1752,7 +1751,7 @@ commit_callee (function *fn, const auto_vec<contract_entry> &contract,
       for (const contract_entry &c : contract)
 	{
 	  gcall *write = gimple_build_call
-	    (write_d->decl, 3, c.value, build_int_cst (unsigned_type_node, 0),
+	    (write_d->decl, 2, c.value,
 	     build_int_cst (integer_type_node, c.lreg));
 	  gsi_insert_before (&gsi, write, GSI_SAME_STMT);
 	}
