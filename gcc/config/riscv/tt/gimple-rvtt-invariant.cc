@@ -492,6 +492,34 @@ rvtt_loop_cc_canonical_body (class loop *loop)
    canonical instruction-buffer operand, all-constant scalar operands,
    and every non-debug use inside LOOP.  */
 
+/* The SFPLOADI root of CALL when CALL is the SFPLOADI_LV tail of the
+   chained pair emit_loadimm issues for a 32-bit constant whose halves
+   are both significant, else null.  Both halves must carry the
+   canonical instruction-buffer operand and constant scalars, and the
+   tail must be the root's only use.  Constants reached the late passes
+   as one sfpxloadi until upstream moved immediate lowering ahead of
+   them.  */
+
+gcall *
+rvtt_chained_loadi_root (gcall *call)
+{
+  const rvtt_insn_data *insnd = rvtt_get_insn_data (call);
+  if (!insnd || insnd->id != rvtt_insn_data::sfploadi_lv)
+    return nullptr;
+  tree link = gimple_call_arg (call, 1);
+  if (TREE_CODE (link) != SSA_NAME || !has_single_use (link))
+    return nullptr;
+  gcall *root = dyn_cast <gcall *> (SSA_NAME_DEF_STMT (link));
+  const rvtt_insn_data *rootd = root ? rvtt_get_insn_data (root) : nullptr;
+  if (!rootd || rootd->id != rvtt_insn_data::sfploadi
+      || !rvtt_canonical_buffer_arg_p (gimple_call_arg (root, 0)))
+    return nullptr;
+  for (unsigned ix = 1; ix != gimple_call_num_args (root); ++ix)
+    if (TREE_CODE (gimple_call_arg (root, ix)) != INTEGER_CST)
+      return nullptr;
+  return root;
+}
+
 bool
 rvtt_invariant_constant_load_p (gcall *call, class loop *loop,
 				bool allow_shortened)
@@ -504,9 +532,18 @@ rvtt_invariant_constant_load_p (gcall *call, class loop *loop,
      sfploadi builtin calls there would change its established
      decisions.  */
   const rvtt_insn_data *insnd = rvtt_get_insn_data (call);
+  /* A shortened materialization may be the two-instruction chain as
+     well as the single-issue form; the opt-in covers both, since a
+     consumer running after immediate shortening sees whichever one the
+     constant needed.  */
+  gcall *chain_root = nullptr;
+  if (allow_shortened && insnd
+      && insnd->id == rvtt_insn_data::sfploadi_lv)
+    chain_root = rvtt_chained_loadi_root (call);
   if (!insnd
       || (insnd->id != rvtt_insn_data::sfpxloadi
-	  && !(allow_shortened && insnd->id == rvtt_insn_data::sfploadi)))
+	  && !(allow_shortened
+	       && (insnd->id == rvtt_insn_data::sfploadi || chain_root))))
     return false;
 
   tree lhs = gimple_call_lhs (call);
@@ -516,8 +553,14 @@ rvtt_invariant_constant_load_p (gcall *call, class loop *loop,
     return false;
 
   for (unsigned ix = 1; ix != gimple_call_num_args (call); ++ix)
-    if (TREE_CODE (gimple_call_arg (call, ix)) != INTEGER_CST)
-      return false;
+    {
+      /* On a chain tail argument 1 is the link to the root, which
+	 rvtt_chained_loadi_root has already qualified.  */
+      if (chain_root && ix == 1)
+	continue;
+      if (TREE_CODE (gimple_call_arg (call, ix)) != INTEGER_CST)
+	return false;
+    }
   return true;
 }
 

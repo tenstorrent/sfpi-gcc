@@ -350,6 +350,7 @@ constexpr unsigned int SFPPUSHCC_MOD1_PUSH = 0;
 constexpr unsigned int SFPPUSHCC_MOD1_REPLACE = 1;
 
 extern tree rvtt_build_loadimm32 (uint32_t, vec<gcall *> *);
+extern gcall *rvtt_chained_loadi_root (gcall *);
 
 constexpr unsigned int SFPPOPCC_MOD1_POP = 0;
 

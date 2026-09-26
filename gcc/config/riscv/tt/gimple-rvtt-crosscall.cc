@@ -417,21 +417,7 @@ pinned_lreg_operand (const rvtt_insn_data *insnd, gcall *call, unsigned argno)
 static gcall *
 prefix_load_root (gcall *call)
 {
-  const rvtt_insn_data *insnd = rvtt_get_insn_data (call);
-  if (!insnd || insnd->id != rvtt_insn_data::sfploadi_lv)
-    return nullptr;
-  tree link = gimple_call_arg (call, 1);
-  if (TREE_CODE (link) != SSA_NAME || !has_single_use (link))
-    return nullptr;
-  gcall *root = dyn_cast <gcall *> (SSA_NAME_DEF_STMT (link));
-  const rvtt_insn_data *rootd = root ? rvtt_get_insn_data (root) : nullptr;
-  if (!rootd || rootd->id != rvtt_insn_data::sfploadi
-      || !rvtt_canonical_buffer_arg_p (gimple_call_arg (root, 0)))
-    return nullptr;
-  for (unsigned ix = 1; ix != gimple_call_num_args (root); ++ix)
-    if (TREE_CODE (gimple_call_arg (root, ix)) != INTEGER_CST)
-      return nullptr;
-  return root;
+  return rvtt_chained_loadi_root (call);
 }
 
 static bool
