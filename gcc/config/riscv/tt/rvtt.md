@@ -470,6 +470,19 @@
 	(match_operand:XTT32SI 1 ""))]
   "TARGET_XTT_TENSIX"
 {
+  /* A zero vector is a constant LREG read, not a materialised constant:
+     the SFPU has no constant-vector move, and the read costs no
+     register.  GCC asks for one when it invents a value for an
+     undefined vector -- an uninitialised vFloat reaching a diamond
+     join, say.  */
+  if (GET_CODE (operands[1]) == CONST_VECTOR
+      && operands[1] == CONST0_RTX (XTT32SImode)
+      && register_operand (operands[0], XTT32SImode))
+    {
+      emit_insn (gen_rtx_SET (operands[0],
+			      rvtt_gen_rtx_creg (XTT32SImode, CREG_IDX_0)));
+      DONE;
+    }
   if (riscv_legitimize_move (GET_MODE (operands[0]), operands[0], operands[1]))
     DONE;
 })
