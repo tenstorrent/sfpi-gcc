@@ -1034,31 +1034,26 @@ cc_restore_classify_stmt (gimple *stmt, int *depth, cc_restore_analysis &a)
 
 	case rvtt_insn_data::sfpxpred:
 	case rvtt_insn_data::sfpxlogic:
+	case rvtt_insn_data::sfpxcond:
 	  /* Structured condition markers: their expander-inserted CC
 	     effects are confined to the enclosing balanced region (see
 	     block comment).  Outside a region there is no PUSHC to
-	     confine them: refuse.  */
+	     confine them: refuse.
+
+	     main folded sfpxcondb (this marker class) and sfpxcondi (the
+	     value materialization, which was never audited and failed
+	     closed) into one sfpxcond, and the port took the unaudited
+	     treatment for the merged builtin.  That was too conservative:
+	     the value form has no representation left.  The folded
+	     builtin yields a depth token rather than a vector, and
+	     gimple-rvtt-pred.cc expand_vif hard-errors on an sfpxcond
+	     that is not inside a predication region, so every one of
+	     them is the structured marker.  It rejoins this class under
+	     the same balanced-region guard that made sfpxcondb safe.  */
 	  a.has_cc = true;
 	  if (!depth || *depth == 0)
 	    a.why = "cc-restore-marker-ambient";
 	  return !a.why;
-
-	case rvtt_insn_data::sfpxcond:
-	  /* Condition-value materialization: its expansion inserts CC
-	     writes at its own position outside any user region; not
-	     audited here.  Fail closed.
-
-	     main folded sfpxcondb (the structured marker, which this
-	     pass admitted inside a balanced region) and sfpxcondi (the
-	     value materialization, never audited) into one sfpxcond.
-	     They are indistinguishable now, so the merged builtin takes
-	     the unaudited treatment and this pass refuses on it.  That
-	     NARROWS what invariant hoisting admits -- it costs
-	     optimization, not correctness -- and it is the honest state
-	     until the folded condition shape is audited.  */
-	  a.has_cc = true;
-	  a.why = "cc-restore-cond-value-unaudited";
-	  return false;
 
 	default:
 	  if (insnd->sets_cc (call))
