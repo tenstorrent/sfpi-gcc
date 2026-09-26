@@ -532,18 +532,16 @@ rvtt_invariant_constant_load_p (gcall *call, class loop *loop,
      sfploadi builtin calls there would change its established
      decisions.  */
   const rvtt_insn_data *insnd = rvtt_get_insn_data (call);
-  /* A shortened materialization may be the two-instruction chain as
-     well as the single-issue form; the opt-in covers both, since a
-     consumer running after immediate shortening sees whichever one the
-     constant needed.  */
-  gcall *chain_root = nullptr;
-  if (allow_shortened && insnd
-      && insnd->id == rvtt_insn_data::sfploadi_lv)
-    chain_root = rvtt_chained_loadi_root (call);
+  /* NOT EXTENDED to the two-instruction chain.  Admitting the tail here
+     (its root qualifies, and rvtt_chained_loadi_root vets it) is not
+     enough to price a chained candidate set -- crosscall still refuses
+     its rediscovered six-value contract on pressure -- and it moved
+     nine tensix subjects whose decisions were not re-examined.  The
+     engine's interval model needs looking at with the pair in mind
+     before this opens.  */
   if (!insnd
       || (insnd->id != rvtt_insn_data::sfpxloadi
-	  && !(allow_shortened
-	       && (insnd->id == rvtt_insn_data::sfploadi || chain_root))))
+	  && !(allow_shortened && insnd->id == rvtt_insn_data::sfploadi)))
     return false;
 
   tree lhs = gimple_call_lhs (call);
@@ -553,14 +551,8 @@ rvtt_invariant_constant_load_p (gcall *call, class loop *loop,
     return false;
 
   for (unsigned ix = 1; ix != gimple_call_num_args (call); ++ix)
-    {
-      /* On a chain tail argument 1 is the link to the root, which
-	 rvtt_chained_loadi_root has already qualified.  */
-      if (chain_root && ix == 1)
-	continue;
-      if (TREE_CODE (gimple_call_arg (call, ix)) != INTEGER_CST)
-	return false;
-    }
+    if (TREE_CODE (gimple_call_arg (call, ix)) != INTEGER_CST)
+      return false;
   return true;
 }
 
