@@ -864,8 +864,11 @@ match_group (const rvtt_cc_region_tree *ccr, gimple_stmt_iterator gsi,
 	      return *candidate
 		? refuse ("lut-structure-mismatch", stmt) : false;
 	    /* The condition tree must be exactly the compare, anchored
-	       at this region's vif token.  */
-	    tree c = gimple_call_arg (call, 0);
+	       at this region's vif token.  main gave sfpxcond a MOD at
+	       argument 0, so the token and the condition moved to
+	       arguments 1 and 2 -- sfpi emits it as
+	       sfpxcond (mod, dep, cond).  */
+	    tree c = gimple_call_arg (call, 2);
 	    tree t = gimple_call_arg (call, 1);
 	    if (TREE_CODE (c) != SSA_NAME || TREE_CODE (t) != SSA_NAME
 		|| SSA_NAME_DEF_STMT (c) != g->fcmp[region]
