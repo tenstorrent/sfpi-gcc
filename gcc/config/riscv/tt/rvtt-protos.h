@@ -349,6 +349,8 @@ constexpr unsigned int SFPENCC_MOD1_EI_RI = 10;
 constexpr unsigned int SFPPUSHCC_MOD1_PUSH = 0;
 constexpr unsigned int SFPPUSHCC_MOD1_REPLACE = 1;
 
+extern tree rvtt_build_loadimm32 (uint32_t, vec<gcall *> *);
+
 constexpr unsigned int SFPPOPCC_MOD1_POP = 0;
 
 constexpr unsigned int SFPCONFIG_MOD1_ARG_IMM = 1;

@@ -2866,11 +2866,8 @@ init_commit_caller (cgraph_node *caller, edge entry,
     = rvtt_get_insn_data (rvtt_insn_data::sfpencc_all_lanes);
   const rvtt_insn_data *setc16_d
     = rvtt_get_insn_data (rvtt_insn_data::ttsetc16);
-  const rvtt_insn_data *xloadi_d
-    = rvtt_get_insn_data (rvtt_insn_data::sfpxloadi);
   const rvtt_insn_data *wrcfg_d
     = rvtt_get_insn_data (rvtt_insn_data::sfpwriteconfig_v);
-  tree vec_type = TREE_TYPE (TREE_TYPE (xloadi_d->decl));
 
   basic_block ph = rvtt_commit_hoist_preheader (entry);
   auto place = [&] (gimple *stmt)
@@ -2897,18 +2894,13 @@ init_commit_caller (cgraph_node *caller, edge entry,
       }
   for (unsigned i = 0; i != prog.n_words; ++i)
     {
-      gcall *load = gimple_build_call
-	(xloadi_d->decl, 5, null_pointer_node,
-	 build_int_cst (unsigned_type_node, prog.words[i].word),
-	 build_int_cst (unsigned_type_node, 0),
-	 build_int_cst (unsigned_type_node, 0),
-	 build_int_cst (integer_type_node, -32));
-      tree staged = make_ssa_name (vec_type);
-      gimple_call_set_lhs (load, staged);
+      auto_vec<gcall *> seq;
+      tree staged = rvtt_build_loadimm32 (prog.words[i].word, &seq);
       gcall *wrcfg = gimple_build_call
 	(wrcfg_d->decl, 3, staged, build_int_cst (unsigned_type_node, 0),
 	 build_int_cst (unsigned_type_node, prog.words[i].dest));
-      place (load);
+      for (gcall *c : seq)
+	place (c);
       place (wrcfg);
     }
   update_ssa (TODO_update_ssa_only_virtuals);

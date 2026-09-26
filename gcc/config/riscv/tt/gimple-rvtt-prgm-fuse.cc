@@ -669,8 +669,6 @@ transform (function *fn, prgm_state *st)
     }
   unsigned &claimed = st->claimed;
   bool changed = false;
-  const rvtt_insn_data *xloadi_d
-    = rvtt_get_insn_data (rvtt_insn_data::sfpxloadi);
   const rvtt_insn_data *wrcfg_d
     = rvtt_get_insn_data (rvtt_insn_data::sfpwriteconfig_v);
   const rvtt_insn_data *readlreg_d
@@ -746,14 +744,8 @@ transform (function *fn, prgm_state *st)
 	{
 	  /* Program the constant on the loop entry edge.  */
 	  basic_block preheader = rvtt_commit_hoist_preheader (c.entry);
-	  gcall *load = gimple_build_call
-	    (xloadi_d->decl, 5, null_pointer_node,
-	     build_int_cst (unsigned_type_node, c.value),
-	     build_int_cst (unsigned_type_node, 0),
-	     build_int_cst (unsigned_type_node, 0),
-	     build_int_cst (integer_type_node, -32));
-	  tree staged = make_ssa_name (vec_type);
-	  gimple_call_set_lhs (load, staged);
+	  auto_vec<gcall *> seq;
+	  tree staged = rvtt_build_loadimm32 (c.value, &seq);
 	  gcall *wrcfg = gimple_build_call
 	    (wrcfg_d->decl, 3, staged, build_int_cst (unsigned_type_node, 0),
 	     build_int_cst (unsigned_type_node, prgm));
@@ -762,12 +754,14 @@ transform (function *fn, prgm_state *st)
 	  if (gsi_end_p (phg) || !stmt_ends_bb_p (gsi_stmt (phg)))
 	    {
 	      gsi_insert_after (&phg, wrcfg, GSI_NEW_STMT);
-	      gsi_insert_before (&phg, load, GSI_SAME_STMT);
+	      for (gcall *ld : seq)
+		gsi_insert_before (&phg, ld, GSI_SAME_STMT);
 	    }
 	  else
 	    {
 	      gsi_insert_before (&phg, wrcfg, GSI_SAME_STMT);
-	      gsi_insert_before (&phg, load, GSI_SAME_STMT);
+	      for (gcall *ld : seq)
+		gsi_insert_before (&phg, ld, GSI_SAME_STMT);
 	    }
 	  if (!prior_bb)
 	    allocs.safe_push (prgm_alloc { c.value, prgm, c.entry->dest });

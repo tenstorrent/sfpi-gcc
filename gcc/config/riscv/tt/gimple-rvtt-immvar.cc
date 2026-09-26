@@ -96,6 +96,62 @@ emit_sfploadi (gimple_stmt_iterator &gsi, location_t loc, unsigned mod,
   return res;
 }
 
+/* Build -- without inserting -- the SFPLOADI sequence that materialises
+   the 32-bit constant VALUE, appending each call to SEQ in emission
+   order and returning the SSA name holding the result.
+
+   main made "lowered before expand" an invariant for sfpxloadi: rvtt.md
+   expands it to a bare FAIL, on the understanding that
+   pass_rvtt_immvar_expand has already rewritten every one.  The
+   crosscall, init-hoist and PRGM passes all run immediately before
+   pass_expand, long after that, so they cannot emit the structured form
+   and must build the lowered one themselves.  They all load a known
+   32-bit word, which is the constant arm of emit_loadimm below.  */
+
+tree
+rvtt_build_loadimm32 (uint32_t value, vec<gcall *> *seq)
+{
+  const auto *lo_d = rvtt_get_insn_data (rvtt_insn_data::sfploadi);
+  const auto *hi_d = lo_d + 1;		/* sfploadi_lv */
+
+  auto emit = [seq] (const rvtt_insn_data *insnd, unsigned mod, tree lv,
+		     uint32_t val) -> tree
+    {
+      tree res = make_ssa_name (TREE_TYPE (TREE_TYPE (insnd->decl)));
+      auto *stmt = gimple_build_call (insnd->decl, insnd->num_args ());
+      gimple_call_set_arg (stmt, 0, null_pointer_node);
+      if (lv)
+	gimple_call_set_arg (stmt, 1, lv);
+      gimple_call_set_arg (stmt, insnd->imm_arg (),
+			   build_int_cst (unsigned_type_node, val));
+      gimple_call_set_arg (stmt, insnd->var_arg (), integer_zero_node);
+      gimple_call_set_arg (stmt, insnd->id_arg (), integer_zero_node);
+      gimple_call_set_arg (stmt, insnd->mod_arg (),
+			   build_int_cst (unsigned_type_node, mod));
+      gimple_call_set_lhs (stmt, res);
+      seq->safe_push (stmt);
+      return res;
+    };
+
+  unsigned mod = SFPLOADI_MOD0_USHORT;
+  bool needs_both = false;
+  uint32_t lower = value;
+
+  if (!(value & 0xffff))
+    { lower = value >> 16; mod = SFPLOADI_MOD0_FLOATB; }
+  else if (!(value >> 16))
+    mod = SFPLOADI_MOD0_USHORT;
+  else if ((value >> 15) == 0x1ffff)
+    mod = SFPLOADI_MOD0_SHORT;
+  else
+    { lower = value & 0xffff; needs_both = true; }
+
+  tree res = emit (lo_d, mod, nullptr, lower);
+  if (needs_both)
+    res = emit (hi_d, SFPLOADI_MOD0_UPPER, res, value >> 16);
+  return res;
+}
+
 /* Emit, before GSI, a load of VAL into a vector register.  BITS < 0
    means treat VAL as unsigned of -BITS bits, BITS >= 0 gives the sign
    bit position.  A value needing more than 16 bits is loaded in two
