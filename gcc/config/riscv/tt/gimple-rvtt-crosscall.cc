@@ -443,9 +443,17 @@ prefix_load_p (gcall *call)
   gcall *root = nullptr;
   if (insnd->id == rvtt_insn_data::sfploadi_lv)
     {
-      root = prefix_load_root (call);
-      if (!root)
-	return false;
+      /* NOT YET ADMITTED.  prefix_load_root and clone_prefix_load below
+	 discover and rebuild a chained materialization, and the
+	 contract path gets as far as a six-value candidate with them,
+	 but the caller-side rebuild still reaches expand with a link
+	 that does not resolve -- four crosscall-config tests ICEd in
+	 riscv_expand_builtin_direct on the arity mismatch that
+	 follows.  Fail closed until that is understood: this costs the
+	 cross-call hoist on any constant whose halves are both
+	 significant, which is most of them since upstream moved
+	 immediate lowering ahead of this pass.  */
+      return false;
     }
   else if (insnd->id != rvtt_insn_data::sfpxloadi
 	   && insnd->id != rvtt_insn_data::sfploadi)
