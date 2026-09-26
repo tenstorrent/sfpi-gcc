@@ -408,22 +408,92 @@ pinned_lreg_operand (const rvtt_insn_data *insnd, gcall *call, unsigned argno)
    pass_rvtt_immload_shorten, like the LUT coefficient placement), with
    the canonical buffer operand and all-constant scalar operands.  */
 
+/* The SFPLOADI root of CALL when CALL is the SFPLOADI_LV tail of a
+   chained pair -- the form emit_loadimm issues for a 32-bit constant
+   whose halves are both significant.  Null when CALL is not such a
+   tail.  Constants reached this pass as one sfpxloadi until upstream
+   moved immediate lowering ahead of it.  */
+
+static gcall *
+prefix_load_root (gcall *call)
+{
+  const rvtt_insn_data *insnd = rvtt_get_insn_data (call);
+  if (!insnd || insnd->id != rvtt_insn_data::sfploadi_lv)
+    return nullptr;
+  tree link = gimple_call_arg (call, 1);
+  if (TREE_CODE (link) != SSA_NAME || !has_single_use (link))
+    return nullptr;
+  gcall *root = dyn_cast <gcall *> (SSA_NAME_DEF_STMT (link));
+  const rvtt_insn_data *rootd = root ? rvtt_get_insn_data (root) : nullptr;
+  if (!rootd || rootd->id != rvtt_insn_data::sfploadi
+      || !rvtt_canonical_buffer_arg_p (gimple_call_arg (root, 0)))
+    return nullptr;
+  for (unsigned ix = 1; ix != gimple_call_num_args (root); ++ix)
+    if (TREE_CODE (gimple_call_arg (root, ix)) != INTEGER_CST)
+      return nullptr;
+  return root;
+}
+
 static bool
 prefix_load_p (gcall *call)
 {
   const rvtt_insn_data *insnd = rvtt_get_insn_data (call);
-  if (!insnd
-      || (insnd->id != rvtt_insn_data::sfpxloadi
-	  && insnd->id != rvtt_insn_data::sfploadi))
+  if (!insnd)
+    return false;
+  gcall *root = nullptr;
+  if (insnd->id == rvtt_insn_data::sfploadi_lv)
+    {
+      root = prefix_load_root (call);
+      if (!root)
+	return false;
+    }
+  else if (insnd->id != rvtt_insn_data::sfpxloadi
+	   && insnd->id != rvtt_insn_data::sfploadi)
     return false;
   tree lhs = gimple_call_lhs (call);
   if (!lhs || TREE_CODE (lhs) != SSA_NAME
       || !rvtt_canonical_buffer_arg_p (gimple_call_arg (call, 0)))
     return false;
   for (unsigned ix = 1; ix != gimple_call_num_args (call); ++ix)
-    if (TREE_CODE (gimple_call_arg (call, ix)) != INTEGER_CST)
-      return false;
+    {
+      /* On a chained tail argument 1 is the link to the root, which
+	 prefix_load_root has already qualified.  */
+      if (root && ix == 1)
+	continue;
+      if (TREE_CODE (gimple_call_arg (call, ix)) != INTEGER_CST)
+	return false;
+    }
   return true;
+}
+
+/* Clone the prefix materialization LOAD -- and ROOT first, when LOAD is
+   a chained tail -- appending each clone to OUT in placement order and
+   returning the cloned value's SSA name.  */
+
+static tree
+clone_prefix_load (gcall *root, gcall *load, vec<gcall *> *out)
+{
+  tree link = NULL_TREE;
+  if (root)
+    {
+      auto_vec<tree, 8> a;
+      for (unsigned i = 0; i != gimple_call_num_args (root); ++i)
+	a.safe_push (unshare_expr (gimple_call_arg (root, i)));
+      gcall *c = gimple_build_call_vec (gimple_call_fndecl (root), a);
+      link = make_ssa_name (TREE_TYPE (gimple_call_lhs (root)));
+      gimple_call_set_lhs (c, link);
+      out->safe_push (c);
+    }
+  auto_vec<tree, 8> a;
+  for (unsigned i = 0; i != gimple_call_num_args (load); ++i)
+    a.safe_push (unshare_expr (gimple_call_arg (load, i)));
+  if (root)
+    a[1] = link;		/* rewire to the cloned root */
+  gcall *c = gimple_build_call_vec (gimple_call_fndecl (load), a);
+  tree val = make_ssa_name (TREE_TYPE (gimple_call_lhs (load)));
+  gimple_call_set_lhs (c, val);
+  out->safe_push (c);
+  return val;
 }
 
 /* Return true if T is a value of vector type (an SFPU vector datum).
@@ -936,6 +1006,7 @@ struct contract_entry
   gcall *load;			/* the prefix materialization	     */
   tree value;			/* its SSA lhs			     */
   int lreg;			/* the pinned hard LREG		     */
+  gcall *root;			/* its SFPLOADI half, if chained     */
 };
 
 /* A config-prefix pair (-mtt-tensix-optimize-crosscall-
@@ -958,6 +1029,7 @@ struct config_prefix_entry
   gcall *load;			/* the prefix materialization	     */
   gcall *write;			/* its single use: sfpwriteconfig_v  */
   unsigned dest;		/* the programmed register, 11..14   */
+  gcall *root;			/* its SFPLOADI half, if chained     */
 };
 
 struct caller_plan
@@ -1043,7 +1115,7 @@ discover_contract (function *fn, auto_vec<contract_entry> *contract,
 				  load);
 	      continue;
 	    }
-	  contract_entry e = { load, lhs, lreg };
+	  contract_entry e = { load, lhs, lreg, prefix_load_root (load) };
 	  contract->safe_push (e);
 	}
     }
@@ -1130,7 +1202,7 @@ discover_config_prefix (function *fn,
 		}
 	      continue;
 	    }
-	  config_prefix_entry p = { load, write, d };
+	  config_prefix_entry p = { load, write, d, prefix_load_root (load) };
 	  pairs->safe_push (p);
 	}
     }
@@ -1529,20 +1601,18 @@ commit_caller (cgraph_node *caller, edge entry,
      contract range (the callee's original prefix order).  */
   for (const config_prefix_entry &p : config)
     {
-      unsigned nargs = gimple_call_num_args (p.load);
-      auto_vec<tree, 8> args;
-      for (unsigned i = 0; i != nargs; ++i)
-	args.safe_push (unshare_expr (gimple_call_arg (p.load, i)));
-      gcall *load = gimple_build_call_vec (gimple_call_fndecl (p.load), args);
-      tree val = make_ssa_name (TREE_TYPE (gimple_call_lhs (p.load)));
-      gimple_call_set_lhs (load, val);
+      auto_vec<gcall *, 4> clones;
+      tree val = clone_prefix_load (p.root, p.load, &clones);
       gcall *write = gimple_build_call
 	(gimple_call_fndecl (p.write), 3, val, build_int_cst (unsigned_type_node, 0),
 	 build_int_cst (integer_type_node, (int) p.dest));
-      insert_in_preheader (ph, load);
+      for (gcall *load : clones)
+	{
+	  insert_in_preheader (ph, load);
+	  caller->create_edge (cgraph_node::get_create
+				 (gimple_call_fndecl (load)), load, ph->count);
+	}
       insert_in_preheader (ph, write);
-      caller->create_edge (cgraph_node::get_create
-			     (gimple_call_fndecl (load)), load, ph->count);
       caller->create_edge (cgraph_node::get_create
 			     (gimple_call_fndecl (p.write)), write,
 			   ph->count);
@@ -1560,26 +1630,24 @@ commit_caller (cgraph_node *caller, edge entry,
       /* Clone the materialization verbatim (same builtin, same
 	 constant operands) and pin its value into the contract
 	 register.  */
-      unsigned nargs = gimple_call_num_args (e.load);
-      auto_vec<tree, 8> args;
-      for (unsigned i = 0; i != nargs; ++i)
-	args.safe_push (unshare_expr (gimple_call_arg (e.load, i)));
-      gcall *load = gimple_build_call_vec (gimple_call_fndecl (e.load), args);
-      tree val = make_ssa_name (TREE_TYPE (e.value));
-      gimple_call_set_lhs (load, val);
+      auto_vec<gcall *, 4> clones;
+      tree val = clone_prefix_load (e.root, e.load, &clones);
       /* No source location: the original's location (and its BLOCK
 	 chain) belongs to the callee's lexical tree and must not leak
 	 into another function.  */
       gcall *write = gimple_build_call
 	(write_d->decl, 3, val, build_int_cst (unsigned_type_node, 0),
 	 build_int_cst (integer_type_node, e.lreg));
-      insert_in_preheader (ph, load);
-      insert_in_preheader (ph, write);
       /* The caller's own inline transform has not run yet (it runs at
 	 the head of its late pipeline); every call statement it walks
 	 must carry a cgraph edge.  */
-      caller->create_edge (cgraph_node::get_create
-			     (gimple_call_fndecl (load)), load, ph->count);
+      for (gcall *load : clones)
+	{
+	  insert_in_preheader (ph, load);
+	  caller->create_edge (cgraph_node::get_create
+				 (gimple_call_fndecl (load)), load, ph->count);
+	}
+      insert_in_preheader (ph, write);
       caller->create_edge (cgraph_node::get_create (write_d->decl), write,
 			   ph->count);
       if (dump_file)
