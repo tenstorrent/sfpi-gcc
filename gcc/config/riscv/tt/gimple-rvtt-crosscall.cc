@@ -1335,10 +1335,10 @@ callee_body_ok_p (function *fn, const auto_vec<contract_entry> &contract,
 	     pairs, which move with the contract.  */
 	  bool is_contract_load = false;
 	  for (const contract_entry &e : contract)
-	    if (stmt == e.load)
+	    if (stmt == e.load || stmt == e.root)
 	      is_contract_load = true;
 	  for (const config_prefix_entry &p : config)
-	    if (stmt == p.load || stmt == p.write)
+	    if (stmt == p.load || stmt == p.write || stmt == p.root)
 	      is_contract_load = true;
 	  if (!is_contract_load
 	      && !flow_bb_inside_loop_p (consumer_loop, bb))
