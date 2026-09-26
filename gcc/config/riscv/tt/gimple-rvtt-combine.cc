@@ -1024,8 +1024,16 @@ init ()
      compilation.  */
   for (auto &combiner : combiners)
       {
+	/* Only a rule this target admits has meaningful arities: the QSR
+	   sfpsetcc patterns carry three arguments against BH's
+	   two-argument builtin, so asserting over a rule the target gate
+	   rejects aborts a checking build at pass init.  Upstream filtered
+	   such rules out of the table entirely; we register them (the hook
+	   is per-function) and gate in Combiner::match instead, so the
+	   check has to be skipped explicitly here.  */
+	bool admitted = !combiner.enable_hook || combiner.enable_hook ();
 	// Check all patterns and replacements have decls and correct number of arguments
-	for (unsigned ix = combiner.reps_hwm; ix--;) {
+	for (unsigned ix = admitted ? combiner.reps_hwm : 0; ix--;) {
 	  auto const *insnd = rvtt_get_insn_data (combiner.shapes[ix].id);
 	  gcc_checking_assert (insnd->decl && insnd->get_non_live ()->decl);
 	  gcc_checking_assert (insnd->num_args () == combiner.shapes[ix].num_args);
