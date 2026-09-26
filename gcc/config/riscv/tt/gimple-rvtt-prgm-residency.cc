@@ -2389,7 +2389,7 @@ residency_transform (function *fn, prgm_state *st)
 	  tree staged = make_ssa_name (vec_type);
 	  gimple_call_set_lhs (stage, staged);
 	  gcall *wrcfg = gimple_build_call
-	    (wrcfg_d->decl, 2, staged,
+	    (wrcfg_d->decl, 3, staged, build_int_cst (unsigned_type_node, 0),
 	     build_int_cst (unsigned_type_node, prgm));
 	  if (c.loop && !c.inplace)
 	    {

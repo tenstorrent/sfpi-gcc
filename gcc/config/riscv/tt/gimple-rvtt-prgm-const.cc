@@ -559,7 +559,7 @@ scan_function_body (function *fn, unsigned *claimed, const char **why,
 		}
 	      else if (insnd->id == rvtt_insn_data::sfpwriteconfig_v)
 		{
-		  tree dest = gimple_call_arg (call, 1);
+		  tree dest = gimple_call_arg (call, 2);
 		  if (TREE_CODE (dest) != INTEGER_CST)
 		    {
 		      refuse ("non-constant user SFPCONFIG destination", stmt);

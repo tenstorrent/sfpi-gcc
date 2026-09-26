@@ -755,7 +755,7 @@ transform (function *fn, prgm_state *st)
 	  tree staged = make_ssa_name (vec_type);
 	  gimple_call_set_lhs (load, staged);
 	  gcall *wrcfg = gimple_build_call
-	    (wrcfg_d->decl, 2, staged,
+	    (wrcfg_d->decl, 3, staged, build_int_cst (unsigned_type_node, 0),
 	     build_int_cst (unsigned_type_node, prgm));
 
 	  gimple_stmt_iterator phg = gsi_last_bb (preheader);
