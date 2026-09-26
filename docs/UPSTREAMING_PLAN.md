@@ -141,12 +141,42 @@ SFPU backend you already maintain, all default-off, all with tests; would you ra
 see them one PR per pass, or should we talk about the shape first?  His answer
 reorders everything below and costs a day to get.
 
-**P2 — Rebase onto `main`.**  The branch is 49 commits behind and **no longer
-applies**.  `gimple-rvtt-expand.cc` was renamed to `gimple-rvtt-pred.cc` on
-2026-09-08 (`ca890f5e6f6`, "Rename confusingly-named expand pass to vif"), so
-the old plan's patch P06 targeted a file that does not exist.  `rvtt.md` has
-*grown* to 2816 lines since the merge-base.  Rebase per pass as it is
-submitted, not the whole branch at once.
+**P2 — Rebase onto `main`.**  ~~The branch is 49 commits behind and no longer
+applies.~~  **DONE 2026-09-26.**  The whole branch was rebased onto
+`417704f4d22`, not per-pass as advised here.  That call was right in the end:
+the churn was not file renames, it was the **builtin ABI** — `rvtt-insn.def`
+moved +38/-30 lines, and a per-pass rebase would have paid the same
+reconciliation 31 times.  The rename this section predicted
+(`gimple-rvtt-expand.cc` -> `gimple-rvtt-pred.cc`, `pass_rvtt_expand` ->
+`pass_rvtt_vif`) is carried.
+
+What the rebase cost, measured against the pre-rebase compiler on identical
+inputs:
+
+| | pass | compile-fail | scan-fail |
+|---|---|---|---|
+| pre-rebase | 1174 | 1 | 232 |
+| now | 1072 | **0** | 361 |
+
+Compile failures are at zero, better than the pre-rebase baseline.  Of the 361
+scan failures, **233 also fail on the pre-rebase compiler** (the local runner
+is a DejaGnu approximation, not DejaGnu); the number that matters is **128
+tests failing that did not fail before**.  Corpus coverage is at parity — 48
+of 48 kernels — with 71 firing cells against the control's 88, of which 12 are
+`reassoc-mad-restructure`, subsumed by upstream's own mad-formation and
+measured as a 47-instruction *improvement*.
+
+Upstream also moved immediate lowering ahead of our late passes, so a 32-bit
+constant now arrives as an `SFPLOADI` + `SFPLOADI_LV` pair.  Six passes broke
+on that alone.  **Any pass in §4 that reads or builds a 32-bit constant must
+be checked against this before it is sent** — `rvtt_build_loadimm32` and
+`rvtt_chained_loadi_root` exist for exactly that.  Full record:
+`craq-sfpi/HANDOFF.md` and `REBASE-OPEN-QUESTIONS.txt` items 14-19.
+
+The 128 remaining failures are not evenly spread: crosscall-hoist 18,
+macro-planner 17, const-residency 14, lut-select 11, store-source 9.  A pass
+whose family still fails is **not ready to send** — its tests are the evidence
+the PR rests on.
 
 **P3 — One green Development run.**  Push a topic branch to
 `tenstorrent/sfpi`, dispatch the workflow, get a green `--test-tt`.  This
