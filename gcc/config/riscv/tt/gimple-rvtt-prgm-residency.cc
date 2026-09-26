@@ -1728,7 +1728,9 @@ residency_collect_pressure_class (function *fn,
 	    if (!rvtt_pressure_tracked_p (name)
 		|| !remat_chain_p (name, &chain))
 	      continue;
-	    if (chain.root != chain.tail || taken.contains (chain.tail))
+	    /* A two-instruction chain is still one constant; the value
+	       derivation handles the pair and the dead root falls to DCE.  */
+	    if (taken.contains (chain.tail))
 	      continue;
 	    unsigned value;
 	    if (!constant_chain_value_p (chain, &value))

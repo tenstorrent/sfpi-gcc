@@ -245,7 +245,36 @@ bool
 constant_chain_value_p (const remat_chain &c, unsigned *value)
 {
   if (c.root != c.tail)
-    return false;
+    {
+      /* The two-instruction form emit_loadimm issues for a 32-bit
+	 constant whose halves are both significant: SFPLOADI USHORT of
+	 the low half, then SFPLOADI_LV UPPER of the high half.  Only
+	 the single-issue encodings used to be on record here because
+	 these constants reached this pass as one sfpxloadi; upstream
+	 now lowers immediates ahead of us, so the pair is what arrives
+	 and it reconstructs exactly as well -- emit_loadimm is the
+	 authority for both halves.  */
+      const rvtt_insn_data *rootd = rvtt_get_insn_data (c.root);
+      const rvtt_insn_data *taild = rvtt_get_insn_data (c.tail);
+      if (!rootd || !taild
+	  || rootd->id != rvtt_insn_data::sfploadi
+	  || taild->id != rvtt_insn_data::sfploadi_lv
+	  || !scalar_args_p (c.root, NULL_TREE))
+	return false;
+      tree lo = gimple_call_arg (c.root, rootd->imm_arg ());
+      tree hi = gimple_call_arg (c.tail, taild->imm_arg ());
+      tree lo_mod = gimple_call_arg (c.root, rootd->mod_arg ());
+      tree hi_mod = gimple_call_arg (c.tail, taild->mod_arg ());
+      if (TREE_CODE (lo) != INTEGER_CST || TREE_CODE (hi) != INTEGER_CST
+	  || TREE_CODE (lo_mod) != INTEGER_CST
+	  || TREE_CODE (hi_mod) != INTEGER_CST
+	  || TREE_INT_CST_LOW (lo_mod) != SFPLOADI_MOD0_USHORT
+	  || TREE_INT_CST_LOW (hi_mod) != SFPLOADI_MOD0_UPPER)
+	return false;
+      *value = (((TREE_INT_CST_LOW (hi) & 0xffff) << 16)
+		| (TREE_INT_CST_LOW (lo) & 0xffff));
+      return true;
+    }
   gcall *load = c.tail;
   tree imm = gimple_call_arg (load, 1);
   if (TREE_CODE (imm) != INTEGER_CST || !scalar_args_p (load, NULL_TREE))
