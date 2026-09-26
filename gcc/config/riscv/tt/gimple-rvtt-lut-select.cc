@@ -1050,8 +1050,23 @@ match_group (const rvtt_cc_region_tree *ccr, gimple_stmt_iterator gsi,
 	if (stmt == g->leaf_mul[leaf] || stmt == g->leaf_add[leaf])
 	  return true;
       for (unsigned i = 0; i < num_pred; i++)
-	if (stmt == g->boundary_def[i])
-	  return true;
+	{
+	  if (stmt == g->boundary_def[i])
+	    return true;
+	  /* A boundary that needed both halves is a chained pair: the
+	     SFPLOADI root feeds only the claimed SFPLOADI_LV tail, so
+	     it is accounted for by the same compare.  */
+	  gcall *tail = dyn_cast <gcall *> (g->boundary_def[i]);
+	  const rvtt_insn_data *td = tail ? rvtt_get_insn_data (tail) : nullptr;
+	  if (td && td->id == rvtt_insn_data::sfploadi_lv)
+	    {
+	      tree link = gimple_call_arg (tail, 1);
+	      if (TREE_CODE (link) == SSA_NAME
+		  && SSA_NAME_DEF_STMT (link) == stmt
+		  && has_single_use (link))
+		return true;
+	    }
+	}
       /* Coefficient definitions may sit inside the region when every
 	 use is a claimed leaf statement or another coefficient (all
 	 pure): they simply outlive the tree as LUT operands.  */
