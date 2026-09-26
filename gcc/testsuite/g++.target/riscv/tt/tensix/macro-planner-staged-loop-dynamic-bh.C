@@ -1,3 +1,7 @@
+/* Upstream now rejects a runtime immediate with a null instruction-buffer
+   pointer: the synthesised instruction word has to be written somewhere.
+   These subjects are deliberately dynamic, so they hand it a buffer.  */
+namespace ckernel { volatile unsigned long *instrn_buffer; }
 // Encodability direction (re-adjudicated for the derived calendar): a run-time
 // shift amount cannot pack the template imm12 field, so the SHIFT has
 // no template realization and stays an EXPLICIT issue -- while the
@@ -27,7 +31,7 @@ __attribute__((noinline)) void staged_loop_dynamic (unsigned iterations,
       __builtin_rvtt_sfppopc (0);
       auto loaded = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0,
 					    no_increment);
-      auto shifted = __builtin_rvtt_sfpshft_i (nullptr, loaded, amount,
+      auto shifted = __builtin_rvtt_sfpshft_i (ckernel::instrn_buffer, loaded, amount,
 					       0, 0, 0);
       auto converted = __builtin_rvtt_sfpcast (shifted, 0);
       __builtin_rvtt_sfpstore (nullptr, converted, 0, 0, 0, 0,

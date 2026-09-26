@@ -1,3 +1,7 @@
+/* Upstream now rejects a runtime immediate with a null instruction-buffer
+   pointer: the synthesised instruction word has to be written somewhere.
+   These subjects are deliberately dynamic, so they hand it a buffer.  */
+namespace ckernel { volatile unsigned long *instrn_buffer; }
 // Regression guard for the synth-renumber constant-fold fix: a rolled
 // counted loop (trip count above the peeling limit) keeps its variable
 // address and must still take the runtime-synthesized delivery path
@@ -12,7 +16,7 @@ void rolled_runtime ()
   auto acc = __builtin_rvtt_sfpload (nullptr, 8, 0, 0, 4, 7);
   for (unsigned k = 0; k != 5; ++k)
     {
-      auto q = __builtin_rvtt_sfpload (nullptr, 40 + 6 * k, 0, 0, 4, 7);
+      auto q = __builtin_rvtt_sfpload (ckernel::instrn_buffer, 40 + 6 * k, 0, 0, 4, 7);
       acc = __builtin_rvtt_sfpxor (acc, q);
     }
   __builtin_rvtt_sfpstore (nullptr, acc, 30, 0, 0, 4, 7);

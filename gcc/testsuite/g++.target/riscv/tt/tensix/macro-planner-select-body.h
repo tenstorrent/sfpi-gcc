@@ -1,3 +1,16 @@
+/* QSR's sfpsetcc and sfpswap carry an operand-type argument the other
+   architectures do not have.  0 is IMM_TYPE_INT, which is what these
+   bit-pattern subjects want.  Spelled as a token macro rather than an
+   #if around the argument because some of these calls sit inside
+   backslash-continued macro bodies.  */
+#ifndef XTT_IMM_TYPE
+#if __riscv_xtttensixqsr
+#define XTT_IMM_TYPE , 0
+#else
+#define XTT_IMM_TYPE
+#endif
+#endif
+
 /* The predicated-select (TTNN Where class) row in raw typed builtins.
    COND_MODE/PAYLOAD_MODE are Dst data modes; ADDR_MODE is the per-CPU
    no-increment address mode (BH 7 / WH 3); SETCC_MOD is the predicate
@@ -39,7 +52,7 @@
 	= __builtin_rvtt_sfpload (nullptr, SELECT_FALSE_ADDR, 0, 0,           \
 				  SELECT_PAYLOAD_MODE, SELECT_ADDR_MODE);     \
       __builtin_rvtt_sfppushc (0);                                            \
-      __builtin_rvtt_sfpsetcc (condition, SELECT_SETCC_MOD);                \
+      __builtin_rvtt_sfpsetcc (condition, SELECT_SETCC_MOD XTT_IMM_TYPE);                \
       auto result = __builtin_rvtt_sfpassign_lv (on_false, on_true);          \
       __builtin_rvtt_sfppopc (0);                                             \
       __builtin_rvtt_sfpstore (nullptr, result, SELECT_COND_ADDR, 0, 0,       \

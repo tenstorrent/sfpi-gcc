@@ -1,3 +1,7 @@
+/* Upstream now rejects a runtime immediate with a null instruction-buffer
+   pointer: the synthesised instruction word has to be written somewhere.
+   These subjects are deliberately dynamic, so they hand it a buffer.  */
+namespace ckernel { volatile unsigned long *instrn_buffer; }
 // Derived-template SFPIADD-immediate admission, fail-closed twin
 //: a RUNTIME immediate takes the register-argument
 // alternative of rvtt_sfpiadd_i_lv_int (the runtime-synthesized
@@ -17,7 +21,7 @@ __attribute__((noinline)) void runtime_imm_rows (int k)
       __builtin_rvtt_sfppushc (0);                                            \
       __builtin_rvtt_sfppopc (0);                                             \
       auto a = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 4, 7);               \
-      a = __builtin_rvtt_sfpiadd_i (nullptr, a, k, 0, 0, 4);                  \
+      a = __builtin_rvtt_sfpiadd_i (ckernel::instrn_buffer, a, k, 0, 0, 4);                  \
       __builtin_rvtt_sfpstore (nullptr, a, 0, 0, 0, 4, 7);                    \
       __builtin_rvtt_ttincrwc (0, 2, 0, 0);                                   \
     }                                                                          \

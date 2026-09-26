@@ -1,3 +1,7 @@
+/* Upstream now rejects a runtime immediate with a null instruction-buffer
+   pointer: the synthesised instruction word has to be written somewhere.
+   These subjects are deliberately dynamic, so they hand it a buffer.  */
+namespace ckernel { volatile unsigned long *instrn_buffer; }
 // Regression guard for the synth-renumber constant-fold fix: peeled
 // iterations whose synthesized encodings stay VARIABLE (runtime base
 // address) exercise the pre-existing plain renumber path -- multiple
@@ -13,7 +17,7 @@ void plain_multi (unsigned x)
 #pragma GCC unroll 3
   for (unsigned j = 0; j != 3; ++j)
     {
-      auto q = __builtin_rvtt_sfpload (nullptr, v + 2 * j, 0, 0, 4, 7);
+      auto q = __builtin_rvtt_sfpload (ckernel::instrn_buffer, v + 2 * j, 0, 0, 4, 7);
       r = __builtin_rvtt_sfpxor (r, q);
     }
   __builtin_rvtt_sfpstore (nullptr, r, 62, 0, 0, 4, 7);

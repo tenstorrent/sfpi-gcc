@@ -1,3 +1,16 @@
+/* QSR's sfpsetcc and sfpswap carry an operand-type argument the other
+   architectures do not have.  0 is IMM_TYPE_INT, which is what these
+   bit-pattern subjects want.  Spelled as a token macro rather than an
+   #if around the argument because some of these calls sit inside
+   backslash-continued macro bodies.  */
+#ifndef XTT_IMM_TYPE
+#if __riscv_xtttensixqsr
+#define XTT_IMM_TYPE , 0
+#else
+#define XTT_IMM_TYPE
+#endif
+#endif
+
 /* Init-hoist-aware run pricing bodies: the
    POST-F1 production minmax shape -- MARKER-FREE rows (the deleted
    sfppushc(0)/sfppopc(0) pair; the planner derives the entry-ambient
@@ -33,7 +46,7 @@
     {                                                                         \
       auto a = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 7);              \
       auto b = __builtin_rvtt_sfpload (nullptr, 64, 0, 0, 0, 7);             \
-      auto pair = __builtin_rvtt_sfpswap (a, b, 1);                          \
+      auto pair = __builtin_rvtt_sfpswap (a, b, 1 XTT_IMM_TYPE);                          \
       auto result = __builtin_rvtt_sfpselect2 (pair, RP_ROW_RESULT);         \
       __builtin_rvtt_sfpstore (nullptr, result, 0, 0, 0, 0, 7);             \
       __builtin_rvtt_ttincrwc (0, 2, 0, 0);                                  \

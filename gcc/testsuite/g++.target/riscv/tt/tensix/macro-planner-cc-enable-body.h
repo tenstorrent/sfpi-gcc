@@ -1,3 +1,16 @@
+/* QSR's sfpsetcc and sfpswap carry an operand-type argument the other
+   architectures do not have.  0 is IMM_TYPE_INT, which is what these
+   bit-pattern subjects want.  Spelled as a token macro rather than an
+   #if around the argument because some of these calls sit inside
+   backslash-continued macro bodies.  */
+#ifndef XTT_IMM_TYPE
+#if __riscv_xtttensixqsr
+#define XTT_IMM_TYPE , 0
+#else
+#define XTT_IMM_TYPE
+#endif
+#endif
+
 /* Shared eight-row Min/Max body for the ambient-enable proof corpus
    (P0/D1: the planner may accept a CC write as the ambient all-lanes
    enable ONLY when the written value provably enables all lanes).
@@ -46,7 +59,7 @@ constexpr unsigned cc_enable_no_increment = 7;
 	(nullptr, 0, 0, 0, 0, cc_enable_no_increment);                        \
       auto b = __builtin_rvtt_sfpload                                         \
 	(nullptr, CC_ENABLE_LOAD1_ADDR, 0, 0, 0, cc_enable_no_increment);     \
-      auto pair = __builtin_rvtt_sfpswap (a, b, 1);                           \
+      auto pair = __builtin_rvtt_sfpswap (a, b, 1 XTT_IMM_TYPE);                           \
       auto result = __builtin_rvtt_sfpselect2 (pair, 0);                      \
       __builtin_rvtt_sfpstore                                                 \
 	(nullptr, result, CC_ENABLE_STORE_ADDR, 0, 0, 0,                      \

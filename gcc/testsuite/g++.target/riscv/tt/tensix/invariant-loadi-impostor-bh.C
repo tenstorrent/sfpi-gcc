@@ -2,7 +2,7 @@
 // { dg-final { scan-tree-dump-not "Hoisted invariant SFPU immediate" "rvtt_invariant" } }
 // { dg-final { scan-assembler-times "SFPLOADI" 2 } }
 
-static volatile unsigned impostor_buffer[1];
+static volatile unsigned long impostor_buffer[1];
 
 void invariant_loadi_impostor ()
 {

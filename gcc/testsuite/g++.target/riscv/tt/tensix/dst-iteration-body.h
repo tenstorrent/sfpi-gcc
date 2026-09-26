@@ -1,15 +1,19 @@
+/* Upstream now rejects a runtime immediate with a null instruction-buffer
+   pointer: the synthesised instruction word has to be written somewhere.
+   These subjects are deliberately dynamic, so they hand it a buffer.  */
+namespace ckernel { volatile unsigned long *instrn_buffer; }
 using vec_t = __xtt_vector;
 
 static inline vec_t
 load_dst (unsigned address)
 {
-  return __builtin_rvtt_sfpload (nullptr, address, 0, 0, 0, DST_MODE);
+  return __builtin_rvtt_sfpload (ckernel::instrn_buffer, address, 0, 0, 0, DST_MODE);
 }
 
 static inline void
 store_dst (vec_t value, unsigned address)
 {
-  __builtin_rvtt_sfpstore (nullptr, value, address, 0, 0, 0, DST_MODE);
+  __builtin_rvtt_sfpstore (ckernel::instrn_buffer, value, address, 0, 0, 0, DST_MODE);
 }
 
 #ifndef DST_INELIGIBLE_ONLY

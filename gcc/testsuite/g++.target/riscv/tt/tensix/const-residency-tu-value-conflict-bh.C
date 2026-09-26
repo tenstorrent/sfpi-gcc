@@ -1,3 +1,7 @@
+/* Upstream now rejects a runtime immediate with a null instruction-buffer
+   pointer: the synthesised instruction word has to be written somewhere.
+   These subjects are deliberately dynamic, so they hand it a buffer.  */
+namespace ckernel { volatile unsigned long *instrn_buffer; }
 // TU value-reuse near misses: (a) TWO TU writes program the same
 // destination with DIFFERENT values -- no unique value exists and the
 // candidate refuses even though one write matches; (b) a destination
@@ -20,7 +24,7 @@ void owner_init_conflict (void)
 
 void owner_init_runtime (unsigned bits)
 {
-  auto s = __builtin_rvtt_sfploadi (nullptr, bits, 0, 0, 0);
+  auto s = __builtin_rvtt_sfploadi (ckernel::instrn_buffer, bits, 0, 0, 0);
   __builtin_rvtt_sfpwriteconfig_v (s, 0, 14);	/* underivable value */
 }
 

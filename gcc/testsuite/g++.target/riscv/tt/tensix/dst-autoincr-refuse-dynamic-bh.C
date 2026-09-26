@@ -1,3 +1,7 @@
+/* Upstream now rejects a runtime immediate with a null instruction-buffer
+   pointer: the synthesised instruction word has to be written somewhere.
+   These subjects are deliberately dynamic, so they hand it a buffer.  */
+namespace ckernel { volatile unsigned long *instrn_buffer; }
 // { dg-do compile }
 // { dg-options "-mcpu=tt-bh-tensix -O2 -mtt-tensix-optimize-dst-autoincr -fdump-rtl-rvtt_dst_autoincr-details" }
 // Dynamically-addressed stores synthesize their encoding at runtime, so the
@@ -15,7 +19,7 @@ row (unsigned addr)
 {
   vec_t a = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 7);
   vec_t p = __builtin_rvtt_sfpmul (a, a, 0);
-  __builtin_rvtt_sfpstore (nullptr, p, addr, 0, 0, 0, 7);
+  __builtin_rvtt_sfpstore (ckernel::instrn_buffer, p, addr, 0, 0, 0, 7);
   __builtin_rvtt_ttincrwc (0, 2, 0, 0);
 }
 
