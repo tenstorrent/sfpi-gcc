@@ -1899,8 +1899,22 @@ riscv_float_const_rtx_index_for_fli (rtx x)
 /* Implement TARGET_LEGITIMATE_CONSTANT_P.  */
 
 static bool
-riscv_legitimate_constant_p (machine_mode mode ATTRIBUTE_UNUSED, rtx x)
+riscv_legitimate_constant_p (machine_mode mode, rtx x)
 {
+  /* The SFPU has no constant-vector move.  rvtt.md's movxtt32si expands
+     through riscv_legitimize_move, which has no form for a CONST_VECTOR,
+     and rvtt_sfpassign accepts only a register, memory, or a constant
+     LREG -- so a materialised one reaches recog as an unrecognizable
+     insn.  Declaring it illegitimate keeps the middle end from forming
+     one at all; it is reached for values the SFPU never needs to
+     materialise from a pool, such as the zero GCC invents for an
+     undefined vector at a diamond join.  */
+  if (TARGET_XTT_TENSIX
+      && GET_CODE (x) == CONST_VECTOR
+      && (mode == XTT32SImode || mode == XTT64SImode
+	  || mode == XTT128SImode))
+    return false;
+
   /* With the post-reload usage, it seems best to just pass in FALSE
      rather than pass ALLOW_NEW_PSEUDOS through the call chain.  */
   return riscv_const_insns (x, false) > 0;
