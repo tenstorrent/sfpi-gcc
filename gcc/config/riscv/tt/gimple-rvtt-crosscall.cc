@@ -1622,7 +1622,7 @@ commit_caller (cgraph_node *caller, edge entry,
 		   "crosscall-hoist: placed config pair (creg %u) in %s "
 		   "preheader bb %d: ",
 		   p.dest, caller->dump_name (), ph->index);
-	  print_gimple_stmt (dump_file, load, 0, TDF_NONE);
+	  print_gimple_stmt (dump_file, clones.last (), 0, TDF_NONE);
 	}
     }
   for (const contract_entry &e : contract)
@@ -1656,7 +1656,7 @@ commit_caller (cgraph_node *caller, edge entry,
 		   "crosscall-hoist: placed contract materialization "
 		   "(L%d) in %s preheader bb %d: ",
 		   e.lreg, caller->dump_name (), ph->index);
-	  print_gimple_stmt (dump_file, load, 0, TDF_NONE);
+	  print_gimple_stmt (dump_file, clones.last (), 0, TDF_NONE);
 	}
     }
   update_ssa (TODO_update_ssa_only_virtuals);
