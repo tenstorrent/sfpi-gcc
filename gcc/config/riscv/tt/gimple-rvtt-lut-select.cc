@@ -364,6 +364,34 @@ const_leaf_value_p (gimple *def, uint32_t *bits)
       return true;
     }
 
+  /* The two-instruction form emit_loadimm issues when both halves of a
+     32-bit constant are significant: SFPLOADI USHORT of the low half,
+     then SFPLOADI_LV UPPER of the high half.  These reached this pass
+     as a single sfpxloadi until upstream moved immediate lowering ahead
+     of it; the pair reconstructs exactly as well.  */
+  if (insnd->id == rvtt_insn_data::sfploadi_lv)
+    {
+      tree hi = gimple_call_arg (call, insnd->imm_arg ());
+      tree hi_mod = gimple_call_arg (call, insnd->mod_arg ());
+      tree link = gimple_call_arg (call, 1);
+      if (TREE_CODE (hi) != INTEGER_CST || TREE_CODE (hi_mod) != INTEGER_CST
+	  || TREE_INT_CST_LOW (hi_mod) != SFPLOADI_MOD0_UPPER
+	  || TREE_CODE (link) != SSA_NAME)
+	return false;
+      gcall *root = dyn_cast <gcall *> (SSA_NAME_DEF_STMT (link));
+      const rvtt_insn_data *rootd = root ? rvtt_get_insn_data (root) : nullptr;
+      if (!rootd || rootd->id != rvtt_insn_data::sfploadi)
+	return false;
+      tree lo = gimple_call_arg (root, rootd->imm_arg ());
+      tree lo_mod = gimple_call_arg (root, rootd->mod_arg ());
+      if (TREE_CODE (lo) != INTEGER_CST || TREE_CODE (lo_mod) != INTEGER_CST
+	  || TREE_INT_CST_LOW (lo_mod) != SFPLOADI_MOD0_USHORT)
+	return false;
+      *bits = ((((uint32_t) TREE_INT_CST_LOW (hi)) & 0xffff) << 16)
+	      | (((uint32_t) TREE_INT_CST_LOW (lo)) & 0xffff);
+      return true;
+    }
+
   if (insnd->id != rvtt_insn_data::sfpxloadi
       && insnd->id != rvtt_insn_data::sfploadi)
     return false;
@@ -648,25 +676,20 @@ slot_coeff_operand (tree val, tree vectype, gimple_stmt_iterator *gsi,
    invariant immediate for the shared preheader placement.  */
 
 static tree
-synth_packed_coeff (tree vectype, tree ptr, uint32_t word,
-		    gimple_stmt_iterator *gsi, location_t loc)
+synth_packed_coeff (tree vectype ATTRIBUTE_UNUSED, tree ptr ATTRIBUTE_UNUSED,
+		    uint32_t word, gimple_stmt_iterator *gsi, location_t loc)
 {
-  const rvtt_insn_data *ld = rvtt_get_insn_data (rvtt_insn_data::sfpxloadi);
-  gcc_assert (ld->decl);
-  tree argts[5];
-  tree t = TYPE_ARG_TYPES (TREE_TYPE (ld->decl));
-  for (int i = 0; i < 5; i++, t = TREE_CHAIN (t))
-    argts[i] = TREE_VALUE (t);
-  gcall *c = gimple_build_call (ld->decl, 5,
-				ptr,
-				build_int_cst (argts[1], word),
-				build_int_cst (argts[2], 0),
-				build_int_cst (argts[3], 0),
-				build_int_cst (argts[4], -32));
-  gimple_call_set_lhs (c, make_ssa_name (vectype));
-  gimple_set_location (c, loc);
-  gsi_insert_before (gsi, c, GSI_SAME_STMT);
-  return gimple_call_lhs (c);
+  /* Build the lowered SFPLOADI sequence rather than the structured
+     sfpxloadi: this pass runs after pass_rvtt_immvar_expand, and
+     rvtt.md expands a surviving sfpxloadi to a bare FAIL.  */
+  auto_vec<gcall *> seq;
+  tree res = rvtt_build_loadimm32 (word, &seq);
+  for (gcall *c : seq)
+    {
+      gimple_set_location (c, loc);
+      gsi_insert_before (gsi, c, GSI_SAME_STMT);
+    }
+  return res;
 }
 
 /* For a leaf duplicated across two slots, give the second slot its own
