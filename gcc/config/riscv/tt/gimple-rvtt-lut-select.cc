@@ -300,6 +300,12 @@ struct lut_group
   /* Boundary encodings found on the compares, in tree order.  */
   uint32_t boundary_bits[RVTT_LUT_MAX_RANGES - 1];
 
+  /* The statement materializing each region's boundary.  main's folded
+     sfpxcmp takes the boundary as a vector operand, so it is a
+     statement inside the region rather than an immediate on the
+     compare, and the region scan has to account for it.  */
+  gimple *boundary_def[RVTT_LUT_MAX_RANGES - 1];
+
   /* Result SSA name (lhs of the final live-value assign).  */
   tree result;
 
@@ -854,6 +860,15 @@ match_group (const rvtt_cc_region_tree *ccr, gimple_stmt_iterator gsi,
 	    }
 	  if (!match_lt_boundary (call, g->mag, &g->boundary_bits[region]))
 	    return refuse ("lut-compare-kind-unsupported", stmt);
+	  {
+	    /* The boundary's materialization is consumed by this
+	       compare and dies with the region.  Claim it only when
+	       the compare is its single use; a shared one has to
+	       outlive the tree and is not ours to delete.  */
+	    tree bnd = gimple_call_arg (call, 1);
+	    if (TREE_CODE (bnd) == SSA_NAME && has_single_use (bnd))
+	      g->boundary_def[region] = SSA_NAME_DEF_STMT (bnd);
+	  }
 	  g->fcmp[region] = stmt;
 	  want = WANT_CONDB;
 	  continue;
@@ -1033,6 +1048,9 @@ match_group (const rvtt_cc_region_tree *ccr, gimple_stmt_iterator gsi,
     {
       for (unsigned leaf = 0; leaf < num_pred; leaf++)
 	if (stmt == g->leaf_mul[leaf] || stmt == g->leaf_add[leaf])
+	  return true;
+      for (unsigned i = 0; i < num_pred; i++)
+	if (stmt == g->boundary_def[i])
 	  return true;
       /* Coefficient definitions may sit inside the region when every
 	 use is a claimed leaf statement or another coefficient (all
