@@ -1372,7 +1372,7 @@ callee_body_ok_p (function *fn, const auto_vec<contract_entry> &contract,
   for (const contract_entry &e : contract)
     loads.safe_push (e.load);
   if (!rvtt_pressure_loop_legal_p (consumer_loop, loads,
-				   /*report=*/true,   /* XXX TEMP: diagnosing crosscall-callee-pressure */
+				   /*report=*/false,
 				   /*cc_transients=*/false,
 				   /*exempt_creg_reads=*/
 				   !config.is_empty ()))
