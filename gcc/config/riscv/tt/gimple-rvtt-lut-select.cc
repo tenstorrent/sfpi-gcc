@@ -1076,6 +1076,33 @@ match_group (const rvtt_cc_region_tree *ccr, gimple_stmt_iterator gsi,
       for (unsigned i = 0; i <= dflt; i++)
 	if (lhs == g->a_coeff[i] || lhs == g->b_coeff[i])
 	  return true;
+      /* The SFPLOADI root of a chained pair is accounted for by
+	 whatever claims its SFPLOADI_LV tail -- a coefficient or a
+	 compare boundary.  Constants whose halves are both significant
+	 arrive this way since upstream moved immediate lowering ahead
+	 of this pass.  */
+      if (TREE_CODE (lhs) == SSA_NAME)
+	{
+	  gimple *use_stmt = nullptr;
+	  use_operand_p use_p;
+	  if (single_imm_use (lhs, &use_p, &use_stmt))
+	    {
+	      gcall *tail = dyn_cast <gcall *> (use_stmt);
+	      const rvtt_insn_data *td
+		= tail ? rvtt_get_insn_data (tail) : nullptr;
+	      if (td && td->id == rvtt_insn_data::sfploadi_lv)
+		{
+		  for (unsigned i = 0; i < num_pred; i++)
+		    if (tail == g->boundary_def[i])
+		      return true;
+		  tree tlhs = gimple_call_lhs (tail);
+		  if (tlhs)
+		    for (unsigned i = 0; i <= dflt; i++)
+		      if (tlhs == g->a_coeff[i] || tlhs == g->b_coeff[i])
+			return true;
+		}
+	    }
+	}
       return false;
     };
   for (gimple *stmt : pending)
