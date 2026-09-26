@@ -548,21 +548,20 @@ static bool
 match_lt_boundary (gcall *fcmp, tree mag, uint32_t *bits)
 {
   const rvtt_insn_data *insnd = rvtt_get_insn_data (fcmp);
-  /* main folded the four compare builtins into sfpxcmp: the compared
-     value and the boundary constant are its two value operands, where
-     the old scalar form had the value at arg 1 and the constant at
-     arg 2.  Reading arg 2 now would read the MOD.  */
-  rvtt_arg_info a0 (gimple_call_arg (fcmp, 0));
-  rvtt_arg_info a1 (gimple_call_arg (fcmp, 1));
-  tree value;
-  uint32_t k;
-  if (a1.is_cst () && !a0.is_cst ())
-    value = a0.get_arg (), k = a1.get_cst ();
-  else if (a0.is_cst () && !a1.is_cst ())
-    value = a1.get_arg (), k = a0.get_cst ();
-  else
+  /* main folded the four compare builtins into one vector-vector
+     sfpxcmp.  The old scalar form carried the boundary as an immediate
+     operand; it is now a materialised vector, so the constant comes
+     from that operand's definition through the same audited value
+     derivation the leaves use.  Require the magnitude on the left:
+     sfpi emits `a < b' as sfpxcmp (a, b, LT), and accepting the
+     mirrored operand order would read the relation backwards.  */
+  if (gimple_call_arg (fcmp, 0) != mag)
     return false;
-  if (value != mag)
+  tree bound = gimple_call_arg (fcmp, 1);
+  if (TREE_CODE (bound) != SSA_NAME)
+    return false;
+  uint32_t k;
+  if (!const_leaf_value_p (SSA_NAME_DEF_STMT (bound), &k))
     return false;
   long mod = rvtt_call_int_arg (fcmp, insnd->mod_arg ());
   if (mod != ((long)(SFPXCMP_MOD1_TYPE_FLOAT << SFPXCMP_MOD1_TYPE_SHIFT)
@@ -833,10 +832,13 @@ match_group (const rvtt_cc_region_tree *ccr, gimple_stmt_iterator gsi,
 	      ? refuse ("lut-structure-mismatch", stmt) : false;
 	  if (region == 0)
 	    {
-	      /* Candidate identification: a float compare whose vector
-		 operand is a float abs.  From here on refusals are
-		 reported.  */
-	      tree v = gimple_call_arg (call, 1);
+	      /* Candidate identification: a float compare whose compared
+		 value is a float abs.  main folded the four compare
+		 builtins into one vector-vector sfpxcmp, whose left
+		 operand is the compared value; the old scalar form
+		 carried it at argument 1, where the boundary now sits.
+		 From here on refusals are reported.  */
+	      tree v = gimple_call_arg (call, 0);
 	      if (TREE_CODE (v) == SSA_NAME)
 		if (gcall *abs = rvtt_call_with_id (SSA_NAME_DEF_STMT (v),
 					       rvtt_insn_data::sfpabs))
