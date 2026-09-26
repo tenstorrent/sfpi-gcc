@@ -1202,7 +1202,21 @@ discover_config_prefix (function *fn,
 		}
 	      continue;
 	    }
-	  config_prefix_entry p = { load, write, d, prefix_load_root (load) };
+	  /* The config-prefix widening does not yet rebuild a chained
+	     materialization correctly in the caller -- the cloned pair
+	     reaches expand with a dangling link -- so it fails closed
+	     on one.  The contract path above handles the pair; this is
+	     a narrowing of the widening flag, not of the base
+	     service.  */
+	  if (prefix_load_root (load))
+	    {
+	      if (dump_file)
+		fprintf (dump_file,
+			 "crosscall-hoist: config pair skipped "
+			 "(crosscall-config-chained-materialization)\n");
+	      continue;
+	    }
+	  config_prefix_entry p = { load, write, d, nullptr };
 	  pairs->safe_push (p);
 	}
     }
