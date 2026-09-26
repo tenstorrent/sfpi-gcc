@@ -378,9 +378,17 @@ void rvtt_prep_stmt_for_deletion (gimple *stmt)
     {
       tree arg = gimple_call_arg (stmt, i);
 
-      if (TREE_CODE (arg) == SSA_NAME && num_imm_uses (arg) == 1)
+      /* An earlier deletion in the same sweep may already have released
+	 this name -- a chained materialization (SFPLOADI + SFPLOADI_LV
+	 for one 32-bit constant) reaches here twice, and the second
+	 visit finds a freed operand whose def statement is null.  */
+      if (TREE_CODE (arg) == SSA_NAME
+	  && !SSA_NAME_IN_FREE_LIST (arg)
+	  && num_imm_uses (arg) == 1)
 	{
 	  gimple *def_g = SSA_NAME_DEF_STMT (arg);
+	  if (!def_g)
+	    continue;
 
 	  if (def_g->code == GIMPLE_PHI)
 	    {
