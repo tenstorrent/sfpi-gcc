@@ -6,7 +6,11 @@
 // preheader.  The in-region admission is the containment refinement:
 // the position's enable set is a subset of the preheader's, and the
 // extra lanes belong to the load's own fresh definition.
-// { dg-final { scan-tree-dump-times "Hoisted invariant SFPU immediate" 2 "rvtt_invariant" } }
+// The comparand is a materialized constant since main folded the
+// compare builtins to a vector-only sfpxcmp, so each compare against
+// a literal contributes one more loop-invariant immediate than the
+// pre-fold counts below assumed.
+// { dg-final { scan-tree-dump-times "Hoisted invariant SFPU immediate" 3 "rvtt_invariant" } }
 // { dg-final { scan-tree-dump-not "cc-position-widening-unproven" "rvtt_invariant" } }
 #define CCR_FN ccrestore_fire_wh
 #define CCR_COND(x) ((x) == 0.0f)

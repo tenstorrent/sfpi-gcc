@@ -1,7 +1,11 @@
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-unroll-loops -I [SFPI]/include -fno-exceptions -fno-rtti -mtt-tensix-optimize-invariant-loadi -fdump-tree-rvtt_invariant-details" }
 // Nested v_if: depth-2 candidate under two balanced narrowing regions
 // still satisfies containment; hoists.
-// { dg-final { scan-tree-dump-times "Hoisted invariant SFPU immediate" 1 "rvtt_invariant" } }
+// The comparand is a materialized constant since main folded the
+// compare builtins to a vector-only sfpxcmp, so each compare against
+// a literal contributes one more loop-invariant immediate than the
+// pre-fold counts below assumed.
+// { dg-final { scan-tree-dump-times "Hoisted invariant SFPU immediate" 3 "rvtt_invariant" } }
 extern volatile unsigned long __instrn_buffer[];
 namespace ckernel {
 constexpr inline volatile unsigned long (&instrn_buffer)[] = ::__instrn_buffer;

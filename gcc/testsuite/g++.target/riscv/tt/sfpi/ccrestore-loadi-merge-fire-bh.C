@@ -5,7 +5,11 @@
 // merge KEEPS its position and mask, lowering to the lane-predicated
 // SFPMOV merge (rvtt.md *rvtt_sfpassign_lv_int) now that the load no
 // longer directly precedes it.
-// { dg-final { scan-tree-dump-times "Hoisted invariant SFPU immediate" 1 "rvtt_invariant" } }
+// The comparand is a materialized constant since main folded the
+// compare builtins to a vector-only sfpxcmp, so each compare against
+// a literal contributes one more loop-invariant immediate than the
+// pre-fold counts below assumed.
+// { dg-final { scan-tree-dump-times "Hoisted invariant SFPU immediate" 2 "rvtt_invariant" } }
 // { dg-final { scan-assembler "SFPMOV.*# LV:L" } }
 extern volatile unsigned long __instrn_buffer[];
 namespace ckernel {

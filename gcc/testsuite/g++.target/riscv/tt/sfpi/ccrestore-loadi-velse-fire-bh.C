@@ -2,7 +2,11 @@
 // v_else region: SFPCOMPC bounds the else arm's enable set by the
 // region-entry save (SFPCOMPC.md) -- audited narrowing -- so
 // candidates in BOTH arms hoist.
-// { dg-final { scan-tree-dump-times "Hoisted invariant SFPU immediate" 2 "rvtt_invariant" } }
+// The comparand is a materialized constant since main folded the
+// compare builtins to a vector-only sfpxcmp, so each compare against
+// a literal contributes one more loop-invariant immediate than the
+// pre-fold counts below assumed.
+// { dg-final { scan-tree-dump-times "Hoisted invariant SFPU immediate" 3 "rvtt_invariant" } }
 extern volatile unsigned long __instrn_buffer[];
 namespace ckernel {
 constexpr inline volatile unsigned long (&instrn_buffer)[] = ::__instrn_buffer;

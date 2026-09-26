@@ -5,7 +5,11 @@
 // lanes corrupt.  The in-region candidate refuses by name; the restore
 // proof itself still holds (the POPC discards the region state), so
 // the depth-0 candidate still hoists.
-// { dg-final { scan-tree-dump-times "cc-position-widening-unproven" 1 "rvtt_invariant" } }
+// The comparand is a materialized constant since main folded the
+// compare builtins to a vector-only sfpxcmp, so each compare against
+// a literal contributes one more loop-invariant immediate than the
+// pre-fold counts below assumed.
+// { dg-final { scan-tree-dump-times "cc-position-widening-unproven" 2 "rvtt_invariant" } }
 // { dg-final { scan-tree-dump-times "Hoisted invariant SFPU immediate" 1 "rvtt_invariant" } }
 extern volatile unsigned long __instrn_buffer[];
 namespace ckernel {

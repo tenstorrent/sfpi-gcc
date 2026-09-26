@@ -4,7 +4,11 @@
 // restore proof holds and the depth-0 candidate hoists; the arm
 // candidates stay by the executes-every-entered-iteration speculation
 // guard (their blocks do not dominate the latch).
-// { dg-final { scan-tree-dump-times "Hoisted invariant SFPU immediate" 1 "rvtt_invariant" } }
+// The comparand is a materialized constant since main folded the
+// compare builtins to a vector-only sfpxcmp, so each compare against
+// a literal contributes one more loop-invariant immediate than the
+// pre-fold counts below assumed.
+// { dg-final { scan-tree-dump-times "Hoisted invariant SFPU immediate" 2 "rvtt_invariant" } }
 // { dg-final { scan-tree-dump-not "cc-restore-unstructured" "rvtt_invariant" } }
 extern volatile unsigned long __instrn_buffer[];
 namespace ckernel {
