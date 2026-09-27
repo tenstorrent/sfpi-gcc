@@ -234,7 +234,12 @@ combine (BH_QSR) {
 combine () {
   p = sfpmul_lv (lv1, a, b, mul_mod);
   r = sfpadd_lv (lv2, %p, c, add_mod);
-  { return moot_muli_ok (p_call) && moot_addi_ok (r_call); }
+  // A matched immediate fold owns the pair regardless of the current
+  // pressure estimate.  Letting this rule moot it at low pressure changes
+  // round(round(a*b)+c) into round(a*b+c), contrary to the preference and
+  // license wall above.  The explicit licensed path vetoes the fold before
+  // this rule is considered, so protecting a surviving deferral is exact.
+  { return moot_muli_ok (p_call, true) && moot_addi_ok (r_call, true); }
   {
     // For WH mul_mod and add_mod will be zero
     unsigned iadd_mod = TREE_INT_CST_LOW (add_mod);

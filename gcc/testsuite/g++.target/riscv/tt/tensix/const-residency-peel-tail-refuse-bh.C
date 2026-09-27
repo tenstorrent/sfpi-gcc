@@ -34,7 +34,9 @@ void peel_noncanonical_word (void)
       __builtin_rvtt_sfppushc (0);
       __builtin_rvtt_sfpsetcc (x, 0);
       __builtin_rvtt_sfppopc (0);
-      __builtin_rvtt_sfpencc (10, 3);
+      // EI_R1 with BOTH also leaves both flags set, but it is not the
+      // word-exact EI_RI capability used by the canonical-tail proof.
+      __builtin_rvtt_sfpencc (2, 3);
     }
   __builtin_rvtt_sfpwritelreg (x, 1);
 }
