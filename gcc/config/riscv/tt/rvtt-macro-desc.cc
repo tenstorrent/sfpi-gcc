@@ -892,12 +892,12 @@ swap_cst_template_fields (rtx_insn *insn, uint8_t *src_c, uint8_t *mod1)
   if (GET_CODE (pat) != SET)
     return false;		/* dual-result / dual-constant forms   */
   rtx un = SET_SRC (pat);
-  if (GET_CODE (un) != UNSPEC_VOLATILE || XVECLEN (un, 0) != 4)
+  if (GET_CODE (un) != UNSPEC_VOLATILE || XVECLEN (un, 0) != 5)
     return false;
   rtx a = XVECEXP (un, 0, 0);
   rtx b = XVECEXP (un, 0, 1);
   rtx mod = XVECEXP (un, 0, 2);
-  rtx marker = XVECEXP (un, 0, 3);
+  rtx marker = XVECEXP (un, 0, 4);
   if (!CONST_INT_P (mod) || !CONST_INT_P (marker))
     return false;
   HOST_WIDE_INT m = INTVAL (mod);
