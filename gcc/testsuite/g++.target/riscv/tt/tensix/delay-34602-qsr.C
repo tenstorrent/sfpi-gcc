@@ -1,6 +1,10 @@
 // { dg-options "-mcpu=tt-qsr32-tensix -fno-exceptions -fno-rtti -O2 -mno-tt-tensix-optimize-dce" }
 // { dg-final { check-function-bodies "**" "" } }
 
+// The campaign scheduler hoists mask setup ahead of the independent shift.
+// Keep the complete body check: SFPU ordering, dynamic delivery and required
+// SFPNOP spacing must remain exact despite this scalar-only rescheduling.
+
 extern volatile unsigned long iptr[];
 
 namespace dyn {
@@ -39,9 +43,9 @@ void one (unsigned i) {
 /*
 **_ZN3dyn3oneEj:
 **	SFPLOAD	L0, 0, 0, 0, 0, 0
-**	slli	a0,a0,8
 **	li	a5,16777216
 **	addi	a5,a5,-256
+**	slli	a0,a0,8
 **	and	a0,a0,a5
 **	li	a5, 1946157056	# 1:74000000
 **	add	a0,a0,a5
@@ -59,10 +63,10 @@ void two (unsigned i) {
 /*
 **_ZN3dyn3twoEj:
 **	SFPLOAD	L0, 0, 0, 0, 0, 0
-**	slli	a0,a0,8
-**	SFPMOV	L1, L0, 2
 **	li	a5,16777216
+**	SFPMOV	L1, L0, 2
 **	addi	a5,a5,-256
+**	slli	a0,a0,8
 **	and	a0,a0,a5
 **	li	a5, 1946157072	# 1:74000010
 **	add	a0,a0,a5
@@ -139,4 +143,3 @@ void three () {
 */
 
 }
-
