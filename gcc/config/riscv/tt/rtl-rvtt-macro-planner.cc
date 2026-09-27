@@ -196,14 +196,23 @@ form_region (function *fn, macro_region &region,
   basic_block scoped_preheader = nullptr;
   if (!planner_config_ownership_ok (fn, c))
     {
-      /* WP9: proven CC-template programs fall back to the region-scoped
-	 ownership proof (see planner_region_config_ownership_ok); every
-	 other shape keeps the conservative function-global gate.  */
       bool scoped_ok = false;
-      if (desc.cc.active)
+
+      /* A structural loop preheader gives every loop-body calendar the
+	 documented preheader-tail + body ownership window.  Foreign init,
+	 calls, and configuration before that insertion point are overwritten
+	 by the complete prefix and lie outside the descriptor lifetime.  */
+      if (region.loop_body)
 	{
-	  basic_block scoped_preheader = region.loop_body
-	    ? loop_region_preheader (fn, region, nullptr) : nullptr;
+	  scoped_preheader = loop_region_preheader (fn, region, nullptr);
+	  scoped_ok = scoped_preheader && planner_config_window_ok (region);
+	}
+
+      /* CC-template programs additionally admit the established
+	 region-scoped proof, including straight-line shapes that have no
+	 structural loop preheader.  */
+      if (!scoped_ok && desc.cc.active)
+	{
 	  if (!region.loop_body || scoped_preheader)
 	    {
 	      rtx_insn *anchor = region.rows[0].enable
