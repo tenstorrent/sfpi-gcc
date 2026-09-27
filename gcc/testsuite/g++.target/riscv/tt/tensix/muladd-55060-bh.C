@@ -4,6 +4,8 @@
 extern volatile unsigned long iptr[];
 
 void muladd1 () {
+  // Default contraction must not discard matched immediate folds and
+  // silently replace separate multiply/add rounding with fused rounding.
   auto a = __builtin_rvtt_sfpreadlreg (0);
   auto b = __builtin_rvtt_sfploadi (nullptr, 0xbf88, 0, 0, 0);
   auto c = __builtin_rvtt_sfploadi (nullptr, 0x3f88, 0, 0, 0);
@@ -15,9 +17,9 @@ void muladd1 () {
 /*
 **_Z7muladd1v:
 **	# READ L0
-**	SFPLOADI	L1, 49032, 0
-**	SFPLOADI	L2, 16264, 0
-**	SFPMAD	L3, L0, L1, L2, 0
+**	SFPMULI	L0, 49032, 0
+**	SFPMOV	L3, L0, 2
+**	SFPADDI	L3, 16264, 0
 **	# WRITE L3
 **	ret
 */
