@@ -548,17 +548,23 @@ rvtt_invariant_constant_load_p (gcall *call, class loop *loop,
       || !all_uses_in_loop_p (lhs, loop))
     return false;
 
-  /* Do not expose both halves of a lowered pair as two candidates.  The
-     root is only an implementation detail of the tail's one 32-bit value;
-     the qualified tail owns discovery, pricing and movement.  */
+  /* Do not expose either a complete lowered pair or a partially shared
+     root as an independent root candidate.  The tail owns discovery,
+     pricing and movement only when it is the root's sole use; otherwise
+     both halves refuse atomically.  Moving just the root would split the
+     materialization across the loop boundary.  */
   if (!root && insnd->id == rvtt_insn_data::sfploadi)
     {
-      use_operand_p use_p;
+      imm_use_iterator iter;
       gimple *use_stmt;
-      if (single_imm_use (lhs, &use_p, &use_stmt))
+      FOR_EACH_IMM_USE_STMT (use_stmt, iter, lhs)
 	if (gcall *tail = dyn_cast <gcall *> (use_stmt))
-	  if (rvtt_chained_loadi_root (tail) == call)
-	    return false;
+	  {
+	    const rvtt_insn_data *taild = rvtt_get_insn_data (tail);
+	    if (taild && taild->id == rvtt_insn_data::sfploadi_lv
+		&& gimple_call_arg (tail, 1) == lhs)
+	      return false;
+	  }
     }
 
   for (unsigned ix = 1; ix != gimple_call_num_args (call); ++ix)
