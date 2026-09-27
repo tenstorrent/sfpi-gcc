@@ -8293,7 +8293,7 @@ rvtt_macro_interrow_drain_tuned (function *fn, const macro_region &region,
   int carrier_pos[8];
   for (int m = 0; m != 8; ++m)
     carrier_pos[m] = -1;
-  int words_per_row = 0, last_issue = -1;
+  int words_per_row = 0;
   for (int slot = 0; slot != schedule.ii; ++slot)
     for (unsigned ix = 0; ix != schedule.events.length (); ++ix)
       {
@@ -8304,7 +8304,6 @@ rvtt_macro_interrow_drain_tuned (function *fn, const macro_region &region,
 	if (ev.is_carrier && ev.macro_index < 8)
 	  carrier_pos[ev.macro_index] = words_per_row;
 	++words_per_row;
-	last_issue = ev.slot;
       }
   if (words_per_row == 0)
     return refuse ("window-pairing-footprint-opaque");

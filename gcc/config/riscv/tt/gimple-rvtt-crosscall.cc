@@ -1137,8 +1137,6 @@ discover_config_prefix (function *fn,
 			const auto_vec<contract_entry> &contract,
 			auto_vec<config_prefix_entry> *pairs)
 {
-  const rvtt_insn_data *write_d
-    = rvtt_get_insn_data (rvtt_insn_data::sfpwriteconfig_v);
   basic_block bb;
   FOR_EACH_BB_FN (bb, fn)
     {
