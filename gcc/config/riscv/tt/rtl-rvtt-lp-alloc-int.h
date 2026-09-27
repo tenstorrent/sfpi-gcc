@@ -70,7 +70,7 @@ struct lpa_web
 {
   unsigned regno;
   int precolor;			/* -1, or the pinned LREG index */
-  bool reservation;		/* livein sentinel: never spill */
+  bool reservation;		/* raw livein interval: never spill */
   bool reload_tmp;		/* spill-generated: never spill */
   unsigned occ;			/* occurrence count (spill cost) */
 };

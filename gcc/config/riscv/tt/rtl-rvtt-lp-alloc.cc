@@ -60,12 +60,11 @@ along with GCC; see the file COPYING3.  If not see
       saturation-degree order (DSATUR, cited above) over the
       eight-register LREG file.
 
-      - The interference graph is built over XTT32SI pseudo webs after
-	pass_rvtt_lreg_livein has materialized every raw-LREG
-	reservation as a sentinel pseudo interval, so raw reservations
-	participate as ordinary precolored nodes.  Precolors come from
-	the singleton-class constraints of the rvtt_sfpreadlregN /
-	rvtt_sfpwritelregN metadata patterns.
+      - The interference graph is built over XTT32SI pseudo webs and
+	fixed hard-LREG reservation intervals after pass_rvtt_lreg_livein
+	has made raw ownership visible.  Reservations are fixed-color,
+	nonspillable nodes; ordinary singleton-class precolors still come
+	from rvtt_sfpreadlregN / rvtt_sfpwritelregN metadata patterns.
 
       - When the function's peak simultaneous SFPU pressure fits the
 	file, the pass is a proven NO-OP: nothing is emitted, nothing
@@ -849,8 +848,8 @@ enforce_colorability (function *fn)
      - matching equality: a matching constraint between two XTT32SI
        webs unifies their colors under this alternative choice.
 
-     - base constraints: graph precolors (livein reservation
-       sentinels) and every single-alternative pin site.
+     - base constraints: graph precolors (including hard livein
+       reservations) and every single-alternative pin site.
 
      - solve: deterministic depth-first search over the relational
        sites' alternatives (insn order, alternative order), pruned by
@@ -1035,8 +1034,10 @@ collect_pin_sites (function *fn, const lpa_graph &g,
 		  const operand_alternative &oa
 		    = recog_op_alt[a * nops + i];
 		  rtx op = recog_data.operand[i];
-		  bool xtt_reg = REG_P (op)
+		  bool xtt_pseudo = REG_P (op)
 		    && xtt32_pseudo_p (REGNO (op));
+		  bool xtt_hard = REG_P (op) && SFPU_REG_P (REGNO (op));
+		  bool xtt_reg = xtt_pseudo || xtt_hard;
 		  int lreg = singleton_sfpu_lreg ((enum reg_class) oa.cl);
 		  if (lreg >= 0)
 		    {
@@ -1049,6 +1050,12 @@ collect_pin_sites (function *fn, const lpa_graph &g,
 			  feasible = false;
 			  break;
 			}
+		      if (xtt_hard
+			  && REGNO (op) != SFPU_REG_FIRST + (unsigned) lreg)
+			{
+			  feasible = false;
+			  break;
+			}
 		      int node = g.node_of_reg[REGNO (op)];
 		      if (node < 0)
 			{
@@ -1056,14 +1063,20 @@ collect_pin_sites (function *fn, const lpa_graph &g,
 			  *why_at = insn;
 			  return false;
 			}
-		      alt.req_node[alt.nreq] = node;
-		      alt.req_lreg[alt.nreq] = lreg;
-		      alt.nreq++;
+		      if (xtt_pseudo)
+			{
+			  alt.req_node[alt.nreq] = node;
+			  alt.req_lreg[alt.nreq] = lreg;
+			  alt.nreq++;
+			}
 		    }
 		  if (oa.matches >= 0 && xtt_reg)
 		    {
 		      rtx mop = recog_data.operand[oa.matches];
-		      if (REG_P (mop) && xtt32_pseudo_p (REGNO (mop)))
+		      bool mop_xtt = REG_P (mop)
+			&& (xtt32_pseudo_p (REGNO (mop))
+			    || SFPU_REG_P (REGNO (mop)));
+		      if (mop_xtt)
 			{
 			  int na = g.node_of_reg[REGNO (op)];
 			  int nb = g.node_of_reg[REGNO (mop)];
@@ -1559,7 +1572,7 @@ bind_dual_bank_chains (function *fn)
   for (unsigned i = 0; i < n; i++)
     {
       bound[i] = sol.col[bind_find (sol, i)];
-      if (bound[i] >= 0)
+      if (bound[i] >= 0 && xtt32_pseudo_p (g.webs[i].regno))
 	n_bound++;
     }
 
@@ -1582,7 +1595,7 @@ bind_dual_bank_chains (function *fn)
      a bad binding is a loud reload failure, never silent.  */
   for (unsigned i = 0; i < n; i++)
     {
-      if (bound[i] < 0)
+      if (bound[i] < 0 || !xtt32_pseudo_p (g.webs[i].regno))
 	continue;
       rtx preg = regno_reg_rtx[g.webs[i].regno];
       rtx hard = gen_rtx_REG (XTT32SImode, SFPU_REG_FIRST + bound[i]);

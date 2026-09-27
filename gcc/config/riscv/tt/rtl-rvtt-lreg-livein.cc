@@ -133,8 +133,8 @@
                                     closings are plain USEs
      - downstream consumer          rtl-rvtt-lp-alloc.cc builds its
                                     interference graph after this pass
-                                    so raw reservations are precolored
-                                    nodes
+				    so hard raw reservations are fixed-
+				    color, nonspillable nodes
 
    BIRTH KERNEL.  None, and none is possible: the pass has NO flag, so
    it has no FIRE-BREADTH.tsv row, no birth row and no birth_share --
@@ -234,9 +234,10 @@ raw_access_p (rtx_insn *insn, unsigned *release_mask, unsigned *write_mask)
   return true;
 }
 
-/* RTL for a sentinel read of hard LREG REGNO defining the pseudo VALUE:
-   a zero-length fixed-register read whose interval is what makes IRA
-   reserve the LREG.  */
+/* RTL for a sentinel read of hard LREG REGNO defining VALUE, which is the
+   same hard register.  Using a pseudo here is insufficient: IRA may allocate
+   it to another LREG and leave reload to satisfy the fixed output constraint,
+   so the raw-owned LREG would not be reserved during allocation.  */
 
 static rtx
 make_sentinel (unsigned regno, rtx value)
@@ -333,12 +334,11 @@ transfer_block (basic_block bb, unsigned live)
 
 /* Pass body over FN.  First solve a forward dataflow fixed point over
    the per-block raw-liveness masks; then, per block, materialize each
-   raw interval as a fresh XTT32SImode pseudo defined by a sentinel read
-   of its LREG -- before the first real insn for values live on entry,
-   after the raw write otherwise -- and end it with a USE at the
-   consuming builtin, the releasing or rewriting raw access, or block
-   end.  Each block gets its own local pseudo for a value it inherits,
-   deliberately avoiding any cross-CFG pseudo or phi.  */
+   raw interval as a sentinel read of its hard LREG -- before the first real
+   insn for values live on entry, after the raw write otherwise -- and end it
+   with a USE at the consuming builtin, the releasing or rewriting raw access,
+   or block end.  Each block gets its own local interval, deliberately avoiding
+   any cross-CFG pseudo or phi.  */
 
 static void
 make_raw_lregs_live (function *fn)
@@ -393,7 +393,8 @@ make_raw_lregs_live (function *fn)
       for (unsigned regno = 0; regno != 8; ++regno)
         if (in[bb->index] & (1u << regno))
           {
-            rtx value = gen_reg_rtx (XTT32SImode);
+	    rtx value = gen_rtx_REG (XTT32SImode,
+				     SFPU_REG_FIRST + regno);
             live[regno] = value;
             producer[regno] = emit_sentinel_before (regno, value, first);
           }
@@ -419,7 +420,8 @@ make_raw_lregs_live (function *fn)
                 if (writes & (1u << regno))
                   {
                     end_sentinel (live[regno], insn);
-                    rtx value = gen_reg_rtx (XTT32SImode);
+		    rtx value = gen_rtx_REG (XTT32SImode,
+					     SFPU_REG_FIRST + regno);
                     producer[regno] = emit_sentinel_after (regno, value, insn);
                     live[regno] = value;
                   }
@@ -465,7 +467,7 @@ public:
   unsigned execute (function *fn) final override
   {
     make_raw_lregs_live (fn);
-    return TODO_df_finish;
+    return 0;
   }
 };
 

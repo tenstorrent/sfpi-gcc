@@ -702,6 +702,16 @@ xtt32_pseudo_p (unsigned regno)
     && GET_MODE (regno_reg_rtx[regno]) == XTT32SImode;
 }
 
+/* Whether REGNO is one allocation unit represented in the coloring graph.
+   Hard LREGs occur here only for raw-ownership reservation intervals emitted
+   by pass_rvtt_lreg_livein; all other values remain pseudos.  */
+
+static bool
+xtt32_graph_unit_p (unsigned regno)
+{
+  return SFPU_REG_P (regno) || xtt32_pseudo_p (regno);
+}
+
 /* Record a precolor on NODE; conflicting constraints fail closed.  */
 
 static void
@@ -720,9 +730,9 @@ set_precolor (lpa_graph &g, int node, int color, rtx_insn *insn)
   w.precolor = color;
 }
 
-/* Build webs (pseudo = web) and the interference graph.  Requires
-   up-to-date DF LR.  SPILL_TMPS marks reload pseudos from earlier
-   rounds.  */
+/* Build webs (pseudo or fixed hard reservation = web) and the interference
+   graph.  Requires up-to-date DF LR.  SPILL_TMPS marks reload pseudos from
+   earlier rounds.  */
 
 void
 build_graph (function *fn, lpa_graph &g, bitmap spill_tmps)
@@ -743,6 +753,9 @@ build_graph (function *fn, lpa_graph &g, bitmap spill_tmps)
 	    continue;
 	  rtx pat = PATTERN (insn);
 	  bool bare_use = GET_CODE (pat) == USE;
+	  int code = recog_memoized (insn);
+	  int read_lregno = sentinel_read_lregno (code);
+	  rtx read_set = read_lregno >= 0 ? single_set (insn) : NULL_RTX;
 
 	  subrtx_iterator::array_type array;
 	  FOR_EACH_SUBRTX (iter, array, pat, ALL)
@@ -754,11 +767,38 @@ build_graph (function *fn, lpa_graph &g, bitmap spill_tmps)
 	      machine_mode mode = GET_MODE (x);
 	      if (regno < FIRST_PSEUDO_REGISTER)
 		{
-		  if (SFPU_REG_P (regno) && !g.fail)
+		  if (!SFPU_REG_P (regno))
+		    continue;
+
+		  /* The livein pass emits only a recognized zero-length read of
+		     the matching hard LREG and a bare USE endpoint.  Keep the
+		     historical refusal for every other hard-SFPU shape.  */
+		  bool reservation_def
+		    = read_lregno == (int) (regno - SFPU_REG_FIRST)
+		      && read_set && REG_P (SET_DEST (read_set))
+		      && REGNO (SET_DEST (read_set)) == regno;
+		  if (!bare_use && !reservation_def)
 		    {
-		      g.fail = "hard-sfpu-reg-pre-ira";
-		      g.fail_at = insn;
+		      if (!g.fail)
+			{
+			  g.fail = "hard-sfpu-reg-pre-ira";
+			  g.fail_at = insn;
+			}
+		      continue;
 		    }
+
+		  int node = g.node_of_reg[regno];
+		  if (node < 0)
+		    {
+		      lpa_web w = {};
+		      w.regno = regno;
+		      w.precolor = regno - SFPU_REG_FIRST;
+		      w.reservation = true;
+		      node = g.webs.length ();
+		      g.webs.safe_push (w);
+		      g.node_of_reg[regno] = node;
+		    }
+		  g.webs[node].occ++;
 		  continue;
 		}
 	      if (mode == XTT64SImode || mode == XTT128SImode)
@@ -789,8 +829,7 @@ build_graph (function *fn, lpa_graph &g, bitmap spill_tmps)
 		g.webs[node].reservation = true;
 	    }
 
-	  int code = recog_memoized (insn);
-	  int lregno = sentinel_read_lregno (code);
+	  int lregno = read_lregno;
 	  if (lregno >= 0)
 	    {
 	      rtx set = single_set (insn);
@@ -844,7 +883,7 @@ build_graph (function *fn, lpa_graph &g, bitmap spill_tmps)
 	  FOR_EACH_INSN_DEF (def, insn)
 	    {
 	      unsigned dregno = DF_REF_REGNO (def);
-	      if (!xtt32_pseudo_p (dregno))
+	      if (!xtt32_graph_unit_p (dregno))
 		continue;
 	      int dnode = g.node_of_reg[dregno];
 	      if (dnode < 0)
@@ -854,7 +893,7 @@ build_graph (function *fn, lpa_graph &g, bitmap spill_tmps)
 	      bitmap_iterator bi;
 	      EXECUTE_IF_SET_IN_BITMAP (live, 0, lregno, bi)
 		{
-		  if (!xtt32_pseudo_p (lregno) || lregno == dregno)
+		  if (!xtt32_graph_unit_p (lregno) || lregno == dregno)
 		    continue;
 		  int lnode = g.node_of_reg[lregno];
 		  if (lnode < 0 || lnode == move_src_node)
@@ -866,7 +905,7 @@ build_graph (function *fn, lpa_graph &g, bitmap spill_tmps)
 	      FOR_EACH_INSN_DEF (def2, insn)
 		{
 		  unsigned d2 = DF_REF_REGNO (def2);
-		  if (d2 != dregno && xtt32_pseudo_p (d2)
+		  if (d2 != dregno && xtt32_graph_unit_p (d2)
 		      && g.node_of_reg[d2] >= 0)
 		    g.add_conflict (dnode, g.node_of_reg[d2]);
 		}

@@ -1,12 +1,13 @@
 // Raw-LREG reservation twin: a raw producer holds L7 (the ownership
-// marker mints a livein sentinel interval ending in a bare USE), four
+// marker mints a hard-LREG livein interval ending in a bare USE), four
 // more inputs are pinned by their reads, and four loop-carried
 // computed values push the peak to nine.  The allocator must spill
-// only unreserved webs -- the sentinel is a precolored node that
+// only unreserved webs -- the reservation is a fixed-color node that
 // constrains coloring, never a candidate -- and still prove
 // colorability with the reservation held.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-unroll-loops -mtt-tensix-optimize-lreg-alloc -mtt-tensix-dst-layout-32b -fdump-rtl-rvtt_lp_alloc-details" }
 // { dg-final { scan-rtl-dump "colorability=proven" "rvtt_lp_alloc" } }
+// { dg-final { scan-rtl-dump-not "hard-sfpu-reg-pre-ira" "rvtt_lp_alloc" } }
 // { dg-final { scan-assembler "# RAWLREG 0, 128" } }
 // { dg-final { scan-assembler {\mSFPSTORE\tL[0-7], 252, 4, 7} } }
 
