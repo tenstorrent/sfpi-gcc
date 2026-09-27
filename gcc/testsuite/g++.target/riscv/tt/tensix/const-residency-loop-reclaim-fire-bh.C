@@ -16,7 +16,9 @@
 // { dg-final { scan-tree-dump-times "reusing TU-programmed PRGM L12 .every TU write stores 0x3e317218" 1 "rvtt_prgm_const" } }
 // { dg-final { scan-tree-dump-times "reclaiming DEAD-claimed PRGM L13 for 0x3f000000 .loop class" 1 "rvtt_prgm_const" } }
 // { dg-final { scan-tree-dump-times "reclaiming DEAD-claimed PRGM L14 for 0x40490fdb .loop class" 1 "rvtt_prgm_const" } }
-// { dg-final { scan-tree-dump-times "refused .prgm-exhausted.: _\\d+ = __builtin_rvtt_sfploadi .0B, 16560" 1 "rvtt_prgm_const" } }
+// The final value now reaches this late pass as the lowered two-issue
+// SFPLOADI chain; pin the capacity verdict, not one member's spelling.
+// { dg-final { scan-tree-dump-times "refused .prgm-exhausted." 1 "rvtt_prgm_const" } }
 // Five programming placements (the duplicate-value second statements
 // re-program their shared slot: same register, same value -- the
 // shipped redundant-but-sound path, and on a reclaimed slot the forced
