@@ -3179,7 +3179,22 @@
      ] UNSPECV_SFPCONFIG)]
   "TARGET_XTT_TENSIX"
   "SFPCONFIG\t%2, 0, %1\t# R:%x0 CFG:%2"
-  [(set_attr "type" "tensix")
+  [(set_attr "xtt_subunit" "cfg")
+   ;; Operand 0 supplies the value from L0.  Numeric LREG attributes
+   ;; encode the operand-position mask plus one, hence bit 0 + 1 == 2.
+   (set_attr "xtt_lreg_read_ops" "2")
+   (set_attr "xtt_lreg_write_ops" "1")
+   ;; SFPCONFIG is lane-gated and writes the destination named by
+   ;; operand 2.  Keep it a replay barrier: the written LaneConfig bits
+   ;; can change the meaning of neighbouring instructions.  This is the
+   ;; value-form counterpart of the audited rvtt_sfpconfig_i attributes
+   ;; below.
+   (set_attr "xtt_cc_effect" "read")
+   (set_attr "xtt_config_effect" "dest")
+   (set_attr "xtt_config_dest_op" "3")
+   (set_attr "xtt_rwc_effect" "none")
+   (set_attr "type" "tensix")
+   (set_attr "xtt_replay" "barrier")
    (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_BH | XTT_DYNAMIC_BUG_QSR)"))])
 
 (define_expand "rvtt_sfpwriteconfig_i"
