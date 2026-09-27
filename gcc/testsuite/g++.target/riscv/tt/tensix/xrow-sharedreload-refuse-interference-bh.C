@@ -1,7 +1,7 @@
 // The direct unsound-shape near-miss: the two
 // halves interact through registers BEYOND the shared reload one -- a
 // loop-carried accumulator is live into the row (the renamer refuses
-// round-interleave-rename-live-in), and the row's pressure (four
+// round-interleave-rename-live-in), and the row's pressure (three
 // pinned invariants) starves the copy's remaining webs after one
 // rename, so the y chain stays shared too.  The epoch merge would move
 // copy-half words that write those shared registers ahead of
@@ -18,12 +18,11 @@ void carried_accumulator_row (void)
   auto acc = __builtin_rvtt_sfpxloadi (nullptr, 0x3f800000, 0, 0, 31);
   auto k5 = __builtin_rvtt_sfpxloadi (nullptr, 0x3f000000, 0, 0, 31);
   auto k6 = __builtin_rvtt_sfpxloadi (nullptr, 0x3e800000, 0, 0, 31);
-  auto k7 = __builtin_rvtt_sfpxloadi (nullptr, 0x3e000000, 0, 0, 31);
   for (unsigned r = 0; r != 32; ++r)
     {
       auto x = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 7);
       auto y = __builtin_rvtt_sfpmad (x, k5, k6, 0);
-      y = __builtin_rvtt_sfpmad (y, x, k7, 0);
+      y = __builtin_rvtt_sfpmad (y, x, k6, 0);
       auto c3 = __builtin_rvtt_sfpxloadi (nullptr, 0xbefa66db, 0, 0, 31);
       acc = __builtin_rvtt_sfpmad (acc, x, c3, 0);
       auto c1 = __builtin_rvtt_sfpxloadi (nullptr, 0x3f7fbec0, 0, 0, 31);
