@@ -2427,6 +2427,7 @@ residency_transform (function *fn, prgm_state *st)
       /* The materialization becomes a constant-register read keeping
 	 its SSA name: every use follows untouched, and the read
 	 expands to a zero-pressure cstlreg unspec.  */
+      gcall *chain_root = rvtt_chained_loadi_root (c.load);
       gimple_stmt_iterator lgsi = gsi_for_stmt (c.load);
       gcall *read = gimple_build_call
 	(readlreg_d->decl, 1, build_int_cst (unsigned_type_node, prgm));
@@ -2439,6 +2440,18 @@ residency_transform (function *fn, prgm_state *st)
 	    release_ssa_name (vdef);
 	}
       gsi_replace (&lgsi, read, false);
+      /* Immediate lowering split this value into a root and tail.  The
+	 read replaces the whole materialization, so retaining the now-dead
+	 root would still emit an architectural SFPLOADI side effect.  */
+      if (chain_root)
+	{
+	  gimple_stmt_iterator rgsi = gsi_for_stmt (chain_root);
+	  if (tree vdef = gimple_vdef (chain_root))
+	    if (TREE_CODE (vdef) == SSA_NAME)
+	      unlink_stmt_vdef (chain_root);
+	  gsi_remove (&rgsi, true);
+	  release_defs (chain_root);
+	}
 
       if (dump_file && reprogram)
 	fprintf (dump_file,
@@ -2556,6 +2569,7 @@ residency_transform (function *fn, prgm_state *st)
 	}
       basic_block preheader = prepeel ? rec->copy_bb
 	: rvtt_commit_hoist_preheader (c.entry);
+      gcall *chain_root = rvtt_chained_loadi_root (c.load);
       /* Same virtual-operand discipline as the invariant pass's hoist:
 	 only a renamed SSA vdef has uses to unlink or a name to
 	 release; the pass-level TODO renumbers the rest.  */
@@ -2573,6 +2587,23 @@ residency_transform (function *fn, prgm_state *st)
 	  gimple_set_vuse (c.load, NULL_TREE);
 	  update_stmt (c.load);
 	}
+      if (chain_root)
+	{
+	  if (tree vdef = gimple_vdef (chain_root))
+	    {
+	      if (TREE_CODE (vdef) == SSA_NAME)
+		{
+		  unlink_stmt_vdef (chain_root);
+		  release_ssa_name (vdef);
+		}
+	      gimple_set_vdef (chain_root, NULL_TREE);
+	    }
+	  if (gimple_vuse (chain_root))
+	    {
+	      gimple_set_vuse (chain_root, NULL_TREE);
+	      update_stmt (chain_root);
+	    }
+	}
       gimple_stmt_iterator from = gsi_for_stmt (c.load);
       bool erased_copy = false;
       if (prepeel)
@@ -2581,12 +2612,31 @@ residency_transform (function *fn, prgm_state *st)
 	     before the peeled iteration under the proven all-lanes
 	     ambient.  */
 	  gimple_stmt_iterator at = gsi_after_labels (preheader);
+	  gimple *root = nullptr;
+	  if (chain_root)
+	    {
+	      gimple_stmt_iterator root_from = gsi_for_stmt (chain_root);
+	      root = gsi_stmt (root_from);
+	      gsi_remove (&root_from, false);
+	    }
 	  gimple *load = gsi_stmt (from);
 	  gsi_remove (&from, false);
 	  if (gsi_end_p (at))
-	    gsi_insert_before (&at, load, GSI_NEW_STMT);
+	    {
+	      if (root)
+		{
+		  gsi_insert_before (&at, root, GSI_NEW_STMT);
+		  gsi_insert_after (&at, load, GSI_NEW_STMT);
+		}
+	      else
+		gsi_insert_before (&at, load, GSI_NEW_STMT);
+	    }
 	  else
-	    gsi_insert_before (&at, load, GSI_SAME_STMT);
+	    {
+	      if (root)
+		gsi_insert_before (&at, root, GSI_SAME_STMT);
+	      gsi_insert_before (&at, load, GSI_SAME_STMT);
+	    }
 	  /* Erase the peel's duplicated materialization: the parked
 	     definition dominates the whole peel block and carries the
 	     identical constant in every lane the copy wrote (and the
@@ -2602,12 +2652,34 @@ residency_transform (function *fn, prgm_state *st)
 		    gimple_stmt_iterator cgsi = gsi_for_stmt (cp);
 		    gsi_remove (&cgsi, true);
 		    release_defs (cp);
+		    /* PREPEEL moves the complete lowered pair.  Its copied
+		       root is dead together with the copied tail.  */
+		    if (chain_root)
+		      if (tree *fresh_root
+			  = rec->names.get (gimple_call_lhs (chain_root)))
+			if (*fresh_root && TREE_CODE (*fresh_root) == SSA_NAME)
+			  {
+			    gimple *rcp = SSA_NAME_DEF_STMT (*fresh_root);
+			    if (rcp && gimple_bb (rcp) == rec->copy_bb)
+			      {
+				gimple_stmt_iterator rgsi = gsi_for_stmt (rcp);
+				gsi_remove (&rgsi, true);
+				release_defs (rcp);
+			      }
+			  }
 		    erased_copy = true;
 		  }
 	      }
 	}
       else
-	gsi_move_to_bb_end (&from, preheader);
+	{
+	  if (chain_root)
+	    {
+	      gimple_stmt_iterator root_from = gsi_for_stmt (chain_root);
+	      gsi_move_to_bb_end (&root_from, preheader);
+	    }
+	  gsi_move_to_bb_end (&from, preheader);
+	}
       --lreg_budget;
       if (dump_file)
 	{

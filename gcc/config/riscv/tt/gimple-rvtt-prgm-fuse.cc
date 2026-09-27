@@ -211,15 +211,10 @@ madpair_vocab_mul_p (tree src, class loop *loop, gimple *only_use,
   return def;
 }
 
-/* An in-loop invariant constant materialization defining SRC whose
-   full 32-bit lane image is recoverable through the audited
-   single-issue-chain derivation (single_issue_constant_image_p below:
-   the sfpxloadi 31/32/-32 verbatim-image forms and the shortened
-   SFPLOADI FLOATB form -- the same recovery the residency classes
-   use).  Other encodings refuse (their value reconstruction is not on
-   record).  */
-
-bool single_issue_constant_image_p (gcall *load, unsigned *value);
+/* An in-loop invariant constant materialization defining SRC whose full
+   32-bit lane image is recoverable through the shared rematerialization
+   chain derivation.  This includes the lowered SFPLOADI+SFPLOADI_LV pair
+   that replaced the former one-call sfpxloadi spelling.  */
 
 static gcall *
 invariant_float_load_p (tree src, class loop *loop, gimple *only_use,
@@ -228,13 +223,16 @@ invariant_float_load_p (tree src, class loop *loop, gimple *only_use,
   if (TREE_CODE (src) != SSA_NAME)
     return nullptr;
   gcall *load = dyn_cast <gcall *> (SSA_NAME_DEF_STMT (src));
+  remat_chain chain;
   if (!load
       || !gimple_bb (load)
       || !flow_bb_inside_loop_p (loop, gimple_bb (load))
       || !rvtt_invariant_constant_load_p (load, loop,
 					  /*allow_shortened=*/true)
       || !single_nondebug_use_p (src, only_use)
-      || !single_issue_constant_image_p (load, value))
+      || !remat_chain_p (src, &chain)
+      || chain.tail != load
+      || !constant_chain_value_p (chain, value))
     return nullptr;
   return load;
 }
@@ -418,12 +416,15 @@ hoisted_madpair_load_p (tree src, class loop *loop, gimple *only_use,
   if (TREE_CODE (src) != SSA_NAME)
     return nullptr;
   gcall *load = dyn_cast <gcall *> (SSA_NAME_DEF_STMT (src));
+  remat_chain chain;
   if (!load
       || !gimple_bb (load)
       || flow_bb_inside_loop_p (loop, gimple_bb (load))
       || !rvtt_invariant_constant_load_p (load, loop,
 					  /*allow_shortened=*/true)
-      || !single_issue_constant_image_p (load, value))
+      || !remat_chain_p (src, &chain)
+      || chain.tail != load
+      || !constant_chain_value_p (chain, value))
     return nullptr;
   /* Fold-vulnerable = the materialization's spelling is one the
      downstream muli/addi immediate folds match, answered from the
@@ -804,12 +805,22 @@ transform (function *fn, prgm_state *st)
 	    if (gimple_call_arg (c.addi, ix) == load_lhs)
 	      gimple_call_set_arg (c.addi, ix, creg);
 	  update_stmt (c.addi);
+	  gcall *root = rvtt_chained_loadi_root (c.loadi);
 	  gimple_stmt_iterator lgsi = gsi_for_stmt (c.loadi);
 	  if (tree vdef = gimple_vdef (c.loadi))
 	    if (TREE_CODE (vdef) == SSA_NAME)
 	      unlink_stmt_vdef (c.loadi);
 	  gsi_remove (&lgsi, true);
 	  release_defs (c.loadi);
+	  if (root)
+	    {
+	      gimple_stmt_iterator rgsi = gsi_for_stmt (root);
+	      if (tree vdef = gimple_vdef (root))
+		if (TREE_CODE (vdef) == SSA_NAME)
+		  unlink_stmt_vdef (root);
+	      gsi_remove (&rgsi, true);
+	      release_defs (root);
+	    }
 	}
 
       changed = true;

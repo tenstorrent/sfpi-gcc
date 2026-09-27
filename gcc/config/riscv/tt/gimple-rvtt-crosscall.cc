@@ -1714,6 +1714,18 @@ commit_callee (function *fn, const auto_vec<contract_entry> &contract,
 	if (TREE_CODE (vdef) == SSA_NAME)
 	  unlink_stmt_vdef (e.load);
       gsi_replace (&gsi, read, false);
+      /* The read replaces the complete lowered materialization.  Its
+	 SFPLOADI root was used only by this tail (prefix_load_root's
+	 qualification), so keeping it would emit a stray architectural load.  */
+      if (e.root)
+	{
+	  gimple_stmt_iterator rgsi = gsi_for_stmt (e.root);
+	  if (tree vdef = gimple_vdef (e.root))
+	    if (TREE_CODE (vdef) == SSA_NAME)
+	      unlink_stmt_vdef (e.root);
+	  gsi_remove (&rgsi, true);
+	  release_defs (e.root);
+	}
       if (dump_file)
 	{
 	  fprintf (dump_file,
