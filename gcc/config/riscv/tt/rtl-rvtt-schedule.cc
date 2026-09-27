@@ -4531,7 +4531,8 @@ crp_mve_expand_arm (basic_block bb, std::vector<ls_node> &all,
 	      continue;
 	    rvtt_lreg_rename_web web;
 	    if (!rvtt_lreg_rename_chain (bb, all[n + k].insn,
-					 (int) (t - SFPU_REG_FIRST), &web))
+					 (int) (t - SFPU_REG_FIRST), &web,
+					 RVTT_RENAME_SHAPE_OWNED))
 	      continue;		/* refused by name in the service; the
 				   next slot-free target may prove */
 	    webs.push_back (web);
