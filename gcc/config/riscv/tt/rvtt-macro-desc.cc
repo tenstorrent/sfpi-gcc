@@ -85,6 +85,8 @@ namespace {
 
 using namespace rvtt_macro;
 
+static bool swap_cst_template_fields (rtx_insn *, uint8_t *, uint8_t *);
+
 /* The architectural opcode byte of an admitted value instruction, from
    the retained TT_OP encoding tables, keyed by the insn's unspec (the
    design-sanctioned encodability key).  Returns 0 when no entry is on
@@ -542,6 +544,14 @@ program_operands_reachable (const desc_program &p,
 	  || (unsigned) rule.source_event >= derived.n_value_insns)
 	continue;
       rtx_insn *src = derived.value_insns[rule.source_event];
+      /* The constant-register SFPSWAP variants now have enough RTL
+	 operands for the old index-only test to succeed, but their operand
+	 roles are not the binary-periodic swap program's layout.  They are
+	 the audited derived-calendar class below; never let a frozen program
+	 claim them merely because its source indices happen to exist.  */
+      uint8_t src_c, mod1;
+      if (swap_cst_template_fields (src, &src_c, &mod1))
+	return false;
       if (rule.mod1_op >= 0 && !operand_exists (src, rule.mod1_op))
 	return false;
       if (rule.imm12_op >= 0 && !operand_exists (src, rule.imm12_op))
