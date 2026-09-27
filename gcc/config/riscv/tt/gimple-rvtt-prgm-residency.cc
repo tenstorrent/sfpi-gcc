@@ -1517,7 +1517,10 @@ residency_collect_loop_class (function *fn,
 				   (load, loop, /*allow_shortened=*/true))
 			    continue;
 			  unsigned value;
-			  if (!single_issue_constant_image_p (load, &value))
+			  remat_chain chain;
+			  if (!remat_chain_p (arg, &chain)
+			      || chain.tail != load
+			      || !constant_chain_value_p (chain, &value))
 			    continue;
 			  residency_candidate c;
 			  c.load = load;

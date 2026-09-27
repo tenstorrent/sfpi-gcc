@@ -321,15 +321,9 @@ staged_config_value (tree staged, unsigned *value)
 {
   if (!staged || TREE_CODE (staged) != SSA_NAME)
     return false;
-  gcall *def = dyn_cast <gcall *> (SSA_NAME_DEF_STMT (staged));
-  if (!def)
+  remat_chain chain;
+  if (!remat_chain_p (staged, &chain))
     return false;
-  const rvtt_insn_data *insnd = rvtt_get_insn_data (def);
-  if (!insnd
-      || (insnd->id != rvtt_insn_data::sfpxloadi
-	  && insnd->id != rvtt_insn_data::sfploadi))
-    return false;
-  remat_chain chain { def, def };
   return constant_chain_value_p (chain, value);
 }
 
