@@ -271,6 +271,8 @@ static const desc_program desc_programs[] = {
     { "minmax-binary-m0", "minmax-binary-m1" },
     "minmax-binary",
     -1, 3, true,
+    false, false, false,
+    false, false,
   },
   /* Unary shift/cast (frozen signbit calendar, LM:847-856).  The SHFT2
      immediate template aliases its source selector to L1, forcing the
@@ -295,6 +297,8 @@ static const desc_program desc_programs[] = {
     { "signbit-m0", nullptr },
     "signbit",
     1, 0, true,
+    false, false, false,
+    false, false,
   },
   /* Unary cast/round (frozen U16->BF16 calendar, LM:858-871).  */
   {
@@ -321,6 +325,8 @@ static const desc_program desc_programs[] = {
     { "cast-round-m0", nullptr },
     "cast-round",
     -1, 0, false,
+    false, false, false,
+    false, false,
   },
   /* Predicated select (the TTNN Where shape class; the select
      calendar frozen from the retired formation pass, preserved in the
@@ -3110,6 +3116,7 @@ rvtt_macro_residency_extend (function *fn, const macro_region &region,
 			     basic_block *hoist_preheader, edge *hoist_edge,
 			     unsigned *levels, FILE *dump)
 {
+  (void) desc;
   *levels = 0;
   if (!riscv_tt_macro_planner_residency)
     return false;
