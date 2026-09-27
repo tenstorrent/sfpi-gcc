@@ -15,6 +15,7 @@ void densedst9 (void)
 {
   /* Occupy all 64 rows with live data derived from row 0.  */
   auto seed = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 4, 7);
+#pragma GCC unroll 64
   for (unsigned row = 1; row != 64; ++row)
     {
       seed = __builtin_rvtt_sfpxor (seed, seed);
@@ -52,6 +53,7 @@ void densedst9 (void)
   r = __builtin_rvtt_sfpxor (r, a6);
   r = __builtin_rvtt_sfpxor (r, a7);
   r = __builtin_rvtt_sfpxor (r, a8);
+#pragma GCC unroll 64
   for (unsigned row = 1; row != 64; ++row)
     {
       auto v = __builtin_rvtt_sfpload (nullptr, 2 * row, 0, 0, 4, 7);
