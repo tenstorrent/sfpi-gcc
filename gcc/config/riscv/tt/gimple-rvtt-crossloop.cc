@@ -477,6 +477,7 @@ transform (function *fn)
 
       for (gcall *call : selected)
 	{
+	  gcall *root = rvtt_chained_loadi_root (call);
 	  if (tree vdef = gimple_vdef (call))
 	    {
 	      if (TREE_CODE (vdef) == SSA_NAME)
@@ -490,6 +491,25 @@ transform (function *fn)
 	    {
 	      gimple_set_vuse (call, NULL_TREE);
 	      update_stmt (call);
+	    }
+	  if (root)
+	    {
+	      if (tree vdef = gimple_vdef (root))
+		{
+		  if (TREE_CODE (vdef) == SSA_NAME)
+		    {
+		      unlink_stmt_vdef (root);
+		      release_ssa_name (vdef);
+		    }
+		  gimple_set_vdef (root, NULL_TREE);
+		}
+	      if (gimple_vuse (root))
+		{
+		  gimple_set_vuse (root, NULL_TREE);
+		  update_stmt (root);
+		}
+	      gimple_stmt_iterator root_from = gsi_for_stmt (root);
+	      gsi_move_to_bb_end (&root_from, preheader);
 	    }
 
 	  gimple_stmt_iterator from = gsi_for_stmt (call);

@@ -548,6 +548,19 @@ rvtt_invariant_constant_load_p (gcall *call, class loop *loop,
       || !all_uses_in_loop_p (lhs, loop))
     return false;
 
+  /* Do not expose both halves of a lowered pair as two candidates.  The
+     root is only an implementation detail of the tail's one 32-bit value;
+     the qualified tail owns discovery, pricing and movement.  */
+  if (!root && insnd->id == rvtt_insn_data::sfploadi)
+    {
+      use_operand_p use_p;
+      gimple *use_stmt;
+      if (single_imm_use (lhs, &use_p, &use_stmt))
+	if (gcall *tail = dyn_cast <gcall *> (use_stmt))
+	  if (rvtt_chained_loadi_root (tail) == call)
+	    return false;
+    }
+
   for (unsigned ix = 1; ix != gimple_call_num_args (call); ++ix)
     {
       /* The chained tail's vector operand is the already-qualified root,
