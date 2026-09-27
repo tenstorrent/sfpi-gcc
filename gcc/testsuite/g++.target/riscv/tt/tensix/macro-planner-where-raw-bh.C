@@ -1,17 +1,15 @@
 // The predicated-select (TTNN Where) shape in raw typed builtins:
 // three loads, a predicate write, a lane-predicated merge, the in-row
 // all-lanes restore, a store.  Before the Where hardware
-// adjudication this refused the missing lane proof AFTER the 4-slot
-// descriptor proved; the descriptor CC model now refuses the calendar
-// itself (root cause the reference simulator -- the store's lane mask is
-// live at execution and this calendar retires its all-lanes restore
-// in the store's own cycle): the mixed-mode compact candidate refuses
-// its descriptor by name and the established calendar's descriptor
-// refuses cc-restore-store-race, so no descriptor is synthesized and
-// the bytes stay explicit.
+// adjudication this refused the missing lane proof after the 4-slot
+// descriptor proved.  The current allocated operand shape cannot prove
+// the predicated merge template for any of the three deterministic
+// schedule candidates, so all candidates refuse earlier at the named
+// cc-template gate.  No descriptor is synthesized and the bytes stay
+// explicit; descriptor-level restore/store race coverage lives in the
+// dedicated select refusal tests.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -fdump-rtl-rvtt_macro_planner-details" }
-// { dg-final { scan-rtl-dump "Macro-planner descriptor-refusal: cc-template-unproved" "rvtt_macro_planner" } }
-// { dg-final { scan-rtl-dump "Macro-planner descriptor-refusal: cc-restore-store-race" "rvtt_macro_planner" } }
+// { dg-final { scan-rtl-dump-times "Macro-planner schedule-refusal: cc-template-unproved" 3 "rvtt_macro_planner" } }
 // { dg-final { scan-rtl-dump-not "Macro-planner schedule-refusal: cc-separator-kept-silicon-unproven" "rvtt_macro_planner" } }
 // { dg-final { scan-rtl-dump-not "Macro-planner descriptor-cc:" "rvtt_macro_planner" } }
 // { dg-final { scan-rtl-dump-not "Macro-planner formed" "rvtt_macro_planner" } }
