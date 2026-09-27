@@ -206,6 +206,9 @@ form_region (function *fn, macro_region &region,
 	{
 	  scoped_preheader = loop_region_preheader (fn, region, nullptr);
 	  scoped_ok = scoped_preheader && planner_config_window_ok (region);
+	  if (scoped_ok && dump)
+	    fprintf (dump,
+		     "Macro-planner config-ownership: loop-scoped window\n");
 	}
 
       /* CC-template programs additionally admit the established
