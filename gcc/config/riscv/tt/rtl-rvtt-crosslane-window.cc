@@ -351,9 +351,13 @@ marker_transfer (rtx_insn *insn, window_state cur, window_state *next)
       rtx body = pat;
       if (GET_CODE (body) == PARALLEL)
 	body = XVECEXP (body, 0, 0);
-      if (GET_CODE (body) == UNSPEC_VOLATILE && XVECLEN (body, 0) >= 2)
+
+      /* Current RTL is [value, mod1, destination].  The old two-operand
+	 shape put the destination in slot 1; reading that slot now silently
+	 loses LaneConfig writes, or treats a modifier as a destination.  */
+      if (GET_CODE (body) == UNSPEC_VOLATILE && XVECLEN (body, 0) == 3)
 	{
-	  rtx dst = XVECEXP (body, 0, 1);
+	  rtx dst = XVECEXP (body, 0, 2);
 	  if (CONST_INT_P (dst) && UINTVAL (dst) == 15)
 	    {
 	      *next = WS_UNKNOWN;

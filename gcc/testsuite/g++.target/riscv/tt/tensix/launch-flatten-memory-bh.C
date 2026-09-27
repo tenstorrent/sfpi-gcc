@@ -5,7 +5,7 @@
 // computed-word fire twin.)
 // { dg-final { scan-tree-dump "refused .launch-flatten-memory." "rvtt_launch_flatten" } }
 
-int lf_side_channel;
+int lf_side_channel[8];
 
 void lf_memory ()
 {
@@ -15,6 +15,8 @@ void lf_memory ()
       __builtin_rvtt_ttreplay (nullptr, 9, 0, 0, 16, 0, 0);
       __builtin_rvtt_ttreplay (nullptr, 9, 0, 0, 16, 0, 0);
       __builtin_rvtt_ttreplay (nullptr, 9, 0, 0, 16, 0, 0);
-      lf_side_channel = d;
+      // Distinct observable stores must remain in the loop. A single scalar
+      // store is legally sunk to the exit before this late pass runs.
+      lf_side_channel[d] = d;
     }
 }
