@@ -532,16 +532,14 @@ rvtt_invariant_constant_load_p (gcall *call, class loop *loop,
      sfploadi builtin calls there would change its established
      decisions.  */
   const rvtt_insn_data *insnd = rvtt_get_insn_data (call);
-  /* NOT EXTENDED to the two-instruction chain.  Admitting the tail here
-     (its root qualifies, and rvtt_chained_loadi_root vets it) is not
-     enough to price a chained candidate set -- crosscall still refuses
-     its rediscovered six-value contract on pressure -- and it moved
-     nine tensix subjects whose decisions were not re-examined.  The
-     engine's interval model needs looking at with the pair in mind
-     before this opens.  */
+  gcall *root = nullptr;
+  if (allow_shortened && insnd
+      && insnd->id == rvtt_insn_data::sfploadi_lv)
+    root = rvtt_chained_loadi_root (call);
   if (!insnd
       || (insnd->id != rvtt_insn_data::sfpxloadi
-	  && !(allow_shortened && insnd->id == rvtt_insn_data::sfploadi)))
+	  && !(allow_shortened && insnd->id == rvtt_insn_data::sfploadi)
+	  && !root))
     return false;
 
   tree lhs = gimple_call_lhs (call);
@@ -551,8 +549,15 @@ rvtt_invariant_constant_load_p (gcall *call, class loop *loop,
     return false;
 
   for (unsigned ix = 1; ix != gimple_call_num_args (call); ++ix)
+    {
+      /* The chained tail's vector operand is the already-qualified root,
+	 not a runtime immediate.  Every other operand remains scalar and
+	 constant, exactly as for the former one-call sfpxloadi spelling.  */
+      if (root && ix == 1)
+	continue;
     if (TREE_CODE (gimple_call_arg (call, ix)) != INTEGER_CST)
       return false;
+    }
   return true;
 }
 
@@ -655,6 +660,9 @@ rvtt_sfpxloadi_materialization_cost (gcall *call)
   const rvtt_insn_data *insnd = rvtt_get_insn_data (call);
   if (insnd && insnd->id == rvtt_insn_data::sfploadi)
     return 1;
+  if (insnd && insnd->id == rvtt_insn_data::sfploadi_lv
+      && rvtt_chained_loadi_root (call))
+    return 2;
 
   uint32_t value = TREE_INT_CST_LOW (gimple_call_arg (call, 1));
   /* The one value-classification spelling (rvtt-delivery-cost-core.h

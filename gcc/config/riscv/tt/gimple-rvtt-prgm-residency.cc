@@ -1163,7 +1163,10 @@ residency_collect_loop_class (function *fn,
 		    }
 		  continue;
 		}
-	      remat_chain chain { load, load };
+	      remat_chain chain;
+	      if (!remat_chain_p (gimple_call_lhs (load), &chain)
+		  || chain.tail != load)
+		continue;
 	      unsigned value;
 	      if (!constant_chain_value_p (chain, &value))
 		continue;

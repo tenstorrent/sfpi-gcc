@@ -78,6 +78,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "insn-codes.h"
 #include "recog.h"
 #include "rvtt.h"
+#include "rvtt-protos.h"
 #include "rvtt-pressure.h"
 #include <unordered_map>
 #include <unordered_set>
@@ -534,6 +535,12 @@ engine_loop_legal_p (class loop *loop,
 				 bool exempt_creg_reads)
 {
   std::unordered_set<tree> candidates;
+  /* A lowered 32-bit immediate is two SSA definitions but only one
+     architectural value.  When its tail is pinned across the loop, the
+     root is subsumed by the candidate: it is consumed immediately by the
+     tail before loop entry and must neither be pinned independently nor
+     counted as an unrelated outside-live value.  */
+  std::unordered_set<tree> candidate_roots;
   std::unordered_set<tree> pinned;
   std::unordered_set<tree> live;
   std::unordered_map<tree, unsigned> remaining;
@@ -581,6 +588,8 @@ engine_loop_legal_p (class loop *loop,
     {
       tree lhs = gimple_call_lhs (call);
       candidates.insert (lhs);
+      if (gcall *root = rvtt_chained_loadi_root (call))
+	candidate_roots.insert (gimple_call_lhs (root));
       pinned.insert (lhs);
       live.insert (lhs);
     }
@@ -597,7 +606,8 @@ engine_loop_legal_p (class loop *loop,
   tree name;
   FOR_EACH_SSA_NAME (version, name, cfun)
     {
-      if (!VECTOR_TYPE_P (TREE_TYPE (name)) || candidates.count (name))
+      if (!VECTOR_TYPE_P (TREE_TYPE (name)) || candidates.count (name)
+	  || candidate_roots.count (name))
 	continue;
       bool outside_use = false;
       gimple *use;
@@ -720,6 +730,7 @@ engine_loop_legal_p (class loop *loop,
 	if (lhs && TREE_CODE (lhs) == SSA_NAME
 	    && VECTOR_TYPE_P (TREE_TYPE (lhs))
 	    && !candidates.count (lhs)
+	    && !candidate_roots.count (lhs)
 	    && !creg_resident_p (lhs))
 	  live.insert (lhs);
 
@@ -1071,6 +1082,15 @@ rvtt_loop_pressure::legal_with (const auto_vec<gcall *> &candidates)
       gcc_assert (iv);
       m_delta[iv->start] -= 1;
       m_delta[iv->end == UINT_MAX ? n : iv->end] += 1;
+      /* The lowered pair's root and tail are one materialization.  Remove
+	 both ordinary intervals, then charge the one pinned result below.  */
+      if (gcall *root = rvtt_chained_loadi_root (call))
+	{
+	  live_interval *riv = m_interval.get (gimple_call_lhs (root));
+	  gcc_assert (riv);
+	  m_delta[riv->start] -= 1;
+	  m_delta[riv->end == UINT_MAX ? n : riv->end] += 1;
+	}
     }
   int carried = 0;
   unsigned peak = 0;
