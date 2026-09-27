@@ -1,12 +1,12 @@
 // Varied-constant twins of the P0/D1 refusal: every pure CC write whose
 // encoded word is not exactly the architectural all-lanes enable
 // refuses, whatever the constants -- partial imm12 selections and the
-// swapped-operand-role spelling alike.  (The typed rvtt_sfpencc
+// a varied legal mod1/imm12 spelling alike.  (The typed rvtt_sfpencc
 // template prints "%1, %0" and the assembler reads "SFPENCC imm12,
 // mod1", so operand 1 encodes imm12 and operand 0 mod1: the proven
 // all-lanes instruction carries operands (10, 3), the same roles the
 // deleted quarantined pass proved against.  A source-level
-// __builtin_rvtt_sfpencc (3, 10) therefore emits imm12=3/mod1=10 --
+// __builtin_rvtt_sfpencc (0, 10) therefore emits imm12=10/mod1=0 --
 // not the all-lanes instruction -- and must refuse.)
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -fdump-rtl-rvtt_macro_planner-details" }
 // { dg-final { scan-rtl-dump-times "Macro-planner refusal: cc-enable-unproved" 3 "rvtt_macro_planner" } }
@@ -28,6 +28,6 @@
 #define CC_ENABLE_STORE_ADDR 192
 #include "macro-planner-cc-enable-body.h"
 
-#define CC_ENABLE_FN swapped_operand_roles
-#define CC_ENABLE_STMT __builtin_rvtt_sfpencc (3, 10)
+#define CC_ENABLE_FN varied_legal_operand_roles
+#define CC_ENABLE_STMT __builtin_rvtt_sfpencc (0, 10)
 #include "macro-planner-cc-enable-body.h"

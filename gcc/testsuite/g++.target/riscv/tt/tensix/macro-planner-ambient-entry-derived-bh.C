@@ -28,8 +28,8 @@
 // { dg-final { scan-rtl-dump-times "Macro-planner formation-refusal: all-lanes-proof-missing \\(ambient-entry-unproven\\)" 2 "rvtt_macro_planner" } }
 // The two near-miss loops keep their explicit rows: 16 swaps, and the
 // lanes-off enable word survives untouched.
-// (the builtin's positional expansion prints "imm12, mod1" = "10, 0")
-// { dg-final { scan-assembler-times "SFPENCC\\t10, 0" 1 } }
+// (the builtin's positional expansion prints "imm12, mod1" = "0, 10")
+// { dg-final { scan-assembler-times "SFPENCC\\t0, 10" 1 } }
 // { dg-final { scan-assembler "SFPSWAP" } }
 
 __attribute__((noinline)) void zephyr_ambient_fire ()

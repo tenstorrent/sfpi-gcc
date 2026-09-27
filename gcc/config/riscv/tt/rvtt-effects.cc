@@ -30,6 +30,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "insn-codes.h"
 #include "insn-attr.h"
 #include "recog.h"
+#include "regs.h"
 #include "memmodel.h"
 #include "emit-rtl.h"
 #include "rtl-iter.h"
@@ -77,12 +78,22 @@ lreg_mask_of_positions (int position_mask)
     if ((position_mask >> i) & 1)
       {
 	rtx op = recog_data.operand[i];
+	if (!REG_P (op))
+	  continue;
+	unsigned regno = REGNO (op);
+	/* Macro planning runs after allocation but before reload has
+	   rewritten every pseudo to its assigned hard register.  Resolve
+	   that normal GCC representation here so typed effects describe
+	   the allocated LREG rather than silently dropping the operand.  */
+	if (regno >= FIRST_PSEUDO_REGISTER && reg_renumber
+	    && reg_renumber[regno] >= 0)
+	  regno = reg_renumber[regno];
 	/* SFPU_REG_P bounds the bit to the real L0-L7 file; the former
 	   `<= 16' bound admitted regnos through 96 (v0) into a 16-bit
 	   mask -- bit 16 lies outside the mask contract (latent, FH
 	   audit FHN-5).  */
-	if (REG_P (op) && HARD_REGISTER_P (op) && SFPU_REG_P (REGNO (op)))
-	  mask |= 1u << (REGNO (op) - SFPU_REG_FIRST);
+	if (SFPU_REG_P (regno))
+	  mask |= 1u << (regno - SFPU_REG_FIRST);
       }
   return mask;
 }
@@ -1142,4 +1153,3 @@ rvtt_canonical_buffer_arg_p (tree addr)
     && rvtt_instrn_buffer_name_p
 	 (IDENTIFIER_POINTER (DECL_ASSEMBLER_NAME (decl)));
 }
-
