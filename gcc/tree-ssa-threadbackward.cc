@@ -45,6 +45,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree-pretty-print.h"
 #include "cfghooks.h"
 #include "dbgcnt.h"
+#include "config/riscv/tt/rvtt.h"
 
 // Path registry for the backwards threader.  After all paths have been
 // registered with register_path(), thread_through_all_blocks() is called
@@ -653,6 +654,16 @@ back_threader_profitability::possibly_profitable_path_p
 		    fputc ('\n', dump_file);
 		  return false;
 		}
+#if 1
+	      // probably nearly all our builtins?
+	      if (auto *insnd = rvtt_get_insn_data (stmt))
+		if (insnd->id == rvtt_insn_data::ttinsn)
+		  {
+		    if (dump_file && (dump_flags & TDF_DETAILS))
+		      fputc ('\n', dump_file);
+		    return false;
+		  }
+#endif
 	      /* Do not count empty statements and labels.  */
 	      if (gimple_code (stmt) != GIMPLE_NOP
 		  && !is_gimple_debug (stmt))
