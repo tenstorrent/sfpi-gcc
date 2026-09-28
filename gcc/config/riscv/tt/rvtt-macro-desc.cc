@@ -1648,6 +1648,7 @@ derive_row (const macro_region &region, const macro_schedule &schedule,
 	    = (e.lreg_read & carrier_load_regs[ev.macro_index]) != 0;
 	  spec.planned_src_c = tf.src_c;
 	  spec.template_key = (uint8_t) (slot + 1);
+	  spec.template_mod1 = tf.mod1;
 	  spec.template_imm12 = tf.imm12;
 	  for (unsigned r = 0; r < 16; ++r)
 	    if ((e.lreg_read >> r) & 1)

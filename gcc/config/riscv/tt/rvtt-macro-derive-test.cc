@@ -465,6 +465,18 @@ test_wp12_template_sharing (const caps *c)
   check (cal.n_templates == 1, "equal keys share one template slot");
   check (cal.template_index_of[0] == 0 && cal.template_index_of[1] == 0,
 	 "both events reference the shared slot");
+  check (cal.store_reads_l16, "mod-0 cast keeps LReg16 store routing");
+
+  /* The same shared-template shape with integer-conversion casts.  BH
+     silicon disproved this LReg16 evaluator route, while the WH table
+     behavior remains unchanged.  The BH same-macro fallback reads VD.  */
+  row.events[0].template_mod1 = 3;
+  row.events[1].template_mod1 = 3;
+  ok = derive_calendar (c, row, &cal);
+  check (ok && !cal.refusal, "mod-3 shared-template row derives");
+  if (ok && !cal.refusal)
+    check (cal.store_reads_l16 == (c->cpu != CPU_BH),
+	   "mod-3 cast uses target-specific store routing");
 }
 
 /* Explicit-issue hazards: the WAR floor delays an event past an

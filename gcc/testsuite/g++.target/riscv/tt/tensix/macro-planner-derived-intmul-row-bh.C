@@ -8,8 +8,10 @@
 //    load carriers, the in-place shift (Round via the proven SHFT2 pair)
 //    and the in-place VB-factor SFPMUL24 (MAD) on the second carrier;
 //  - the store's sole producer (the result cast, encoded through its
-//    surviving VC source field) rides the demoted store carrier and
-//    reaches the store through LReg16;
+//    surviving VC source field) rides the demoted store carrier.  The
+//    Blackhole mod-3 cast is conservatively excluded from the LReg16
+//    evaluator after a silicon wrong-result witness, so the same macro's
+//    store reads its launch VD;
 //  - bit-identical derived template words share one InstructionTemplate
 //    destination (both in-place casts), fitting the four-template budget;
 //  - name-encoded consumers pin every value carrier to its own physical
@@ -28,6 +30,9 @@
 // { dg-final { scan-rtl-dump-times "Macro-planner descriptor-word dest=2: 0x980009e0" 1 "rvtt_macro_planner" } }
 // The store-producer cast reading its VC source by name (L3):
 // { dg-final { scan-rtl-dump-times "Macro-planner descriptor-word dest=3: 0x900003f3" 1 "rvtt_macro_planner" } }
+// Macro 2 executes template 3 into VD and the delayed store reads VD: neither
+// byte carries the LReg16 route bit.
+// { dg-final { scan-rtl-dump-times "Macro-planner descriptor-word dest=6: 0x0b000087" 1 "rvtt_macro_planner" } }
 // Pinned launch VDs: the carriers keep their own physical destinations;
 // the store-only carrier takes the proven-clobberable temporary L2.
 // { dg-final { scan-rtl-dump-times "Macro-planner descriptor-launch: macro=0 vd=0 word=0x9304e000" 1 "rvtt_macro_planner" } }

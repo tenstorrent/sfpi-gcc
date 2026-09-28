@@ -997,7 +997,7 @@ opcode_reads_vd (const caps *c, uint8_t opcode)
    VD-direct or staging-copy realization or refuses.  */
 
 bool
-opcode_l16_target_proven (const caps *c, uint8_t opcode)
+opcode_l16_target_proven (const caps *c, uint8_t opcode, uint8_t mod1)
 {
   /* The ORACLE-PROVEN LReg16-target evaluator set.  An event
      redirected to the LReg16 staging
@@ -1014,6 +1014,15 @@ opcode_l16_target_proven (const caps *c, uint8_t opcode)
      or staging-copy realizations (rewritten-word execution, full
      opcode support) or refuse by name.  */
   if (!c)
+    return false;
+  /* A Blackhole MulInt32 row whose final SFPCAST mod 3 used the
+     simulator-only LReg16 route completed but produced an incorrect result
+     in every lane.  Conservatively quarantine that exact realization while
+     its microarchitectural cause remains unproven.  Keep other cast modes
+     unchanged and let a same-macro mod-3 producer use the rewritten-word
+     VD-direct realization below.  WH remains unchanged because the evidence
+     is Blackhole-only.  */
+  if (c->cpu == CPU_BH && opcode == 0x90 && mod1 == 3)
     return false;
   switch (opcode)
     {

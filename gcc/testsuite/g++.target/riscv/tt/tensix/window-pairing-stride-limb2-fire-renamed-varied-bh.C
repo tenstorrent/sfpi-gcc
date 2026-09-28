@@ -4,6 +4,8 @@
 // verdict is structural (first-word absorber admitted under the flag,
 // exact model prices one NOP, fixed-VD WAR hazard names the bound) --
 // no operation identity, coefficient value, or row count participates.
+// Mode-0 casts keep the renamed twin in the unchanged L16 target class;
+// Blackhole mode-3 cast/store routing is covered separately.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-optimize-window-pairing -mtt-tensix-optimize-window-pairing-stride -fdump-rtl-rvtt_macro_planner" }
 // { dg-final { scan-rtl-dump-times "Macro-planner drain-interrow: drain=2 rows=6" 1 "rvtt_macro_planner" } }
 // { dg-final { scan-rtl-dump-times "Macro-planner window-pairing: interrow-drain 2 -> 1 rows=6 bound=window-pairing-lreg-overlap" 1 "rvtt_macro_planner" } }
@@ -16,14 +18,14 @@
       __builtin_rvtt_sfppushc (0);                                            \
       __builtin_rvtt_sfppopc (0);                                             \
       auto opa = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 4, 7);             \
-      opa = __builtin_rvtt_sfpcast (opa, 3);                                  \
+      opa = __builtin_rvtt_sfpcast (opa, 0);                                  \
       auto opb = __builtin_rvtt_sfpload (nullptr, 96, 0, 0, 4, 7);            \
-      opb = __builtin_rvtt_sfpcast (opb, 3);                                  \
+      opb = __builtin_rvtt_sfpcast (opb, 0);                                  \
       auto uppr = __builtin_rvtt_sfpmul24 (opa, opb, 1);                      \
       auto lowr = __builtin_rvtt_sfpmul24 (opa, opb, 0);                      \
       uppr = __builtin_rvtt_sfpshft_i (nullptr, uppr, 23, 0, 0, 0);           \
       lowr = __builtin_rvtt_sfpiadd_v (lowr, uppr, 4);                        \
-      lowr = __builtin_rvtt_sfpcast (lowr, 3);                                \
+      lowr = __builtin_rvtt_sfpcast (lowr, 0);                                \
       __builtin_rvtt_sfpstore (nullptr, lowr, 0, 0, 0, 4, 7);                 \
       __builtin_rvtt_ttincrwc (0, 2, 0, 0);                                   \
     }                                                                          \

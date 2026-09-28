@@ -42,20 +42,24 @@
 // { dg-final { scan-assembler-times "\\.ttinsn\\t2467618816" 8 } }
 // { dg-final { scan-assembler-times "\\.ttinsn\\t2470756416" 8 } }
 
+// Keep the casts in the unchanged mode-0 L16 capability class.  This fixture
+// exercises commuted MUL24 admission and its
+// calendar, not the Blackhole mode-3 cast/store capability quarantine.
+
 #define ROW()                                                                 \
   do                                                                          \
     {                                                                          \
       __builtin_rvtt_sfppushc (0);                                            \
       __builtin_rvtt_sfppopc (0);                                             \
       auto a = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 4, 7);               \
-      a = __builtin_rvtt_sfpcast (a, 3);                                      \
+      a = __builtin_rvtt_sfpcast (a, 0);                                      \
       auto b = __builtin_rvtt_sfpload (nullptr, 64, 0, 0, 4, 7);              \
-      b = __builtin_rvtt_sfpcast (b, 3);                                      \
+      b = __builtin_rvtt_sfpcast (b, 0);                                      \
       b = __builtin_rvtt_sfpmul24 (b, a, 0);                                  \
       auto t = __builtin_rvtt_sfpshft_i (nullptr, a, 1, 0, 0, 0);             \
       t = __builtin_rvtt_sfpshft_i (nullptr, t, 2, 0, 0, 0);                  \
       b = __builtin_rvtt_sfpiadd_v (b, t, 4);                                 \
-      b = __builtin_rvtt_sfpcast (b, 3);                                      \
+      b = __builtin_rvtt_sfpcast (b, 0);                                      \
       __builtin_rvtt_sfpstore (nullptr, b, 0, 0, 0, 4, 7);                    \
       __builtin_rvtt_ttincrwc (0, 2, 0, 0);                                   \
     }                                                                          \

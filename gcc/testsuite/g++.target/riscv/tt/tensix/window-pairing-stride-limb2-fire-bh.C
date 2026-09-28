@@ -12,6 +12,8 @@
 // hazard (the pending hosted store reads the launch register the
 // follower's first launch rewrites), named as the bound.  The replay
 // window shrinks from five delivered words per row to four.
+// Mode-0 casts keep this window-pairing fixture in the unchanged L16 target
+// class; Blackhole mode-3 cast/store routing is covered separately.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-optimize-window-pairing -mtt-tensix-optimize-window-pairing-stride -fdump-rtl-rvtt_macro_planner" }
 // { dg-final { scan-rtl-dump-times "Macro-planner drain-interrow: drain=2 rows=8" 1 "rvtt_macro_planner" } }
 // { dg-final { scan-rtl-dump-times "Macro-planner window-pairing: interrow-drain 2 -> 1 rows=8 bound=window-pairing-lreg-overlap" 1 "rvtt_macro_planner" } }
@@ -26,14 +28,14 @@
       __builtin_rvtt_sfppushc (0);                                            \
       __builtin_rvtt_sfppopc (0);                                             \
       auto a = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 4, 7);               \
-      a = __builtin_rvtt_sfpcast (a, 3);                                      \
+      a = __builtin_rvtt_sfpcast (a, 0);                                      \
       auto b = __builtin_rvtt_sfpload (nullptr, 64, 0, 0, 4, 7);              \
-      b = __builtin_rvtt_sfpcast (b, 3);                                      \
+      b = __builtin_rvtt_sfpcast (b, 0);                                      \
       auto hi = __builtin_rvtt_sfpmul24 (a, b, 1);                            \
       auto lo = __builtin_rvtt_sfpmul24 (a, b, 0);                            \
       hi = __builtin_rvtt_sfpshft_i (nullptr, hi, 23, 0, 0, 0);               \
       lo = __builtin_rvtt_sfpiadd_v (lo, hi, 4);                              \
-      lo = __builtin_rvtt_sfpcast (lo, 3);                                    \
+      lo = __builtin_rvtt_sfpcast (lo, 0);                                    \
       __builtin_rvtt_sfpstore (nullptr, lo, 0, 0, 0, 4, 7);                   \
       __builtin_rvtt_ttincrwc (0, 2, 0, 0);                                   \
     }                                                                          \

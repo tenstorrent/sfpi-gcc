@@ -456,7 +456,8 @@ extern bool opcode_reads_vd (const caps *, uint8_t opcode);
 /* Whether OPCODE may be realized with the LReg16 staging target: the
    oracle-proven direct-evaluator set (see the table's
    comment).  Everything else keeps VD-direct/staging-copy or refuses.  */
-extern bool opcode_l16_target_proven (const caps *, uint8_t opcode);
+extern bool opcode_l16_target_proven (const caps *, uint8_t opcode,
+				      uint8_t mod1);
 
 /* The SFPSWAP scheduling rule (ISA (ddag)): MAD hosts nothing in the
    SWAP's execution cycle, and Simple and Round host nothing in the

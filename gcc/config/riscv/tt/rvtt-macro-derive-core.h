@@ -76,6 +76,9 @@ struct event_spec
      caller owns key consistency (equal keys iff equal derived words);
      capacity counts distinct slots.  */
   uint8_t template_key;
+  /* Template modifier.  Store-source routing uses it to distinguish
+     opcode realizations whose LReg16 evaluator support differs by mode.  */
+  uint8_t template_mod1;
   /* Template imm12 field (generic template classes; the
      established swap class always packed 0).  Carried here so the
      derivation's capacity/identity view and the descriptor encoder
@@ -306,7 +309,8 @@ derive_calendar (const rvtt_macro::caps *c, const row_spec &row,
 	 Unproven opcodes fall to the VD-direct or staging-copy
 	 realizations (rewritten-word execution) or refuse by name.  */
       if (!opcode_reads_vd (c, row.events[sp].opcode) && sole_consumer
-	  && opcode_l16_target_proven (c, row.events[sp].opcode))
+	  && opcode_l16_target_proven (c, row.events[sp].opcode,
+				     row.events[sp].template_mod1))
 	{
 	  out->writes_l16[sp] = true;
 	  out->store_reads_l16 = true;
