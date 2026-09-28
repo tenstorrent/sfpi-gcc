@@ -696,12 +696,13 @@ crosslane_transform::collapse_rotate_chains ()
    own subvec_slideup split is the precedent).
 
    Canonical WH-portable slide form (subvec_slideup's rotate+mask arm,
-   and any hand spelling of the same shape):
+   and any hand spelling of the same shape), after pass_rvtt_vif has
+   lowered its structured predicate:
 
-     t1..tK = ror1 chain (K links)
-     PUSHC; m = XVIF; t = READLREG(15); s = SHFT_I(t, -1);
-     msk = LOADI(7); col = AND(s, msk); c = XICMPS(col, K, LT);
-     XCONDB(c, m); z = LOADI(0); out = ASSIGN_LV(tK, z); POPC
+     t1..tK = ror1 chain (K links); p = XPRED;
+     t = READLREG(15); s = SHFT_I(t, -1); msk = LOADI(7);
+     col = AND(s, msk); IADD_I(col, -K, LT0); XCOND(0, p, 0);
+     z = LOADI(0); out = ASSIGN_LV(tK, z); ENCC(all)
 
    i.e. rotate the row right K times and zero columns < K under a
    lane_col() predicate (vConstTileId == 2*lane, so col = (tileid >>
@@ -752,27 +753,51 @@ match_slide_region (gcall *tail, unsigned k, slide_match *m)
 
   /* Flat post-CC-lowering form of `v_if (lane_col () < K) v = 0':
 
+       p = SFPXPRED (IF|depth1, 0)      [structured predicate token]
        t = READLREG (15)                 [vConstTileId == 2*lane]
        s = SFPSHFT_I (t, -1)             [column pre-mask]
        msk = SFPLOADI (7)
        col = SFPAND (s, msk)             [column = (tileid >> 1) & 7]
-       SFPXIADD_I (col, K, mod 8)        [CC := col < K, no result]
+       SFPIADD_I (col, -K, mod 0)        [CC := col < K, no result]
+       SFPXCOND (0, p, 0)                [lowered condition marker]
        z = READLREG (9) | SFPLOADI (0)   [the bit-pattern zero]
        out = ASSIGN_LV (tail, z)
        SFPENCC all-lanes                 [region exit]  */
+  gcall *pred = next_call (rvtt_insn_data::sfpxpred);
+  unsigned pred_mod, pred_id;
+  tree pred_lhs = pred ? gimple_call_lhs (pred) : NULL_TREE;
+  if (!pred
+      || !rvtt_call_const_uarg (pred, 0, &pred_mod)
+      || pred_mod != (SFPXPRED_MOD1_IF
+		      | (1u << SFPXPRED_MOD1_DEPTH_SHIFT))
+      || !rvtt_call_const_uarg (pred, 1, &pred_id) || pred_id != 0
+      || !pred_lhs || TREE_CODE (pred_lhs) != SSA_NAME
+      || !has_single_use (pred_lhs))
+    return false;
   gcall *readl = next_call (rvtt_insn_data::sfpreadlreg);
   unsigned reg;
   if (!readl || !rvtt_call_const_uarg (readl, 0, &reg) || reg != 15)
     return false;		/* vConstTileId == 2*lane (sfpi.h) */
   gcall *shft = next_call (rvtt_insn_data::sfpshft_i);
-  unsigned shimm;
+  unsigned shimm, shmod;
   if (!shft
+      || !rvtt_canonical_buffer_arg_p (gimple_call_arg (shft, 0))
       || resolve_value (gimple_call_arg (shft, 1)) != gimple_call_lhs (readl)
       || !rvtt_call_const_uarg (shft, 2, &shimm) || shimm != 0xffffffffu)
+    return false;
+  if (!integer_zerop (gimple_call_arg (shft, 3))
+      || !integer_zerop (gimple_call_arg (shft, 4))
+      || !rvtt_call_const_uarg (shft, 5, &shmod) || shmod != 0)
     return false;		/* tileid >> 1 */
   gcall *mask = next_call (rvtt_insn_data::sfploadi);
-  unsigned maskimm;
-  if (!mask || !rvtt_call_const_uarg (mask, 1, &maskimm) || maskimm != 7)
+  unsigned maskimm, maskmod;
+  if (!mask
+      || !rvtt_canonical_buffer_arg_p (gimple_call_arg (mask, 0))
+      || !rvtt_call_const_uarg (mask, 1, &maskimm) || maskimm != 7
+      || !integer_zerop (gimple_call_arg (mask, 2))
+      || !integer_zerop (gimple_call_arg (mask, 3))
+      || !rvtt_call_const_uarg (mask, 4, &maskmod)
+      || maskmod != SFPLOADI_MOD0_USHORT)
     return false;
   gcall *andc = next_call (rvtt_insn_data::sfpand);
   if (!andc)
@@ -785,24 +810,46 @@ match_slide_region (gcall *tail, unsigned k, slide_match *m)
       return false;
   }
   gcall *cmp = next_call (rvtt_insn_data::sfpiadd_i);
-  unsigned imm, mod;
+  unsigned mod;
+  tree imm = cmp ? gimple_call_arg (cmp, 2) : NULL_TREE;
   if (!cmp
+      || !rvtt_canonical_buffer_arg_p (gimple_call_arg (cmp, 0))
       || resolve_value (gimple_call_arg (cmp, 1)) != gimple_call_lhs (andc)
-      || !rvtt_call_const_uarg (cmp, 2, &imm) || imm != k
-      || !rvtt_call_const_uarg (cmp, 5, &mod) || mod != 8)
+      || TREE_CODE (imm) != INTEGER_CST
+      || (uint32_t) TREE_INT_CST_LOW (imm) != 0u - k
+      || !integer_zerop (gimple_call_arg (cmp, 3))
+      || !integer_zerop (gimple_call_arg (cmp, 4))
+      || !rvtt_call_const_uarg (cmp, 5, &mod) || mod != 0
+      || gimple_call_lhs (cmp))
     return false;		/* col < K (canonical LT-compare CC set) */
+  gcall *cond = next_call (rvtt_insn_data::sfpxcond);
+  unsigned cond_mod, cond_done;
+  if (!cond
+      || !rvtt_call_const_uarg (cond, 0, &cond_mod) || cond_mod != 0
+      || gimple_call_arg (cond, 1) != pred_lhs
+      || !rvtt_call_const_uarg (cond, 2, &cond_done) || cond_done != 0
+      || gimple_call_lhs (cond))
+    return false;
   /* The zero: a literal zero SFPLOADI or a read of the architectural
      constant-0 register LReg[9].  */
   gimple_stmt_iterator save = gsi;
   gcall *zero = next_call (rvtt_insn_data::sfpreadlreg);
-  unsigned zimm;
+  unsigned zimm, zmod;
   if (zero && (!rvtt_call_const_uarg (zero, 0, &zimm) || zimm != 9))
     zero = nullptr;
   if (!zero)
     {
       gsi = save;
       zero = next_call (rvtt_insn_data::sfploadi);
-      if (!zero || !rvtt_call_const_uarg (zero, 1, &zimm) || zimm != 0)
+      if (!zero
+	  || !rvtt_canonical_buffer_arg_p (gimple_call_arg (zero, 0))
+	  || !rvtt_call_const_uarg (zero, 1, &zimm) || zimm != 0
+	  || !integer_zerop (gimple_call_arg (zero, 2))
+	  || !integer_zerop (gimple_call_arg (zero, 3))
+	  || !rvtt_call_const_uarg (zero, 4, &zmod)
+	  || (zmod != SFPLOADI_MOD0_FLOATB && zmod != SFPLOADI_MOD0_FLOATA
+	      && zmod != SFPLOADI_MOD0_USHORT && zmod != SFPLOADI_MOD0_SHORT
+	      && zmod != SFPLOADI_MOD0_UPPER && zmod != SFPLOADI_MOD0_LOWER))
 	return false;
     }
   gcall *assign = next_call (rvtt_insn_data::sfpassign_lv);
@@ -810,13 +857,22 @@ match_slide_region (gcall *tail, unsigned k, slide_match *m)
       || gimple_call_arg (assign, 0) != gimple_call_lhs (tail)
       || resolve_value (gimple_call_arg (assign, 1)) != gimple_call_lhs (zero))
     return false;
+  tree tail_lhs = gimple_call_lhs (tail);
+  use_operand_p tail_use_p;
+  gimple *tail_use;
+  if (!tail_lhs || TREE_CODE (tail_lhs) != SSA_NAME
+      || !has_single_use (tail_lhs)
+      || !single_imm_use (tail_lhs, &tail_use_p, &tail_use)
+      || tail_use != assign)
+    return false;
   gcall *encc = next_call (rvtt_insn_data::sfpencc);
   if (!encc || !rvtt_encc_all_lanes_call_p (encc, rvtt_get_insn_data (encc)))
     return false;
 
   m->k = k;
   m->out_assign = assign;
-  m->region = { readl, shft, mask, andc, cmp, zero, assign, encc };
+  m->region = { pred, readl, shft, mask, andc, cmp, cond, zero, assign,
+		encc };
   gcc_assert (gimple_bb (encc) == bb);
   return true;
 }
@@ -1502,9 +1558,11 @@ match_zip_frame (gcall *transp_call, zip_frame *zf)
      post-CC-lowering form (the structured v_if has already been lowered
      by the rvtt expansion pipeline before this pass runs):
 
+       p = SFPXPRED (IF|depth1, 0)      [structured predicate token]
        t = READLREG (15)                [vConstTileId == 2*lane]
        s = SFPSHFT_I (t, -4)            [subvector row = tileid >> 4]
-       SFPXIADD_I (s, 2, mod 9)         [CC := row >= 2, no result]
+       SFPIADD_I (s, -2, mod 8)         [CC := row >= 2, no result]
+       SFPXCOND (0, p, 0)               [lowered condition marker]
        SFPSWAP (v0, v1, 0) + select2(0) [+ optional select2(1)] threads
        SFPSWAP (v2, v3, 0) + likewise
        SFPENCC all-lanes                [region exit re-enable]  */
@@ -1534,26 +1592,57 @@ match_zip_frame (gcall *transp_call, zip_frame *zf)
       }
   };
 
+  gcall *pred = next_call (rvtt_insn_data::sfpxpred);
+  unsigned pred_mod, pred_id;
+  tree pred_lhs = pred ? gimple_call_lhs (pred) : NULL_TREE;
+  if (!pred
+      || !rvtt_call_const_uarg (pred, 0, &pred_mod)
+      || pred_mod != (SFPXPRED_MOD1_IF
+		      | (1u << SFPXPRED_MOD1_DEPTH_SHIFT))
+      || !rvtt_call_const_uarg (pred, 1, &pred_id) || pred_id != 0
+      || !pred_lhs || TREE_CODE (pred_lhs) != SSA_NAME
+      || !has_single_use (pred_lhs))
+    return false;
   gcall *readl = next_call (rvtt_insn_data::sfpreadlreg);
   unsigned reg;
   if (!readl || !rvtt_call_const_uarg (readl, 0, &reg) || reg != 15)
     return false;
   gcall *shft = next_call (rvtt_insn_data::sfpshft_i);
-  unsigned shimm;
+  unsigned shimm, shmod;
   if (!shft
+      || !rvtt_canonical_buffer_arg_p (gimple_call_arg (shft, 0))
       || resolve_value (gimple_call_arg (shft, 1)) != gimple_call_lhs (readl)
-      || !rvtt_call_const_uarg (shft, 2, &shimm) || shimm != 0xfffffffcu)
+      || !rvtt_call_const_uarg (shft, 2, &shimm) || shimm != 0xfffffffcu
+      || !integer_zerop (gimple_call_arg (shft, 3))
+      || !integer_zerop (gimple_call_arg (shft, 4))
+      || !rvtt_call_const_uarg (shft, 5, &shmod) || shmod != 0)
     return false;		/* tileid >> 4 == lane_row */
   gcall *cmp = next_call (rvtt_insn_data::sfpiadd_i);
-  unsigned imm, mod;
+  unsigned mod;
+  tree imm = cmp ? gimple_call_arg (cmp, 2) : NULL_TREE;
   if (!cmp
+      || !rvtt_canonical_buffer_arg_p (gimple_call_arg (cmp, 0))
       || resolve_value (gimple_call_arg (cmp, 1)) != gimple_call_lhs (shft)
-      || !rvtt_call_const_uarg (cmp, 2, &imm) || imm != 2
-      || !rvtt_call_const_uarg (cmp, 5, &mod) || mod != 9)
+      || TREE_CODE (imm) != INTEGER_CST
+      || (uint32_t) TREE_INT_CST_LOW (imm) != 0u - 2
+      || !integer_zerop (gimple_call_arg (cmp, 3))
+      || !integer_zerop (gimple_call_arg (cmp, 4))
+      || !rvtt_call_const_uarg (cmp, 5, &mod) || mod != 8
+      || gimple_call_lhs (cmp))
     return false;		/* row >= 2 (canonical GE-compare CC set) */
+  gcall *cond = next_call (rvtt_insn_data::sfpxcond);
+  unsigned cond_mod, cond_done;
+  if (!cond
+      || !rvtt_call_const_uarg (cond, 0, &cond_mod) || cond_mod != 0
+      || gimple_call_arg (cond, 1) != pred_lhs
+      || !rvtt_call_const_uarg (cond, 2, &cond_done) || cond_done != 0
+      || gimple_call_lhs (cond))
+    return false;
+  region.push_back (pred);
   region.push_back (readl);
   region.push_back (shft);
   region.push_back (cmp);
+  region.push_back (cond);
 
   /* Two mod-0 pair swaps on (out0, out1) and (out2, out3).  The
      surviving-value select (index 0) must exist; the partner select is
