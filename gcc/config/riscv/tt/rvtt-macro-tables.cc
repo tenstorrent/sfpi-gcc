@@ -923,6 +923,17 @@ subunit_legal_mask (const caps *c, uint8_t opcode)
 {
   if (!c)
     return 0;
+  /* Blackhole's sequencer does not execute SFPABS (0x7d) lane-wise
+     correctly.  The LReg16-target realization was already refused after
+     its reference oracle and silicon both rejected it; the int32-absolute
+     LLK then adjudicated the VD-direct fallback as wrong on silicon too
+     (alternating lanes were zero while the explicit/replay lowering was
+     correct).  This is an opcode execution capability, independent of the
+     source operation or register route: keep SFPABS out of Blackhole macro
+     templates until hardware support is established.  WH retains the
+     architectural table entry because the evidence is Blackhole-only.  */
+  if (c->cpu == CPU_BH && opcode == 0x7d)
+    return 0;
   for (const subunit_legal_entry &e : subunit_legality)
     if (e.opcode == opcode)
       return e.mask;

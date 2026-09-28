@@ -1,26 +1,23 @@
 // { dg-options "-mcpu=tt-bh-tensix -O3 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -fdump-rtl-rvtt_macro_planner-details" }
 // Near-miss guards for the effect-attributes work: the refusing default
 // must still hold everywhere it was not explicitly proven.
-//   - an UNattributed neighboring pattern (SFPABS) inside a row;
+//   - SFPABS, whose Blackhole macro execution is not lane-correct;
 //   - SFPCAST mod 1 (stochastic rounding: advances the PRNG, outside
 //     the effect vocabulary);
 //   - SFPCAST mod 2 (the documented BH cast-as-ABS hardware bug).
 // Each row dissolves at the opaque member; a CC-writing SFPIADD
 // (CC_LT0) instead refuses at the CC write by name.  The D3 latency
-// audit gave SFPABS mod 1 a Layer-1 effect set (the rows then refused
-// one gate later at the Layer-4 tables), and the enumerated
-// vocabulary admission PROVED the ABS descriptor program
-// (differential vs the reference simulatorulators, macro-planner-unary-*), so
-// the abs rows now legitimately FORM -- this guard keeps watching the
-// still-unproven neighbors: both stochastic/bug cast mods stay
-// opaque, and the CC-writing accumulate still refuses at the CC gate
-// by name, never forming.
+// audit gave SFPABS mod 1 a Layer-1 effect set, but Blackhole silicon
+// subsequently disproved both its LReg16-target and VD-direct macro
+// realizations.  The ABS rows therefore reach the subunit gate and
+// refuse there.  Both stochastic/bug cast mods remain opaque, and the
+// CC-writing accumulate still refuses at the CC gate by name.
 // { dg-final { scan-rtl-dump-times "row-opaque-effect" 8 "rvtt_macro_planner" } }
 // { dg-final { scan-rtl-dump "event-delay-unproven|descriptor-program-unproven|row-not-closed" "rvtt_macro_planner" } }
 // { dg-final { scan-rtl-dump-times "cc-template-unsupported" 4 "rvtt_macro_planner" } }
-// { dg-final { scan-rtl-dump-times "Macro-planner formed: rows=4 runs=1" 1 "rvtt_macro_planner" } }
-// { dg-final { scan-rtl-dump-times "Macro-planner descriptor-word dest=0: 0x7d0000c1" 1 "rvtt_macro_planner" } }
-// { dg-final { scan-assembler-not "SFPABS" } }
+// { dg-final { scan-rtl-dump "subunit-placement-unproven" "rvtt_macro_planner" } }
+// { dg-final { scan-rtl-dump-not "Macro-planner descriptor-word dest=0: 0x7d0000c1" "rvtt_macro_planner" } }
+// { dg-final { scan-assembler-times "SFPABS" 4 } }
 // { dg-final { scan-assembler-times "SFPCAST" 8 } }
 // { dg-final { scan-assembler "SFPIADD" } }
 

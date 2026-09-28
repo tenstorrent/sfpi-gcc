@@ -1,13 +1,15 @@
-// Derived-template Simple-unary admission, varied surface:
-// the SFPMOV negate arm (mod 1) and the SFPABS float arm (mod 1),
-// each an in-place single-carrier calendar.
+// Derived-template Simple-unary admission, varied surface.  The SFPMOV
+// negate arm (mod 1) remains an admitted in-place single-carrier calendar.
+// Blackhole silicon disproved lane-correct macro execution of SFPABS, so
+// its otherwise identical row shape must remain explicit.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-macro-planner-verify -fdump-rtl-rvtt_macro_planner" }
 // { dg-final { scan-rtl-dump-times "Macro-planner descriptor-word dest=0: 0x7c0000c1" 1 "rvtt_macro_planner" } }
-// { dg-final { scan-rtl-dump-times "Macro-planner descriptor-word dest=0: 0x7d0000c1" 1 "rvtt_macro_planner" } }
-// { dg-final { scan-rtl-dump-times "Macro-planner verify: ok" 2 "rvtt_macro_planner" } }
-// { dg-final { scan-rtl-dump-times "Macro-planner formed: rows=8 runs=1" 2 "rvtt_macro_planner" } }
+// { dg-final { scan-rtl-dump-not "Macro-planner descriptor-word dest=0: 0x7d0000c1" "rvtt_macro_planner" } }
+// { dg-final { scan-rtl-dump "subunit-placement-unproven" "rvtt_macro_planner" } }
+// { dg-final { scan-rtl-dump-times "Macro-planner verify: ok" 1 "rvtt_macro_planner" } }
+// { dg-final { scan-rtl-dump-times "Macro-planner formed: rows=8 runs=1" 1 "rvtt_macro_planner" } }
 // { dg-final { scan-assembler-not "SFPMOV" } }
-// { dg-final { scan-assembler-not "SFPABS" } }
+// { dg-final { scan-assembler-times "SFPABS" 1 } }
 
 __attribute__((noinline)) void neg_rows ()
 {

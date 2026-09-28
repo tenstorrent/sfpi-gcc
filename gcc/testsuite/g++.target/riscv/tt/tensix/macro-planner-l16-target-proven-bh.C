@@ -6,18 +6,20 @@
 // outside the set to reach formation, via the entry-ambient derivation
 // -- was adjudicated WRONG on BH hardware under LReg16 staging (a
 // absint32 int-abs witness; the oracle refuses it as
-// UnsupportedFunctionality).  The derivation now realizes it VD-DIRECT:
-// the template targets the launch VD (rewritten-word execution, full
-// opcode support) and the store reads VD, with NO vd16 sequence bit.
+// UnsupportedFunctionality).  A VD-direct fallback then targeted the launch
+// VD through rewritten-word execution.  Silicon subsequently disproved that
+// fallback too: the Blackhole macro evaluator produced alternating zero
+// lanes for int32 abs while the explicit lowering was correct.  SFPABS is
+// therefore absent from the Blackhole macro execution capability; the
+// same-shape SFPCAST control remains admitted.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-macro-planner-verify -fdump-rtl-rvtt_macro_planner-details" }
-// { dg-final { scan-rtl-dump-times "Macro-planner formed: rows=1 runs=1 config=preheader lane-proof=materialized-enable" 2 "rvtt_macro_planner" } }
-// The abs fn's VD-direct calendar: sequence word 0x0b000004 (template0
-// at the launch slot targeting VD -- no 0x40 vd16 bit on either byte --
-// store case 3 at delay 1).  The proven-set CONTROL (SFPCAST 0x90
-// producer, same row shape) KEEPS the LReg16 staging: sequence word
+// { dg-final { scan-rtl-dump "Macro-planner descriptor-refusal: subunit-placement-unproven" "rvtt_macro_planner" } }
+// { dg-final { scan-rtl-dump-times "Macro-planner formed: rows=1 runs=1 config=preheader lane-proof=materialized-enable" 1 "rvtt_macro_planner" } }
+// The proven-set CONTROL (SFPCAST 0x90 producer, same row shape) keeps the
+// LReg16 staging: sequence word
 // 0x4b000044 (template0 and store both vd16-flagged) -- the exact
 // discrimination the guard makes.
-// { dg-final { scan-rtl-dump-times "descriptor-word dest=4: 0x0b000004" 1 "rvtt_macro_planner" } }
+// { dg-final { scan-assembler-times "SFPABS" 1 } }
 // { dg-final { scan-rtl-dump-times "descriptor-word dest=4: 0x4b000044" 1 "rvtt_macro_planner" } }
 
 __attribute__((noinline)) void abs_vd_direct_loop ()
