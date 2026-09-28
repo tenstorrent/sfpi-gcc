@@ -4,16 +4,16 @@
 // SAME re-record loop and would-be mod-write row as the refuse twin,
 // but with twelve scalar separator words on the only path from the row
 // back to the inner preheader (the outer-loop tail).  The planned
-// capture is >= W_drain issue words from the row, the mirror admits the
-// hoist, and the dst-autoincr group guard then admits the SAME audited
-// distance at pass 397: BOTH transforms fire and compose -- proving the
-// refusal keys the audited window, not the passes' co-presence.
+// capture is >= W_drain issue words from the row, so record hoisting still
+// fires.  The resulting dominating no-exec capture is not the deliverer of
+// the explicit row, however; with record hoisting enabled the Blackhole
+// composition quarantine retains the explicit destination increment.
 // { dg-final { scan-rtl-dump "record-hoist: invariant re-record window admitted" "rvtt_replay" } }
 // { dg-final { scan-rtl-dump "Hoisted no-exec capture" "rvtt_replay" } }
 // { dg-final { scan-rtl-dump-not "record-hoist-downstream-fallback-unprofitable" "rvtt_replay" } }
-// { dg-final { scan-rtl-dump "Dst-autoincr group: bb \[0-9\]+ rows 1 stride 2 config 3 words" "rvtt_dst_autoincr" } }
-// { dg-final { scan-rtl-dump-not "mod-write-noexec-record-composition-unaudited" "rvtt_dst_autoincr" } }
-// { dg-final { scan-assembler-not "TTINCRWC" } }
+// { dg-final { scan-rtl-dump "record-hoist-enabled no-exec capture dominates explicit mod-write group" "rvtt_dst_autoincr" } }
+// { dg-final { scan-rtl-dump-not "Dst-autoincr group: bb" "rvtt_dst_autoincr" } }
+// { dg-final { scan-assembler-times "TTINCRWC\t0, 2, 0, 0" 1 } }
 // { dg-final { scan-assembler "TTREPLAY\t0, 6, 0, 1" } }
 void tile_rows_fallback_covered (volatile int *sep)
 {

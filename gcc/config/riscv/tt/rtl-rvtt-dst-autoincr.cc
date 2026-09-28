@@ -590,6 +590,31 @@ noexec_record_composition_p (const function_scan &fn, const group &grp,
 	  return true;
 	}
 
+      /* With record hoisting enabled, conservatively quarantine a no-exec
+	 capture that dominates an explicit mod-write group.  Such a capture is
+	 not the deliverer of the group's stores, and dominance within this
+	 function cannot prove that a prior invocation's explicit mod-write has
+	 retired before the next invocation enters the capture.  The scanner
+	 does not retain capture origin, so this deliberately applies to every
+	 option-on capture of that shape, not only to captures moved by the
+	 record-hoist pass.  This Blackhole composition was not part of the
+	 original drained-frontend audit: keep the explicit increments.
+	 Replay-delivered groups retain the existing dominance policy below.  */
+      bool cap_dominates_group
+	= dom_info_available_p (CDI_DOMINATORS)
+	  && dominated_by_p (CDI_DOMINATORS, grp.scan->bb, cap->bb);
+      if (!replay_delivered
+	  && TARGET_XTT_TENSIX_BH
+	  && riscv_tt_opt_replay_record_hoist > 0
+	  && cap_dominates_group)
+	{
+	  *hazard = cap;
+	  *detail
+	    = "record-hoist-enabled no-exec capture dominates explicit mod-write "
+	      "group (cross-invocation retirement unproven)";
+	  return true;
+	}
+
       /* Replay-delivered rows break the issue-parity premise of the
 	 frontend-word distance audit (see the block comment above for
 	 the refuting hardware witness): a reachable no-exec
@@ -627,9 +652,6 @@ noexec_record_composition_p (const function_scan &fn, const group &grp,
 	     (the persistence case).  A dominating, non-reachable capture is the
 	     deliverer and admits.  */
 	  bool reachable = block_reachable_p (grp.scan->bb, cap->bb);
-	  bool cap_dominates_group
-	    = dom_info_available_p (CDI_DOMINATORS)
-	      && dominated_by_p (CDI_DOMINATORS, grp.scan->bb, cap->bb);
 	  if (reachable || !cap_dominates_group)
 	    {
 	      *hazard = cap;

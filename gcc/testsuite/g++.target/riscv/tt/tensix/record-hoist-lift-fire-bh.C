@@ -11,8 +11,9 @@
 // reaches the function entry (oracle-clean), and the UNCHANGED no-exec
 // hoist commits there -- the record is delivered once per kernel entry
 // (the hand init-record discipline) instead of re-recorded per row,
-// and dst-autoincr keeps its mod-write fire (the guard's dominating
-// non-reachable deliverer class).
+// but it is not the deliverer of the explicit store.  With record hoisting
+// enabled the Blackhole composition quarantine therefore retains the
+// explicit destination increment.
 // Pricing floor (immediate loop): 11 trips x (6x123 - 70) - (7x123 +
 // 300) = 6187 >= 60.
 // { dg-final { scan-rtl-dump "record-hoist-lift: lifted placement to bb \[0-9\]+ .1 level.s. out" "rvtt_replay" } }
@@ -20,9 +21,9 @@
 // { dg-final { scan-rtl-dump-times "Hoisted no-exec capture" 1 "rvtt_replay" } }
 // { dg-final { scan-rtl-dump-not "record-hoist-downstream-fallback-unprofitable" "rvtt_replay" } }
 // { dg-final { scan-rtl-dump-not "Capturing and executing sequence" "rvtt_replay" } }
-// { dg-final { scan-rtl-dump "Dst-autoincr group: bb \[0-9\]+ rows 1 stride 2 config 3 words" "rvtt_dst_autoincr" } }
-// { dg-final { scan-rtl-dump-not "mod-write-noexec-record-composition-unaudited" "rvtt_dst_autoincr" } }
-// { dg-final { scan-assembler-not "TTINCRWC" } }
+// { dg-final { scan-rtl-dump "record-hoist-enabled no-exec capture dominates explicit mod-write group" "rvtt_dst_autoincr" } }
+// { dg-final { scan-rtl-dump-not "Dst-autoincr group: bb" "rvtt_dst_autoincr" } }
+// { dg-final { scan-assembler-times "TTINCRWC\t0, 2, 0, 0" 1 } }
 // { dg-final { scan-assembler-times "TTREPLAY\t0, 6, 0, 1" 1 } }
 // { dg-final { scan-assembler-times "TTREPLAY\t0, 6, 0, 0" 2 } }
 void tile_rows_lift_fire ()
