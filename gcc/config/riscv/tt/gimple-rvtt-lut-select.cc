@@ -1056,7 +1056,8 @@ match_group (const rvtt_cc_region_tree *ccr, gimple_stmt_iterator gsi,
 	  /* A boundary that needed both halves is a chained pair: the
 	     SFPLOADI root feeds only the claimed SFPLOADI_LV tail, so
 	     it is accounted for by the same compare.  */
-	  gcall *tail = dyn_cast <gcall *> (g->boundary_def[i]);
+	  gimple *boundary = g->boundary_def[i];
+	  gcall *tail = boundary ? dyn_cast <gcall *> (boundary) : nullptr;
 	  const rvtt_insn_data *td = tail ? rvtt_get_insn_data (tail) : nullptr;
 	  if (td && td->id == rvtt_insn_data::sfploadi_lv)
 	    {
@@ -1415,6 +1416,26 @@ match_group (const rvtt_cc_region_tree *ccr, gimple_stmt_iterator gsi,
 	    }
       }
 
+  /* The compare boundaries are part of the converted region too.  Once
+     their sfpxcmp consumers disappear, the lowered SFPLOADI calls would
+     otherwise survive as volatile, result-less instructions in the row
+     loop.  Capture the whole claimed materialization while its SSA links
+     are still intact; the matcher recorded a boundary only when its value
+     had this compare as its single use, so a shared boundary is never
+     admitted here.  Tails precede roots in the vector so deletion exposes
+     the root as dead before it is considered.  */
+  auto_vec<gimple *, 10> dead_boundary_defs;
+  for (unsigned i = 0; i < num_pred; ++i)
+    if (gimple *tail = g->boundary_def[i])
+      {
+	if (!dead_boundary_defs.contains (tail))
+	  dead_boundary_defs.safe_push (tail);
+	gcall *call = dyn_cast <gcall *> (tail);
+	if (gcall *root = call ? rvtt_chained_loadi_root (call) : nullptr)
+	  if (!dead_boundary_defs.contains (root))
+	    dead_boundary_defs.safe_push (root);
+      }
+
   /* A folded sign restore dissolves: the LUT's mode word already
      copies the input's sign, so the copy's consumers take the LUT
      value directly.  */
@@ -1448,6 +1469,17 @@ match_group (const rvtt_cc_region_tree *ccr, gimple_stmt_iterator gsi,
     {
       remove (g->leaf_add[leaf]);
       remove (g->leaf_mul[leaf]);
+    }
+  /* Boundary materializations were single-use when claimed, but recheck
+     liveness after deleting the comparisons.  This keeps the cleanup
+     fail-closed if a later matcher change ever admits a shared value.  */
+  for (gimple *def : dead_boundary_defs)
+    {
+      if (!gimple_bb (def))
+	continue;
+      tree lhs = gimple_call_lhs (def);
+      if (!lhs || (TREE_CODE (lhs) == SSA_NAME && has_zero_uses (lhs)))
+	remove (def);
     }
   /* Under a packed mode the original coefficient materializations are
      dead once their leaves are gone (unless something else still uses
