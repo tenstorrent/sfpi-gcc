@@ -657,7 +657,7 @@ back_threader_profitability::possibly_profitable_path_p
 #if 1
 	      // probably nearly all our builtins?
 	      if (auto *insnd = rvtt_get_insn_data (stmt))
-		if (insnd->id == rvtt_insn_data::ttinsn)
+		//		if (insnd->id == rvtt_insn_data::ttinsn)
 		  {
 		    if (dump_file && (dump_flags & TDF_DETAILS))
 		      fputc ('\n', dump_file);
