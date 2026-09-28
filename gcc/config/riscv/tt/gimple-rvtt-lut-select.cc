@@ -1412,7 +1412,21 @@ match_group (const rvtt_cc_region_tree *ccr, gimple_stmt_iterator gsi,
 	      gimple *def = SSA_NAME_DEF_STMT (op);
 	      if (def && rvtt_get_insn_data (def)
 		  && !dead_coeff_defs.contains (def))
-		dead_coeff_defs.safe_push (def);
+		{
+		  dead_coeff_defs.safe_push (def);
+		  /* A packed FP16 coefficient can be a chained
+		     SFPLOADI + SFPLOADI_LV materialization.  Deleting the
+		     tail below strips the single-use root's lhs, but the root
+		     call is volatile and would otherwise survive in the row
+		     loop as a result-less instruction.  Capture it while the
+		     SSA link is intact; tail-before-root ordering makes the
+		     liveness recheck below preserve a shared root.  */
+		  gcall *call = dyn_cast <gcall *> (def);
+		  if (gcall *root
+		      = call ? rvtt_chained_loadi_root (call) : nullptr)
+		    if (!dead_coeff_defs.contains (root))
+		      dead_coeff_defs.safe_push (root);
+		}
 	    }
       }
 
@@ -1483,9 +1497,11 @@ match_group (const rvtt_cc_region_tree *ccr, gimple_stmt_iterator gsi,
     }
   /* Under a packed mode the original coefficient materializations are
      dead once their leaves are gone (unless something else still uses
-     them, in which case they stay).  A null lhs means the recursive
-     single-use cleanup in the leaf deletions above already stripped
-     the definition's result: the load is equally dead.  */
+     them, in which case they stay).  Chained tails precede their roots
+     in DEAD_COEFF_DEFS, so removing a tail first exposes an unshared
+     root as dead.  A null lhs means the recursive single-use cleanup in
+     the leaf deletions above already stripped the definition's result:
+     the load is equally dead.  */
   for (gimple *def : dead_coeff_defs)
     {
       if (!gimple_bb (def))
