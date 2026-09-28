@@ -42,6 +42,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree-ssa.h"
 #include "rvtt-protos.h"
 #include "rvtt-refuse.h"
+#include "rvtt-effects.h"
 #include "rvtt.h"
 #include "diagnostic-core.h"
 #include "print-rtl.h"
@@ -513,6 +514,26 @@ rvtt_arg_info::rvtt_arg_info (tree arg, bool only_zeroness)
     }
   else if (only_zeroness)
     return;
+  else if (insnd->id == rvtt_insn_data::sfpxloadi)
+    {
+      /* SFPXLOADI's canonical full-width forms carry the scalar bit image
+	 verbatim.  Other widths can truncate or sign-extend in emit_loadimm;
+	 do not claim those as the original scalar constant here.  The address
+	 and synthesis operands must also be canonical constants, just as for
+	 the SFPLOADI case below.  */
+      if (!rvtt_canonical_buffer_arg_p (gimple_call_arg (call, 0))
+	  || TREE_CODE (gimple_call_arg (call, 1)) != INTEGER_CST
+	  || !integer_zerop (gimple_call_arg (call, 2))
+	  || !integer_zerop (gimple_call_arg (call, 3))
+	  || TREE_CODE (gimple_call_arg (call, 4)) != INTEGER_CST)
+	return;
+
+      HOST_WIDE_INT bits = tree_to_shwi (gimple_call_arg (call, 4));
+      if (bits != 31 && bits != -32)
+	return;
+
+      cst = (uint32_t) TREE_INT_CST_LOW (gimple_call_arg (call, 1));
+    }
   else if (insnd->id == rvtt_insn_data::sfploadi)
     {
       if (!integer_zerop (gimple_call_arg (call, 0)))

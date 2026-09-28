@@ -283,7 +283,8 @@ match_group (gimple_stmt_iterator gsi, intabs_group *g, bool *candidate)
 	    if (want != WANT_CONDB)
 	      return *candidate ? refuse ("int-abs-region-shape", stmt)
 				: false;
-	    tree c = gimple_call_arg (call, 0);
+	    /* Current sfpxcond is (mod, pred, cond).  */
+	    tree c = gimple_call_arg (call, 2);
 	    tree t = gimple_call_arg (call, 1);
 	    if (TREE_CODE (c) != SSA_NAME || TREE_CODE (t) != SSA_NAME
 		|| SSA_NAME_DEF_STMT (c) != g->icmp

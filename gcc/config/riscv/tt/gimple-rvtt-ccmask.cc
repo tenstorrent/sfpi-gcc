@@ -353,7 +353,8 @@ match_group (const rvtt_cc_region_tree *ccr, gimple_stmt_iterator gsi,
 	    if (want != WANT_CONDB)
 	      return *candidate ? refuse ("ccmask-region-shape", stmt)
 				: false;
-	    tree c = gimple_call_arg (call, 0);
+	    /* Current sfpxcond is (mod, pred, cond).  */
+	    tree c = gimple_call_arg (call, 2);
 	    tree t = gimple_call_arg (call, 1);
 	    if (TREE_CODE (c) != SSA_NAME || TREE_CODE (t) != SSA_NAME
 		|| SSA_NAME_DEF_STMT (c) != g->fcmp
@@ -783,11 +784,11 @@ match_group_general (function *fun, const rvtt_cc_region_tree *ccr,
   /* Stage-A operand linkage of the structured condition.  */
   {
     /* sfpxcondb(c, t) became sfpxcond(mod, pred, cond): main reads the
-       two linked values at mod_arg()+1 and mod_arg()+2
+       predicate at mod_arg()+1 and the condition at mod_arg()+2
        (gimple-rvtt-pred.cc expand_vif).  */
     const rvtt_insn_data *cond_insnd = rvtt_get_insn_data (g->condb);
-    tree c = gimple_call_arg (g->condb, cond_insnd->mod_arg () + 1);
-    tree t = gimple_call_arg (g->condb, cond_insnd->mod_arg () + 2);
+    tree c = gimple_call_arg (g->condb, cond_insnd->mod_arg () + 2);
+    tree t = gimple_call_arg (g->condb, cond_insnd->mod_arg () + 1);
     if (TREE_CODE (c) != SSA_NAME || TREE_CODE (t) != SSA_NAME
 	|| SSA_NAME_DEF_STMT (c) != g->fcmp
 	|| SSA_NAME_DEF_STMT (t) != g->xvif
@@ -915,6 +916,18 @@ transform_group (ccmask_group *g)
       print_gimple_stmt (dump_file, land, 0);
     }
 
+  /* Identify the zero materialization before deleting either of its uses.
+     rvtt_prep_stmt_for_deletion can strip the lhs from a single-use
+     defining call and release its SSA name.  In particular, the compare
+     and predicated assignment may share one zero materialization.  */
+  gimple *zdef = nullptr;
+  if (TREE_CODE (g->zv) == SSA_NAME)
+    {
+      gimple *d = SSA_NAME_DEF_STMT (g->zv);
+      if (d && rvtt_get_insn_data (d))
+	zdef = d;
+    }
+
   auto remove = [] (gimple *stmt)
     {
       rvtt_prep_stmt_for_deletion (stmt);
@@ -931,10 +944,10 @@ transform_group (ccmask_group *g)
   /* The zero materialization the region assigned is dead once the
      assign is gone; delete it here so the invariant pass running next
      never sees a use-free architectural LREG write to hoist.  */
-  if (TREE_CODE (g->zv) == SSA_NAME && has_zero_uses (g->zv))
+  if (zdef && gimple_bb (zdef))
     {
-      gimple *zdef = SSA_NAME_DEF_STMT (g->zv);
-      if (rvtt_get_insn_data (zdef))
+      tree lhs = gimple_call_lhs (zdef);
+      if (!lhs || (TREE_CODE (lhs) == SSA_NAME && has_zero_uses (lhs)))
 	remove (zdef);
     }
 
