@@ -354,6 +354,29 @@ classify (rtx_insn *insn)
       f.cc_write = true;
       return f;
     }
+  /* Unified scalar/vector comparisons lower their no-value SET_CC arm to
+     the native SFPGT/SFPLE _nv patterns.  Those patterns predate complete
+     effect attributes, so rvtt_insn_effects conservatively reports them
+     opaque.  Treating that opacity as CC-transparent loses the lane-state
+     boundary: a Dst load after the compare can then be recorded as an
+     all-lanes value and forwarded past the closing ENCC.
+
+     Admit only the exact SET_CC encoding emitted by sfpxcmp lowering.  The
+     other native-compare modes include destination and flag-stack effects;
+     they retain the refusing opaque default until separately audited.  In
+     the _nv patterns operand 2 is mod1 (operand 3 is imm12), mirroring the
+     assembler template in rvtt.md.  */
+  if (code == CODE_FOR_rvtt_sfpgt_nv || code == CODE_FOR_rvtt_sfple_nv)
+    {
+      extract_insn (insn);
+      if (recog_data.n_operands >= 4
+	  && CONST_INT_P (recog_data.operand[2])
+	  && INTVAL (recog_data.operand[2]) == SFPGTLE_MOD1_SET_CC)
+	{
+	  f.cc_write = true;
+	  return f;
+	}
+    }
   /* The predicated-assign copy is a pure LREG move under CC (its split
      form is a plain SET); it has no Dst/RWC/config/CC-write effect.
      Its define_insn is starred (no CODE_FOR), so it is identified by
