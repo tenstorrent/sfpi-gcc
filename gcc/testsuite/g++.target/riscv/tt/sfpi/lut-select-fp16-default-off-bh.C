@@ -7,7 +7,8 @@
 // { dg-final { scan-tree-dump "refused \\(lut-partition-arity-unsupported\\)" "rvtt_lut_select" } }
 // { dg-final { scan-tree-dump-not "formed" "rvtt_lut_select" } }
 // { dg-final { scan-assembler-not "SFPLUTFP32" } }
-// { dg-final { scan-assembler "SFPSETCC" } }
+// { dg-final { scan-assembler "SFPGT" } }
+// { dg-final { scan-assembler "SFPENCC" } }
 
 #define LUT_TREE_FN lut_tree_fp16_off
 #define LUT_TREE_X x

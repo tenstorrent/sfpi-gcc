@@ -5,7 +5,8 @@
 // this test used to rely on the ambient default being off; it now pins
 // the -mno- spelling so the disabled path stays covered.
 // { dg-final { scan-assembler-not "SFPLUTFP32" } }
-// { dg-final { scan-assembler "SFPSETCC" } }
+// { dg-final { scan-assembler "SFPGT" } }
+// { dg-final { scan-assembler "SFPENCC" } }
 
 #define LUT_TREE_FN lut_tree_off
 #define LUT_TREE_X x

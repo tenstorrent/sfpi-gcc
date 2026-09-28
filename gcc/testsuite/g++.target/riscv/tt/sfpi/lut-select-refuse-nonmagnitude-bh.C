@@ -4,7 +4,8 @@
 // nothing forms.
 // { dg-final { scan-tree-dump-not "formed " "rvtt_lut_select" } }
 // { dg-final { scan-assembler-not "SFPLUTFP32" } }
-// { dg-final { scan-assembler "SFPSETCC" } }
+// { dg-final { scan-assembler "SFPGT" } }
+// { dg-final { scan-assembler "SFPENCC" } }
 
 extern volatile unsigned long __instrn_buffer[];
 namespace ckernel {

@@ -9,7 +9,10 @@
 // slot copy.
 // { dg-final { scan-tree-dump "formed fp32-3entry-sgn-update" "rvtt_lut_select" } }
 // { dg-final { scan-tree-dump "slot creg value 0 materialized as FLOATB immediate 0" "rvtt_lut_select" } }
-// { dg-final { scan-tree-dump "placements=3" "rvtt_lut_select" } }
+// The two affine coefficients, two zero slots, and converted constant-leaf
+// slot are all loop invariant and fit the audited preheader pressure budget.
+// { dg-final { scan-tree-dump-times "placed coefficient materialization in loop preheader" 5 "rvtt_lut_select" } }
+// { dg-final { scan-tree-dump "placements=5" "rvtt_lut_select" } }
 // { dg-final { scan-tree-dump-not "lut-coefficient-pressure" "rvtt_lut_select" } }
 // { dg-final { scan-assembler-times "SFPLUTFP32" 1 } }
 // { dg-final { scan-assembler "SFPMAD\tL3, L3, L3, L10" } }

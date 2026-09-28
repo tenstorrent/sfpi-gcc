@@ -5,7 +5,8 @@
 // { dg-final { scan-tree-dump-times "refused \\(lut-coeff-encoding-unrepresentable\\)" 1 "rvtt_lut_select" } }
 // { dg-final { scan-tree-dump-not "formed" "rvtt_lut_select" } }
 // { dg-final { scan-assembler-not "SFPLUTFP32" } }
-// { dg-final { scan-assembler "SFPSETCC" } }
+// { dg-final { scan-assembler "SFPGT" } }
+// { dg-final { scan-assembler "SFPENCC" } }
 
 #define LUT_TREE_FN lut_tree_fp16_bad_coeff
 #define LUT_TREE_X x

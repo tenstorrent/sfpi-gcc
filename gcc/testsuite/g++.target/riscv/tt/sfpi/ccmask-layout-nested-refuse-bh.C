@@ -6,7 +6,8 @@
 // untouched.
 // { dg-final { scan-tree-dump "ccmask refused .ccmask-region-shape" "rvtt_ccmask" } }
 // { dg-final { scan-tree-dump-not "folded zeroing CC region" "rvtt_ccmask" } }
-// { dg-final { scan-assembler "SFPSETCC" } }
+// { dg-final { scan-assembler "SFPLE" } }
+// { dg-final { scan-assembler "SFPENCC" } }
 // { dg-final { scan-assembler-not "SFPGT\tL\[0-7\], L9" } }
 #define CCL_REGION_BODY(y, s, vp) \
   do { \

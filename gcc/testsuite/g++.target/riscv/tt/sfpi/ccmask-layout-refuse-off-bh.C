@@ -6,7 +6,8 @@
 // when absent.
 // { dg-final { scan-tree-dump "ccmask refused .ccmask-region-foreign-stmt" "rvtt_ccmask" } }
 // { dg-final { scan-tree-dump-not "folded zeroing CC region" "rvtt_ccmask" } }
-// { dg-final { scan-assembler "SFPSETCC" } }
+// { dg-final { scan-assembler "SFPLE" } }
+// { dg-final { scan-assembler "SFPENCC" } }
 // { dg-final { scan-assembler-not "SFPGT" } }
 #define CCL_REGION_BODY(y, s, vp) \
   do { (y) = sfpi::vFloat (0.0f); if ((s) & 1) (void) *(vp); } while (0)

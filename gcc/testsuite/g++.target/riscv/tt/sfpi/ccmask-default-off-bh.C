@@ -1,8 +1,9 @@
 // { dg-options "-mcpu=tt-bh-tensix -O2 -I [SFPI]/include -fno-exceptions -fno-rtti" }
 // Default-off control: without -mtt-tensix-optimize-ccmask the CC
-// lowering is untouched.
+// lowering retains its ordinary compare-and-enable sequence.
 // { dg-final { scan-assembler-not "SFPGT" } }
-// { dg-final { scan-assembler "SFPSETCC" } }
+// { dg-final { scan-assembler "SFPLE" } }
+// { dg-final { scan-assembler "SFPENCC" } }
 #define CCMASK_FN ccmask_defoff
 #define CCMASK_X x
 #define CCMASK_Y y

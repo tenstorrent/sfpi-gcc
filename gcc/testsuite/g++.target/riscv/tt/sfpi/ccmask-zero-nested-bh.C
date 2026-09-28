@@ -5,7 +5,8 @@
 // own CC scaffolding stays.
 // { dg-final { scan-tree-dump-times "ccmask: folded zeroing CC region" 1 "rvtt_ccmask" } }
 // { dg-final { scan-assembler "SFPGT" } }
-// { dg-final { scan-assembler "SFPSETCC" } }
+// { dg-final { scan-assembler "SFPLE" } }
+// { dg-final { scan-assembler "SFPENCC" } }
 extern volatile unsigned long __instrn_buffer[];
 namespace ckernel {
 constexpr inline volatile unsigned long (&instrn_buffer)[] = ::__instrn_buffer;

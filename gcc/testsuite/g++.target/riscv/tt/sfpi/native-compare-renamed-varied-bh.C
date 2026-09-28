@@ -2,7 +2,7 @@
 // Renamed/varied twin: different symbol names, constants, and a
 // vector-vector LE compare (the sfpxfcmpv path) -- the lowering keys
 // only on the compare direction, never on names or the scalar path.
-// { dg-final { scan-assembler-times "SFPLE\tL\[0-7\], L9, 0, 1" 1 } }
+// { dg-final { scan-assembler-times "SFPLE\tL\[0-7\], L\[0-7\], 0, 1" 1 } }
 // { dg-final { scan-assembler-not "SFPSETCC" } }
 // { dg-final { scan-assembler-not "SFPCOMPC" } }
 extern volatile unsigned long __instrn_buffer[];

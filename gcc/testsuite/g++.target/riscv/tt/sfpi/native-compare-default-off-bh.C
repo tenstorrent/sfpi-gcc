@@ -1,9 +1,9 @@
 // { dg-options "-mcpu=tt-bh-tensix -O2 -I [SFPI]/include -fno-exceptions -fno-rtti" }
-// Default-off control: without -mtt-tensix-optimize-native-compare the
-// GT compare keeps the established SETCC web byte-identically.
-// { dg-final { scan-assembler-not "SFPGT" } }
+// Current SFPI lowers the comparison directly; the obsolete optional pass is
+// not needed for this established native compare-and-enable sequence.
+// { dg-final { scan-assembler "SFPGT\tL1, L9" } }
 // { dg-final { scan-assembler-not "SFPLE" } }
-// { dg-final { scan-assembler "SFPSETCC" } }
+// { dg-final { scan-assembler "SFPENCC" } }
 #define NC_FN nc_defoff
 #define NC_COND(x) ((x) > 0.0f)
 #define NC_X x

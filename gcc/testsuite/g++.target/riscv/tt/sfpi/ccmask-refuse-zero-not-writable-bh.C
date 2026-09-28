@@ -7,7 +7,8 @@
 // { dg-final { scan-tree-dump "ccmask refused .ccmask-zero-not-writable" "rvtt_ccmask" } }
 // { dg-final { scan-tree-dump "ccmask: folds=0" "rvtt_ccmask" } }
 // { dg-final { scan-assembler-not "SFPLE" } }
-// { dg-final { scan-assembler-not "SFPGT" } }
+// { dg-final { scan-assembler "SFPGT\tL9, L\[0-7\], 0, 1" } }
+// { dg-final { scan-assembler "SFPENCC" } }
 #define CCMASK_FN ccmask_ltdir_cregzero
 #define CCMASK_COND(x) ((x) < 0.0f)
 #define CCMASK_ZERO sfpi::vConst0
