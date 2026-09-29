@@ -44,6 +44,9 @@ INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_attrib);
 INSERT_PASS_BEFORE (pass_lower_subreg, 1, pass_rvtt_unspec_prop_rtl);
 INSERT_PASS_AFTER (pass_cse, 1, pass_rvtt_fix_ebreak);
 INSERT_PASS_AFTER (pass_late_combine, 1, pass_rvtt_rmext);
+/* Make opaque raw-LLK LREG ownership visible before IRA assigns any
+   compiler temporaries to the same architectural registers.  */
+INSERT_PASS_BEFORE (pass_ira, 1, pass_rvtt_lreg_livein);
 INSERT_PASS_BEFORE (pass_postreload, 1, pass_rvtt_synth_opcode);
 INSERT_PASS_BEFORE (pass_postreload, 1, pass_rvtt_schedule);
 INSERT_PASS_AFTER (pass_postreload, 1, pass_rvtt_replay);
