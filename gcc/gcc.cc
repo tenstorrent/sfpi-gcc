@@ -1209,7 +1209,10 @@ static const char *cc1_spec = CC1_SPEC OS_CC1_SPEC;
 static const char *cc1plus_spec = CC1PLUS_SPEC;
 static const char *link_gcc_c_sequence_spec = LINK_GCC_C_SEQUENCE_SPEC;
 static const char *link_ssp_spec = LINK_SSP_SPEC;
-static const char *asm_spec = ASM_SPEC;
+static const char *asm_spec = ASM_SPEC
+  // Hack to force user to provide -mcpu option
+  "%{!B*:%{!mcpu=*:%ea '-mcpu=' option must be provided}}"
+  ;
 static const char *asm_final_spec = ASM_FINAL_SPEC;
 static const char *link_spec = LINK_SPEC;
 static const char *lib_spec = LIB_SPEC;
