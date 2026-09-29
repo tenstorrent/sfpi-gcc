@@ -42,6 +42,7 @@
   ;; LV for keep dst reg alive as input for predicated liveness
 
   UNSPECV_SFPVARLREG
+  UNSPECV_SFPRAWLREG_ACCESS
 
   UNSPECV_SFPNOP
   UNSPECV_SFPBANKDONE
@@ -211,6 +212,19 @@
   "TARGET_XTT_TENSIX"
   "# READ %x0"
 ;; not a xtt_dynamic_bug consumer, it is for the user to get this right.
+  [(set_attr "type" "tensix")
+   (set_attr "length" "0")])
+
+;; Compiler-only ownership marker for opaque raw LLK instructions.  Operand 0
+;; releases raw-owned LREGs and operand 1 starts newly written raw-owned LREGs.
+;; The pre-IRA lreg-livein pass consumes the metadata; no word is emitted.
+(define_insn "rvtt_sfprawlreg_access"
+  [(unspec_volatile:XTT32SI [
+     (match_operand:SI 0 "const_int_operand" "n")
+     (match_operand:SI 1 "const_int_operand" "n")
+     ] UNSPECV_SFPRAWLREG_ACCESS)]
+  "TARGET_XTT_TENSIX"
+  "# RAWLREG %0, %1"
   [(set_attr "type" "tensix")
    (set_attr "length" "0")])
 
