@@ -998,8 +998,8 @@ mop_config_words (std::vector<std::pair<unsigned,
    MOP row no longer delivers (the concurrent-delivery accounting
    above), less the serially delivered configuration.  Stores the
    signed centislot benefit in *BENEFIT_OUT and tests it against the
-   minimum-benefit knob; -mtt-mop-form-force bypasses only this pricing
-   refusal.  */
+   minimum-benefit knob; -mtt-tensix-mop-form-force bypasses only this
+   pricing refusal.  */
 
 static bool
 mop_profitable_p (mop_candidate const &cand, HOST_WIDE_INT config_words,
