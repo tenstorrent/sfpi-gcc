@@ -110,12 +110,12 @@ struct autoincr_caps
 
      Architectural basis: SETC16 retires through the configuration issue
      class, which the target issue model (rvtt-cost.md, rvtt_issue_cfg)
-     and the reference simulator's tensix_rtl_issue_class_for_inst both model as a
-     two-cycle resource, one cycle longer than the single-cycle math/SFPU
-     classes.  Two intervening issued words therefore guarantee the
-     configuration write has retired before the consumer issues in that
-     model.  Replay-shaped rows satisfy this structurally (the launch word
-     plus the payload prefix precede the terminator access); tight
+     and the reference simulator's tensix_rtl_issue_class_for_inst both
+     model as a two-cycle resource, one cycle longer than the single-cycle
+     math/SFPU classes.  Two intervening issued words therefore guarantee
+     the configuration write has retired before the consumer issues in
+     that model.  Replay-shaped rows satisfy this structurally (the launch
+     word plus the payload prefix precede the terminator access); tight
      explicit-row shapes must either prove the distance by anchoring the
      program earlier or refuse (independent-review carry-forward for
      promoting explicit-row shapes).  */
@@ -136,10 +136,11 @@ struct autoincr_caps
   unsigned drained_frontend_window;
   /* Frontend issue-slot occupancy of one SETC16 configuration word: the
      configuration issue class is an audited two-cycle resource
-     (rvtt-cost.md rvtt_issue_cfg; the reference simulator's tensix_rtl_issue_class_for_inst
-     models the same), one cycle longer than the single-cycle class a
-     removed TTINCRWC occupies.  The profitability comparison prices the
-     slot program in these units so both sides are frontend issue slots.  */
+     (rvtt-cost.md rvtt_issue_cfg; the reference simulator's
+     tensix_rtl_issue_class_for_inst models the same), one cycle longer
+     than the single-cycle class a removed TTINCRWC occupies.  The
+     profitability comparison prices the slot program in these units so
+     both sides are frontend issue slots.  */
   unsigned config_issue_slots;
   autoincr_slot slots[2];
   /* Refuse-only watched configuration rows for the cross-call ADDR_MOD

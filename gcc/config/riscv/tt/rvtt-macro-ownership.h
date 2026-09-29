@@ -135,8 +135,8 @@ extern bool rvtt_loop_has_sfpu_barrier_p (class loop *loop);
    statement before FIRST_CC_WRITER equals, on every iteration after the
    first, the architectural all-lanes state the trailing SFPENCC
    re-establishes (capability word rvtt_macro::sfpencc_all_lanes_word;
-   the reference simulator's SFPENCC executor).  The first iteration's mask is the
-   unknown ambient state -- consumers must reproduce iteration one
+   the reference simulator's SFPENCC executor).  The first iteration's
+   mask is the unknown ambient state -- consumers must reproduce iteration one
    exactly (the const-residency first-iteration peel) rather than reason
    about it.  PROVEN is false for multi-block bodies, bodies with no CC
    writer (the plain-barrier classes handle those), a non-SFPENCC or

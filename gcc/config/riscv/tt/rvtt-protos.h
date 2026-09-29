@@ -307,7 +307,8 @@ constexpr unsigned int SFPLOADI_MOD0_LOWER = 10;
 
 constexpr unsigned int SFPLOADSTORE_ADDR_MODE_WH_NOINC = 3;
 constexpr unsigned int SFPLOADSTORE_ADDR_MODE_NOINC = 7;
-constexpr unsigned int SFPLOADSTORE_MOD0_FMT_COPY_MASK = 0x18; // FP32 or FPINT32
+// FP32 or FPINT32
+constexpr unsigned int SFPLOADSTORE_MOD0_FMT_COPY_MASK = 0x18;
 
 constexpr unsigned int SFPEXEXP_MOD1_DEBIAS = 0;
 constexpr unsigned int SFPEXEXP_MOD1_NODEBIAS = 1;
@@ -336,8 +337,10 @@ constexpr unsigned int SFPSETCC_IMM_TYPE_SMAG = 1;
 
 // EU: enable unmodified, EC: complement, EI: immediate
 // R1: result set, RI: immediate
-constexpr unsigned int SFPENCC_IMM12_NEITHER = 0;   // Imm value to clear both enable/result
-constexpr unsigned int SFPENCC_IMM12_BOTH = 3;      // Imm value to set both enable/result
+// Imm value to clear both enable/result
+constexpr unsigned int SFPENCC_IMM12_NEITHER = 0;
+// Imm value to set both enable/result
+constexpr unsigned int SFPENCC_IMM12_BOTH = 3;
 
 constexpr unsigned int SFPENCC_MOD1_EU_R1 = 0;
 constexpr unsigned int SFPENCC_MOD1_EC_R1 = 1;

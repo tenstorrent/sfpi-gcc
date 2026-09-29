@@ -223,8 +223,8 @@ pure_dst_increment_p (rtx_insn *insn, HOST_WIDE_INT *stride)
 
 
 /* Load-carrier word counting (riscv_tt_opt_dst_autoincr_load_carrier,
-   the load-carrier extension): a canonical single-constant `.ttinsn' asm (the TTI_ macro
-   shape the LLK library issues its raw boundary words in) is by
+   the load-carrier extension): a canonical single-constant `.ttinsn' asm
+   (the TTI_ macro shape the LLK library issues its raw boundary words in) is by
    construction exactly one 32-bit Tensix word in the issue stream, so
    it occupies exactly one replay slot and one frontend issue slot.
    This is a COUNTING fact only, taken from the audited extraction

@@ -47,8 +47,9 @@ INSERT_PASS_BEFORE (pass_all_optimizations, 1, pass_rvtt_int_not);
    folds above: run while the canonical structured forms are intact and
    before the invariant pass sees the shortened bodies.  */
 INSERT_PASS_BEFORE (pass_all_optimizations, 1, pass_rvtt_store_fold);
-/* Place semantic SFPU constants outside counted loops while values are still
-   SSA pseudos.  Doing this after allocation would extend hard-LREG lifetimes.  */
+/* Place semantic SFPU constants outside counted loops while values are
+   still SSA pseudos.  Doing this after allocation would extend hard-LREG
+   lifetimes.  */
 INSERT_PASS_BEFORE (pass_all_optimizations, 1, pass_rvtt_invariant);
 INSERT_PASS_BEFORE (pass_all_optimizations, 1, pass_rvtt_immvar_expand);
 INSERT_PASS_BEFORE (pass_all_optimizations, 1, pass_rvtt_synth_split);

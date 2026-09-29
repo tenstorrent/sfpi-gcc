@@ -610,8 +610,8 @@ noexec_record_composition_p (const function_scan &fn, const group &grp,
 	{
 	  *hazard = cap;
 	  *detail
-	    = "record-hoist-enabled no-exec capture dominates explicit mod-write "
-	      "group (cross-invocation retirement unproven)";
+	    = "record-hoist-enabled no-exec capture dominates explicit "
+	      "mod-write group (cross-invocation retirement unproven)";
 	  return true;
 	}
 
