@@ -765,6 +765,9 @@ mtt-tensix-optimize-int-abs
 Target Var(riscv_tt_opt_int_abs) Init(0)
 Fold a conditional-negate predicated SFPU region into the single integer SFPABS instruction.
 
+mtt-tensix-optimize-int-not
+Target Var(riscv_tt_opt_int_not) Init(0)
+Select the single SFPNOT instruction for the all-ones-minus-x one's-complement pattern.
 
 
 
