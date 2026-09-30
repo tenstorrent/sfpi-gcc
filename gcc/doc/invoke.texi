@@ -32026,6 +32026,13 @@ by default.
 Fold an exponent extract that feeds @code{SFPSETEXP} into the
 instruction's exponent-copy addressing mode.  Enabled by default.
 
+@opindex mtt-tensix-optimize-ccmask
+@item -mtt-tensix-optimize-ccmask
+Fold a predicated region whose only effect is zeroing selected lanes
+under a floating-point ordering test against @code{+0.0} into an
+unpredicated compare and bitwise AND, removing the CC save/restore
+pair.  Non-matching regions decline.
+
 @opindex mtt-tensix-optimize-native-compare
 @item -mtt-tensix-optimize-native-compare
 Lower strict-greater and less-or-equal floating-point vector comparison
