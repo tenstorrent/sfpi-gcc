@@ -76,6 +76,10 @@ RVTT_OBJS := rvtt.o \
 	rvtt-lut-tables.o \
 	gimple-rvtt-noval.o \
 	gimple-rvtt-pred.o \
+	gimple-rvtt-prgm-const.o \
+	gimple-rvtt-prgm-fuse.o \
+	gimple-rvtt-prgm-remat.o \
+	gimple-rvtt-prgm-residency.o \
 	gimple-rvtt-synth.o \
 	gimple-rvtt-unspec.o \
 	rtl-rvtt-fix-ebreak.o \

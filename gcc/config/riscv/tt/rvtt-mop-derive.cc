@@ -1554,7 +1554,8 @@ rvtt_mop_derive_finish (const rvtt_mop_derive_state *st, const char **why)
 }
 
 /* ------------------------------------------------------------------ */
-/* Raw REPLAY record regions.
+/* Raw REPLAY record regions
+   (-mtt-tensix-optimize-opaque-replay-record).
 
    THE THEOREM.  A raw REPLAY word with load_mode=1 opens a record
    window: the thread's next COUNT delivered frontend words are stored
@@ -1626,7 +1627,16 @@ rvtt_mop_derive_finish (const rvtt_mop_derive_state *st, const char **why)
    or LT exit against a constant bound, init below the bound), the
    same discipline as the bounded-IV store-range proof above; the
    count is exact, so "every trip swallowed" is an equality, never an
-   estimate.  */
+   estimate.
+
+   PLACEMENT SAFETY (why the transform can never insert programming
+   INSIDE an admitted window): residency/prgm-const programming lands
+   only on the function-entry edge or on preheaders of loops that
+   contain typed residency candidates.  An admitted window's interior
+   consists of raw words and transparent scalars only -- a loop inside
+   it contains no typed statement at all (the interleave refusal), so
+   it can neither be nor enclose a candidate loop -- and the entry
+   edge precedes every statement.  */
 
 namespace {
 

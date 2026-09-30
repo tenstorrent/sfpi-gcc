@@ -191,11 +191,11 @@ extern unsigned rvtt_sfpxloadi_materialization_cost (gcall *call);
    refusal returns false with the dump-stable name in *WHY (and the
    offending statement in *WHY_STMT when known).  Refusing default for
    every class not on record.
-   CC_IMMATERIAL selects the programming-only discipline: a CC-writing
-   statement is admitted exactly when it is a structured typed CC atom
-   (whitelisted by insn id; its whole architectural effect is the
-   lane-enable state plus its SSA definition) -- sound only for a
-   consumer whose lifted
+   CC_IMMATERIAL selects the programming-only discipline
+   (-mtt-tensix-optimize-crossloop-cc-peel): a CC-writing statement is
+   admitted exactly when it is a structured typed CC atom (whitelisted
+   by insn id; its whole architectural effect is the lane-enable state
+   plus its SSA definition) -- sound only for a consumer whose lifted
    object executes BEFORE the region and whose parked state (a claimed
    programmable constant register) no CC write can touch.  Every other
    discipline (delivered words, replay, MOP census, explicit LREG

@@ -40,7 +40,8 @@ along with GCC; see the file COPYING3.  If not see
    Materialization out of the innermost (defining) loop is the early
    invariant pass's decision -- its pressure pricing chose what stays
    in the row body, and re-litigating that here would disturb
-   downstream consumers that depend on the row-level placement.
+   downstream consumers (e.g. the programmable-constant fusion) that
+   depend on the row-level placement.
 
    No-speculation obligation: an architectural LREG write must never
    execute on a path where the original would not have.  Each candidate

@@ -162,7 +162,8 @@ extern bool rvtt_mop_init_array_call_p (gcall *call);
 extern bool rvtt_mop_derive_finish (const rvtt_mop_derive_state *st,
 				    const char **why);
 
-/* ---- Raw REPLAY record regions ----
+/* ---- Raw REPLAY record regions
+   (-mtt-tensix-optimize-opaque-replay-record) ----
 
    Parse STMT as the canonical raw `.ttinsn' asm with one constant
    input; on success *WORD receives the 32-bit instruction word.  */
