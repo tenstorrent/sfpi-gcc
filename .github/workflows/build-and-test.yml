@@ -1,0 +1,108 @@
+# sfpi-gcc is built as the `gcc` submodule of tenstorrent/sfpi.  This job
+# reproduces that build with the pull request's compiler in place of the
+# pinned submodule, then runs the rvtt.exp testsuite exactly the way
+# tenstorrent/sfpi's own "Build SFPI" workflow runs it: scripts/build.sh
+# --test-tt, which is `make check-gcc-tt` with the riscv-sim target board
+# and $SFPI pointing at the freshly installed SFPI headers.
+#
+# Scope: compile, assemble and dump-scan (scan-assembler /
+# check-function-bodies) tests.  There is no Tensix silicon in CI, so
+# nothing is executed on device.
+name: Build and test
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{github.workflow}}-${{github.ref}}
+  cancel-in-progress: true
+
+jobs:
+  rvtt:
+    name: riscv-tt-elf build and rvtt.exp
+    runs-on: ubuntu-22.04
+    timeout-minutes: 180
+    steps:
+      - name: Checkout tenstorrent/sfpi
+        uses: actions/checkout@v6
+        with:
+          repository: tenstorrent/sfpi
+          path: sfpi
+          fetch-depth: 64
+          fetch-tags: true
+
+      - name: Checkout this compiler as its gcc submodule
+        uses: actions/checkout@v6
+        with:
+          path: sfpi/gcc
+          fetch-depth: 1
+
+      - name: Tweak Git
+        run: git config --global --add safe.directory '*'
+
+      # tenstorrent/sfpi's Makefile lists gcc/.git as a prerequisite of the
+      # build stamps, and every make invocation runs `git -C gcc describe
+      # --dirty`, which writes inside the git directory.  A real .git directory
+      # therefore gets a fresh mtime on each make and the following make
+      # rebuilds the toolchain from stage1.  A gitlink file -- what a submodule
+      # checkout gives tenstorrent/sfpi's own CI -- never changes mtime.
+      - name: Turn gcc/.git into a gitlink, as a submodule checkout would
+        run: |
+          mv sfpi/gcc/.git gcc-git
+          echo "gitdir: $GITHUB_WORKSPACE/gcc-git" >sfpi/gcc/.git
+
+      - name: Checkout binutils and newlib
+        run: git -C sfpi submodule update --init -- binutils newlib
+
+      - name: Install packages
+        run: |
+          sudo apt-get update
+          sudo apt-get -y install autoconf automake bison dejagnu expect flex \
+            gawk python3 texinfo patchutils ruby wget \
+            libexpat1-dev libgmp-dev libmpc-dev libmpfr-dev
+
+      # One build.sh invocation builds and tests; it runs make twice inside,
+      # once to build and once for check-gcc-tt.
+      - name: Build toolchain and run rvtt.exp
+        working-directory: sfpi
+        run: |
+          scripts/build.sh --tt-built --small --test-tt \
+            || echo "build.sh flagged failures; the baseline comparison decides"
+
+      - name: Compare failures against the baseline
+        working-directory: sfpi
+        run: |
+          set -euo pipefail
+          baseline=gcc/.github/rvtt-baseline.txt
+          passes=$(awk '/^# of expected passes/{n += $NF} END {print n + 0}' build/tests/*.sum)
+          echo "expected passes: $passes"
+          if [ "$passes" -eq 0 ]; then
+            echo "::error::rvtt.exp reported zero expected passes, so the suite did not run"
+            exit 1
+          fi
+          grep -hE '^(FAIL|UNRESOLVED|ERROR|XPASS):' build/tests/*.sum \
+            | sed 's/[[:space:]]*$//' | sort >seen.txt || true
+          grep -vE '^[[:space:]]*(#|$)' $baseline \
+            | sed 's/[[:space:]]*$//' | sort >known.txt || true
+          gone=$(comm -23 known.txt seen.txt)
+          new=$(comm -13 known.txt seen.txt)
+          if [ -n "$gone" ]; then
+            echo "::warning::these baseline entries no longer fail, delete them from $baseline"
+            printf '%s\n' "$gone"
+          fi
+          if [ -n "$new" ]; then
+            echo "::error::rvtt.exp failures that are not in $baseline"
+            printf '%s\n' "$new"
+            exit 1
+          fi
+          echo "rvtt.exp agrees with the baseline"
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: rvtt-results
+          path: sfpi/build/tests/*

@@ -1,0 +1,12 @@
+# rvtt.exp results that are known to fail and must not fail the build.
+#
+# One whole result line per entry, copied verbatim from a .sum file, e.g.
+#   FAIL: g++.target/riscv/tt/rv/zbkb.C (test for excess errors)
+# FAIL, UNRESOLVED, ERROR and XPASS lines are compared; the check is a set
+# difference, never a count, so a fixed test is reported as a stale entry
+# and a new failure fails the job by name.
+#
+# Empty because the suite is clean in this configuration: at gcc
+# ba48edbef33 the run is 1178 expected passes, 2 expected failures and no
+# FAIL, UNRESOLVED, ERROR or XPASS.  Expected failures are marked in the
+# tests themselves with dg-xfail-if and never appear here.
