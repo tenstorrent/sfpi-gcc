@@ -769,8 +769,17 @@ mtt-tensix-optimize-int-not
 Target Var(riscv_tt_opt_int_not) Init(0)
 Select the single SFPNOT instruction for the all-ones-minus-x one's-complement pattern.
 
+mtt-tensix-optimize-store-fold
+Target Var(riscv_tt_opt_store_fold) Init(0)
+Fold lane-predicated SFPU value merges into their consuming Dst stores where the round trip is proven the identity.
 
+mtt-tensix-optimize-store-sink
+Target Var(riscv_tt_opt_store_sink) Init(0)
+Allow sinking an all-lanes store of a predicated merge into its region as a predicated store; changes stored values on denormal pass-through lanes.
 
+mtt-tensix-optimize-stochrnd-store-fold
+Target Var(riscv_tt_opt_stochrnd_store_fold) Init(0)
+Allow folding an explicit nearest-rounding precision reduction into its consuming converting store; changes delivered bits on the proven divergence classes.
 
 
 mtt-tensix-optimize-setexp-fold
