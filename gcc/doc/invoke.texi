@@ -32441,6 +32441,14 @@ Set the minimum modeled benefit, in hundredths of an issue slot,
 required to hoist a replay capture; overrides the built-in cost-table
 default.
 
+@opindex mtt-tensix-optimize-replay-exec-record
+@item -mtt-tensix-optimize-replay-exec-record
+When a hoisted replay capture is immediately followed by a playback
+launch of the same window, execute the capture while recording and drop
+the now-redundant first launch, when the loop structure proves the
+exchange.  Effective only with
+@option{-mtt-tensix-optimize-replay-hoist}.
+
 @opindex mtt-tensix-optimize-replay-record-hoist
 @item -mtt-tensix-optimize-replay-record-hoist
 Hoist the record phase of a replay capture window that is provably
@@ -32448,6 +32456,60 @@ iteration-invariant to the loop's dedicated preheader, leaving one
 playback launch per former record site.  Admission keeps every
 structural, invariance, and latency proof; profitability is priced with
 the removed per-iteration record delivery counted as real issue cost.
+
+@opindex mtt-tensix-replay-hoist-completion-guard
+@item -mtt-tensix-replay-hoist-completion-guard
+Use a drain-inclusive completion contract when pricing hoisted replay
+records: the complete preheader record delivery is charged instead of
+assuming it hides behind the loop's execution backlog.  Affects the
+profitability verdicts of @option{-mtt-tensix-optimize-replay-hoist}
+and @option{-mtt-tensix-optimize-replay-record-hoist}.
+
+@opindex mtt-tensix-optimize-record-hoist-peel
+@item -mtt-tensix-optimize-record-hoist-peel
+Hoist a Dst-storing replay capture---a shape the no-execute record
+hoist must decline---by peeling the loop's proven first iteration
+verbatim into the dedicated preheader as an execute-while-record pass.
+Former in-body record sites become playback launches and the proven
+constant loop counter is re-initialized one step later.  Trip count,
+counter rewrite, and full body coverage must all be proven.  Effective
+only with @option{-mtt-tensix-optimize-replay-record-hoist}.
+
+@opindex mtt-tensix-optimize-record-hoist-lift
+@item -mtt-tensix-optimize-record-hoist-lift
+Walk a hoisted storeless replay record outward across enclosing loops
+to the outermost preheader the pricing oracle proves admissible
+(ultimately the function entry), so the record is delivered once per
+kernel entry instead of once per loop iteration.  Every crossed loop
+must be proven replay-preserving; a failing level stops the walk.
+Effective only with @option{-mtt-tensix-optimize-replay-record-hoist}.
+
+@opindex mtt-tensix-optimize-counted-capture-peel
+@item -mtt-tensix-optimize-counted-capture-peel
+Extend the first-iteration peel to counted-loop captures whose plain
+hoist is unprofitable because the preheader record cannot amortize over
+the loop's proven trip count: the peeled shape pays only the capture
+word and record-engine overhead, since the first iteration already paid
+the payload delivery.  Requires a proven constant trip count of at
+least two and a single-block body with full coverage.
+
+@opindex mtt-tensix-optimize-replay-window-sizing
+@item -mtt-tensix-optimize-replay-window-sizing
+Re-size a replay window that is about to be hoisted out of its loop.
+The normal in-block selection prefers shorter windows, whose in-body
+record is cheaper; but a hoisted record is delivered once, so a wider
+candidate with the same anchor that fits the free replay slots and
+strictly reduces per-iteration deliveries is committed instead, with a
+trailing run that is a word-exact prefix of the window delivered as one
+partial playback launch.  The widened candidate must re-prove the whole
+hoist admission itself.
+
+@opindex mtt-tensix-optimize-counted-row-formation
+@item -mtt-tensix-optimize-counted-row-formation
+Canonicalize parameterized repeated SFPU rows---identical rows that
+differ only in immediate operands---so replay formation can record one
+parameterized row program, delivering the varying immediates between
+launches.
 
 @opindex mtt-tensix-optimize-replay-loop-unroll
 @item -mtt-tensix-optimize-replay-loop-unroll
@@ -32490,6 +32552,16 @@ effects the compiler has audited as occupying replay slots in the Dst
 auto-increment analysis, unlocking the fold in functions whose replay
 recordings contain such words.  The raw words themselves are never
 rewritten.
+
+@opindex mtt-tensix-optimize-post-autoincr-window
+@item -mtt-tensix-optimize-post-autoincr-window
+Defer replay window formation until after the Dst auto-increment fold,
+so loop bodies that the earlier formation could not capture---because
+explicit row-advance words acted as window barriers---form as replay
+windows once the fold has made them word-uniform, and one post-fold
+allocation prices every candidate against the single replay buffer.
+The deferral loses no opportunity: every window capturable before the
+fold is capturable verbatim after it.
 
 @node Tensix Macro Planner Options
 @subsubsection Tensix Macro Planner Options
