@@ -47,6 +47,7 @@ MULTILIB_EXTRA_OPTS :=
 
 RVTT_OBJS := rvtt.o \
 	rvtt-refuse.o \
+	rvtt-pressure.o \
 	rvtt-effects.o \
 	rvtt-raw-boundary.o \
 	rvtt-macro-ownership.o \
@@ -59,7 +60,9 @@ RVTT_OBJS := rvtt.o \
 	gimple-rvtt-dce.o \
 	gimple-rvtt-schedule.o \
 	gimple-rvtt-immvar.o \
+	gimple-rvtt-invariant.o \
 	gimple-rvtt-live.o \
+	gimple-rvtt-replay-unroll.o \
 	gimple-rvtt-noval.o \
 	gimple-rvtt-pred.o \
 	gimple-rvtt-synth.o \
@@ -74,8 +77,10 @@ RVTT_OBJS := rvtt.o \
 	rtl-rvtt-unspec.o \
 	rvtt-lpsolve.o \
 	rvtt-bnb.o \
+	rvtt-trips.o \
 	rvtt-delivery-cost.o \
 	rvtt-timing.o \
+	rvtt-placement.o \
 
 OBJS += $(RVTT_OBJS)
 

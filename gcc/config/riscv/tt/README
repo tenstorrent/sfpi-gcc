@@ -34,8 +34,10 @@ a recorded reason (see section 5).
 			     rvtt-macro-{tables,ownership}.
   scheduling                 Post-RA scheduling of the SFPU instruction stream
 			     around hardware hazards.
-  replay formation           Record/playback formation of repeated instruction
-			     runs.
+  replay formation           Record/playback formation, including hoisting a
+			     record out of a loop.
+  prgm constants             Constant-register promotion and the priced
+			     residency walk that keeps invariants resident.
   effects                    rvtt-effects.h is the single source of truth for
 			     instruction effect classification.  New code must
 			     query it rather than write another switch.  It
@@ -44,7 +46,7 @@ a recorded reason (see section 5).
 			     shared helper there rather than in a pass.
 
 Supporting infrastructure that is not a pass: rvtt-cost / rvtt-delivery-cost
-/ rvtt-timing (pricing engines), rvtt-bnb and rvtt-lpsolve (an
+/ rvtt-timing / rvtt-trips (pricing engines), rvtt-bnb and rvtt-lpsolve (an
 exact branch-and-bound solver used where a heuristic would guess), and the
 opt-in host-compiled unit harnesses wired up in t-riscv-tt.
 
