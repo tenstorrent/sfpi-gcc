@@ -32445,6 +32445,23 @@ Admit planner-formed @code{SFPLOADMACRO} launches into automatic replay
 recording; the launch is a pure instruction word, and execution at a
 replay site reads the descriptor configuration current at that site.
 
+@opindex mtt-tensix-macro-planner-residency
+@item -mtt-tensix-macro-planner-residency
+Extend a proven descriptor-programming configuration epoch outward
+through successively enclosing loops, so the programming words become
+resident once per kernel entry instead of once per loop iteration, and
+elide the descriptor programming of a later region whose derived words
+are bit-identical to an already-programmed dominating one.  Every proof
+failure declines and keeps the established placement.
+
+@opindex mtt-tensix-macro-ims
+@item -mtt-tensix-macro-ims
+When a maximal macro-hosting proposal is declined downstream,
+deterministically retry with reduced hosted sets instead of declining
+the whole region; and additionally require a formed calendar to price
+below the replay-compressed explicit alternative under the shared
+issue-cost model.
+
 @node Tensix Value-Changing Options
 @subsubsection Tensix Value-Changing Options
 
