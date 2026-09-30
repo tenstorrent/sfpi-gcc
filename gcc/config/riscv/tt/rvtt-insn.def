@@ -172,7 +172,7 @@ RVTT_FN (sfptransp,           ,,XTT_VEC4_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC, 
 RVTT_FN (sfpswap_indexed,     ,,XTT_VEC4_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_USI,          0, ({M, 0x1ff}))
 RVTT_FN (sfptransp8,          ,,XTT_VEC4_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC, 0, ())
 // Compiler-internal companion-preserving involution bundle (formed by the
-// compiler, never spelled by users): SFPTRANSP, four
+// transp-involution pass, never spelled by users): SFPTRANSP, four
 // constant-address full-bank SFPLOADs into L0-L3, SFPTRANSP -- one atomic
 // instruction whose net effect on the L4-L7 companion bank is the identity.
 // Args: addr0..addr3, mod0, addr_mode.  (The RTL insn carries a seventh

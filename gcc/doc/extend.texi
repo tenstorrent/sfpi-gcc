@@ -26706,9 +26706,7 @@ Two-bank form of @code{SFPTRANSP}: transforms both four-register banks formed by
 @enddefbuiltin
 
 @defbuiltin{__xtt_vector4 __builtin_rvtt_sfptransp_gather (unsigned int, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int)}
-Compiler-internal companion-preserving bundle
-(a transpose, four full-bank loads, and a transpose) for
-compiler-generated code; never spelled by users.
+Compiler-internal companion-preserving bundle (a transpose, four full-bank loads, and a transpose) formed by the @option{-mtt-tensix-optimize-transp-involution} pass; never spelled by users.
 @enddefbuiltin
 
 @defbuiltin{__xtt_vector4 __builtin_rvtt_sfpshft2_copy4 (__xtt_vector, __xtt_vector, __xtt_vector, unsigned int)}

@@ -3994,8 +3994,9 @@
   DONE;
 })
 
-;; Companion-preserving involution bundle, formed only from a proven
-;; "SFPTRANSP of four freshly, fully loaded L0-L3 operands" shape.
+;; Companion-preserving involution bundle, formed only by the
+;; transp-involution pass (-mtt-tensix-optimize-transp-involution) from a
+;; proven "SFPTRANSP of four freshly, fully loaded L0-L3 operands" shape.
 ;; Emitted as ONE atomic multi-word instruction:
 ;;
 ;;   [SFPENCC all-lanes]   (operand 10 != 0 only: forced lane state)
