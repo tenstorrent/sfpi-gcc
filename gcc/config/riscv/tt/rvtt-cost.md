@@ -132,7 +132,7 @@
 ;; not a result delay.  SFPSWAP's next-cycle rule is an acceptance stall,
 ;; recorded separately as xtt_next_slot_stall; a latency entry alone does
 ;; not make SFPSWAP a latency filler.  The compare set-CC forms (sfpgt/
-;; sfple BH mod1 == 1) write only the lane
+;; sfple BH mod1 == 1, rvtt_sfpgt_cc, rvtt_sfple_cc) write only the lane
 ;; flags and have no result latency; their ordering is carried by the
 ;; `readwrite' CC effect.  The register-immediate (runtime-synthesized)
 ;; alternatives of iadd and divp2 keep the default, as does SFPLUT with

@@ -44,7 +44,10 @@ along with GCC; see the file COPYING3.  If not see
    and is treated accordingly.  A malformed region structure (POPC or
    COMPC outside any region, replace at depth zero) is a hard error.
 
-   Runs under -mtt-tensix-optimize-cc (default on).  */
+   Runs under -mtt-tensix-optimize-cc (default on).  The RTL-level CC
+   region machinery (tt/rvtt-cc-region.*) later rebuilds the region
+   tree from the surviving markers; this pass must stay conservative
+   precisely so that that reconstruction is exact.  */
 
 #define INCLUDE_TUPLE
 #define INCLUDE_VECTOR

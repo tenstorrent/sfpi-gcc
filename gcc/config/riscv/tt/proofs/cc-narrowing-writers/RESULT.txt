@@ -1,0 +1,70 @@
+Copyright (C) 2026 Tenstorrent Inc.
+
+This file is part of GCC.
+
+GCC is free software; you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free
+Software Foundation; either version 3, or (at your option) any later
+version.
+
+GCC is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or
+FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+for more details.
+
+You should have received a copy of the GNU General Public License
+along with GCC; see the file COPYING3.  If not see
+<http://www.gnu.org/licenses/>.
+
+cc-narrowing-writers — narrowing certificate for the raw typed CC
+writers that -mtt-tensix-optimize-cc-region-general admits into the
+CC-restore containment fact (gimple-rvtt-invariant.cc,
+cc_narrowing_modifier_p).
+
+OBLIGATION.  A modifier is NARROWING when a lane disabled before the
+write is still disabled after it: enable_out subset-of enable_in,
+pointwise per lane, for every operand value.  (The containment fact the
+invariant pass needs: the enable set at an in-region candidate is a
+subset of the region entry's.)
+
+FORM.  This is a STRUCTURAL certificate, not a value sweep: for every
+writer below, the reference simulator computes its per-lane flag decision
+strictly inside `for_each_lane (mask)` where
+`mask = p_tensix->cc_en ? p_tensix->cc : 0xFFFFFFFF` -- a lane outside
+the current enable mask is never visited, so its enable bit cannot
+change, for EVERY operand value; the per-lane decision only chooses
+between `cc |= bit` and `cc &= ~bit` on visited lanes.  A 2^32 value
+sweep would exercise only the visited-lane decision, which the
+obligation does not constrain; the disabled-lane case is a two-row
+truth table decided by the loop guard.  The certificate is therefore
+an audit of that guard for each writer.
+
+Audit of the reference simulator, per writer:
+
+  SFPEXEXP, SFPIADD, SFPLZ, SFPLE SET_CC, SFPGT SET_CC, and SFPSETCC
+  (narrowing without the option): the enable mask is formed from
+  cc_en/cc and the flag decision is made inside the masked
+  for_each_lane.  The same holds for the SFPIADD embedded in
+  SFPLOADMACRO (not a typed GIMPLE statement; recorded for
+  completeness).
+
+  SFPCOMPC       with a save on the stack,
+                 cc = cc_stack[top] & ~cc -- capped by the SAVED set
+                 (the region entry), hence narrowing IN-REGION; with an
+                 EMPTY stack, cc = cc_en ? ~cc : 0 -- a full ambient
+                 complement, NOT narrowing.  The restore proof only
+                 consults the fact at in-region positions (depth > 0,
+                 where the save exists); depth-0 writers refuse
+                 separately (cc-restore-ambient-cc-write).
+
+  SFPENCC        assigns cc / cc_en outright (can ENABLE
+                 lanes).  NOT narrowing; deliberately excluded.
+
+LICENSES.  The riscv_tt_opt_cc_region_general arm of
+cc_narrowing_modifier_p (sfpgt/sfpgt_lv/sfple/sfple_lv/sfpexexp/
+sfpexexp_lv/sfplz/sfplz_lv/sfpiadd_v/sfpiadd_v_lv/sfpiadd_i/
+sfpiadd_i_lv), and the STMT_CC_OTHER (vocabulary-external, in-frame)
+case of rvtt_cc_region_tree::loop_cc_ambient_preserving_p
+(rvtt-cc-region.cc) -- both lean on exactly this guard discipline.
+Those arms are sound only while every listed writer visits lanes
+through the enable-masked for_each_lane.

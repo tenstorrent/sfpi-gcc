@@ -986,7 +986,7 @@ cc_narrowing_modifier_p (const rvtt_insn_data *insnd)
 
     /* Widening under -mtt-tensix-optimize-cc-region-general: the
        remaining raw typed CC writers, audited narrowing against the
-       reference simulator: every one
+       reference simulator (tt/proofs/cc-narrowing-writers/): every one
        computes its per-lane flag decision inside
        for_each_lane (current-enable-mask), so a lane disabled at the
        write stays disabled -- the enable set only narrows relative to

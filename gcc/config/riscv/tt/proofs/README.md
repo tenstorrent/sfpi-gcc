@@ -56,3 +56,14 @@ streams with OpenSSL.)
   stratum).  Discharges in advance the obligation of materializing a
   loop-invariant shift amount in a register; no transformation relies
   on it yet.
+- cc-narrowing-writers/ — STRUCTURAL certificate (an audit, not a
+  value enumeration; the obligation is decided by the simulator's
+  enable-masked for_each_lane loop guard, not by operand values): the
+  raw typed CC writers admitted into the audited-narrowing set by
+  -mtt-tensix-optimize-cc-region-general (gimple-rvtt-invariant.cc
+  cc_narrowing_modifier_p: SFPGT/SFPLE SET_CC, SFPEXEXP, SFPLZ,
+  SFPIADD families) never touch a disabled lane's enable bit; SFPENCC
+  and the empty-stack COMPC are recorded NOT-narrowing.  Also the
+  soundness record for the tree's loop-scoped in-frame
+  vocabulary-external case
+  (rvtt_cc_region_tree::loop_cc_ambient_preserving_p).

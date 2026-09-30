@@ -78,8 +78,11 @@ RVTT_OBJS := rvtt.o \
 	rvtt-lpsolve.o \
 	rvtt-bnb.o \
 	rvtt-trips.o \
+	rvtt-cc-region.o \
+	rvtt-cc-region-rtl.o \
 	rvtt-delivery-cost.o \
 	rvtt-timing.o \
+	rvtt-ipa-summary.o \
 	rvtt-placement.o \
 
 OBJS += $(RVTT_OBJS)
