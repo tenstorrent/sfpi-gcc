@@ -32445,6 +32445,43 @@ These options control allocation and renaming of the eight SFPU vector
 registers.  All are disabled by default except as noted.
 
 @table @gcctabopt
+@opindex mtt-tensix-optimize-lreg-alloc
+@item -mtt-tensix-optimize-lreg-alloc
+When SFPU vector pressure exceeds the eight-register file, color the
+interference graph before GCC's register allocator runs and spill
+selected vector value webs through proven-free 32-bit Dst scratch rows
+(an @code{SFPSTORE}/@code{SFPLOAD} round trip) until the graph is
+colorable with eight registers.  Register assignment itself stays with
+the normal allocator.  Every unproven ingredient declines, in which
+case the over-pressure compile error is reported exactly as without the
+option.
+
+@opindex mtt-tensix-optimize-lreg-coalesce
+@item -mtt-tensix-optimize-lreg-coalesce
+Apply conservative coalescing (in the Briggs and George formulations)
+to the interference graph built by
+@option{-mtt-tensix-optimize-lreg-alloc}, merging copy-related vector
+webs whenever the merged node provably keeps the graph colorable.  A
+web that only spilled because its copy halves were counted separately
+then colors without a spill.  Effective only with
+@option{-mtt-tensix-optimize-lreg-alloc}.
+
+@opindex mtt-tensix-dst-layout-32b
+@item -mtt-tensix-dst-layout-32b
+Declare that every SFPU calculation body in the translation unit
+executes under a 32-bit-row Dst layout (32-bit destination
+accumulation and addressing).  This declaration is consumed by
+@option{-mtt-tensix-optimize-lreg-alloc} to admit additional kernels
+for Dst scratch-row spilling.
+
+@strong{Warning:} this option asserts a property of the execution
+environment that the compiler cannot check.  Declaring it for a kernel
+that actually runs under a 16-bit-row layout makes any spilled
+compilation produce silent wrong output; no run-time error exists.  The
+build system must derive this option from the kernel's actual
+destination-accumulation mode.  Code with explicit 16-bit-format Dst
+accesses is refused for spilling regardless of the declaration.
+
 @opindex mtt-tensix-optimize-lreg-rename-chains
 @item -mtt-tensix-optimize-lreg-rename-chains
 After register allocation, move storage-colliding single-definition
