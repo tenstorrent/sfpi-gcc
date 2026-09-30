@@ -41,6 +41,7 @@ a recorded reason (see section 5).
   LUT selection              If-conversion of piecewise range dispatch into
 			     SFPLUTFP32 table selection, including the FP16
 			     six-entry form.
+  crosscall                  Interprocedural LICM across noinline boundaries.
   effects                    rvtt-effects.h is the single source of truth for
 			     instruction effect classification.  New code must
 			     query it rather than write another switch.  It

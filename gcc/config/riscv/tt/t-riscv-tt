@@ -67,6 +67,9 @@ RVTT_OBJS := rvtt.o \
 	gimple-rvtt-invariant.o \
 	gimple-rvtt-live.o \
 	gimple-rvtt-lut-select.o \
+	gimple-rvtt-crosscall.o \
+	gimple-rvtt-crosscall-census.o \
+	gimple-rvtt-crosscall-hoist.o \
 	gimple-rvtt-replay-unroll.o \
 	rvtt-lut-tables.o \
 	gimple-rvtt-noval.o \
@@ -224,4 +227,12 @@ rvtt-unit-macro-tables: $(srcdir)/config/riscv/tt/rvtt-macro-tables-test.cc \
 		$(srcdir)/config/riscv/tt/rvtt-macro-tables.cc
 	$(CXX) -std=c++11 $(RVTT_UNIT_TEST_FLAGS) $^ -o tmp-$@
 	./tmp-$@ && rm -f tmp-$@
+
+# The hoist services must have one owner.  A static archive can silently
+# select the first of two definitions, so ordinary compiler links do not
+# detect a duplicated implementation.
+.PHONY: rvtt-check-crosscall-hoist-symbols
+rvtt-check-crosscall-hoist-symbols: gimple-rvtt-crosscall.o gimple-rvtt-crosscall-hoist.o
+	@$(NM) -C gimple-rvtt-crosscall.o | awk '/ T rvtt_crosscall_(init|addrmod)_hoist\(/ { bad = 1 } END { exit bad }'
+	@$(NM) -C gimple-rvtt-crosscall-hoist.o | awk '/ T rvtt_crosscall_init_hoist\(/ { init++ } / T rvtt_crosscall_addrmod_hoist\(/ { addr++ } END { exit !(init == 1 && addr == 1) }'
 

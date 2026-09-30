@@ -182,8 +182,9 @@ extern bool rvtt_stmt_executes_every_entered_iteration_p (class loop *loop,
    only; never recognizes particular values or source patterns).  */
 extern unsigned rvtt_sfpxloadi_materialization_cost (gcall *call);
 
-/* Audited hoist-region scan (audited word classification and TU MOP
-   template census): every statement of {LOOP body} union
+/* Audited hoist-region scan (implemented with the cross-call hoist's
+   audited word classification and TU MOP template census,
+   gimple-rvtt-crosscall.cc): every statement of {LOOP body} union
    {preheader tail at/after the ENTRY insertion point} is proven unable
    to write an LREG in LREG_MASK, unable to change the SFPU CC/lane
    state, and unable to deliver an unaudited or replay word.  On
