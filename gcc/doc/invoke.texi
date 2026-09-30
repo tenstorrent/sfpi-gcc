@@ -32109,6 +32109,18 @@ constant there would cost a copy per store; this option routes such
 constants to the vector-register placement tier instead.  Effective
 only with @option{-mtt-tensix-optimize-const-residency}.
 
+@opindex mtt-tensix-optimize-crosslane
+@item -mtt-tensix-optimize-crosslane
+Recognize the canonical cross-lane instruction sequences
+(@code{SFPSHFT2} rotate chains, @code{SFPSWAP} compare-exchange stages,
+dual-bank @code{SFPTRANSP} and interleave frames) and simplify them
+through their proven permutation algebra: collapsing rotate chains,
+re-lowering lane slides per architecture, refolding swaps, and
+cancelling transpose and interleave round trips.  This option also
+enforces the architectural restriction on writes to registers
+@code{L4}--@code{L7} inside an indexed-destination window, reporting
+violations as compile-time errors.
+
 @opindex mtt-tensix-optimize-cc-region-general
 @item -mtt-tensix-optimize-cc-region-general
 Generalize the recognizers of the CC-consuming folds above.  The

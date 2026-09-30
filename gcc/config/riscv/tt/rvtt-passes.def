@@ -94,6 +94,14 @@ INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_schedule_ssa);
 INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_unspec_prop_ssa);
 INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_attrib);
 
+/* Cross-lane canonical-frame fusion (rotate-chain collapse, per-arch
+   slide re-lowering, swap refolding, transpose-involution and
+   zip-round-trip cancellation): late, after the structured-CC lowering
+   and scheduling shape are final -- the frame matchers and the
+   all-lanes proof read explicit SFPENCC/PUSHC/POPC words -- and before
+   the transpose-involution pass below so both see maximally-canonical
+   streams.  */
+INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_crosslane);
 
 
 

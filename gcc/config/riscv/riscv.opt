@@ -697,6 +697,9 @@ Arbitrate the competing invariant-constant placement tiers through one priced au
 
 
 
+mtt-tensix-optimize-crosslane
+Target Var(riscv_tt_opt_crosslane) Init(0)
+Optimize recognized cross-lane instruction sequences through their proven permutation algebra.
 
 
 
