@@ -1299,6 +1299,7 @@ See RS/6000 and PowerPC Options.
 -mtt-optimize-hll
 -mtt-tensix-optimize-cc  -mno-tt-tensix-optimize-cc
 -mtt-tensix-optimize-dce  -mno-tt-tensix-optimize-dce
+-mtt-tensix-optimize-dst-ownership  -mno-tt-tensix-optimize-dst-ownership
 -mtt-tensix-optimize-lut-select  -mno-tt-tensix-optimize-lut-select
 -mtt-tensix-optimize-lut-select-leaf-ext
 -mtt-tensix-optimize-lut-select-fp16
@@ -31962,6 +31963,14 @@ saves, restores, and enables.  Enabled by default.
 @item -mtt-tensix-optimize-dce
 @itemx -mno-tt-tensix-optimize-dce
 Remove Tensix instructions whose results are provably unused.  Enabled
+by default.
+
+@opindex mtt-tensix-optimize-dst-ownership
+@item -mtt-tensix-optimize-dst-ownership
+@itemx -mno-tt-tensix-optimize-dst-ownership
+Track ownership of Dst rows and the row counter before register
+allocation, and fold Dst reloads that provably reload a value still
+resident in a vector register into direct register references.  Enabled
 by default.
 
 @opindex mtt-tensix-optimize-lut-select

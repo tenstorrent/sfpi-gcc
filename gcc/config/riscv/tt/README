@@ -41,6 +41,8 @@ a recorded reason (see section 5).
   LUT selection              If-conversion of piecewise range dispatch into
 			     SFPLUTFP32 table selection, including the FP16
 			     six-entry form.
+  Dst / RWC                  Dst row ownership tracking and store-to-load
+			     forwarding over Dst.
   crosscall                  Interprocedural LICM across noinline boundaries.
   effects                    rvtt-effects.h is the single source of truth for
 			     instruction effect classification.  New code must
@@ -60,8 +62,8 @@ opt-in host-compiled unit harnesses wired up in t-riscv-tt.
 
 Registrations live in rvtt-passes.def.  They cluster on a few anchors:
 pass_all_optimizations and pass_expand for the GIMPLE passes, and the
-passes around register allocation (chiefly pass_postreload) for
-the RTL passes.
+passes around register allocation (pass_ira, pass_postreload) for the RTL
+passes.
 
 IMPORTANT: within a single anchor, ordering is encoded by textual position in
 rvtt-passes.def, and INSERT_PASS_AFTER reverses it -- each later line on the
@@ -83,6 +85,7 @@ The flags enabled by default are:
 
 	-mtt-tensix-optimize-cc
 	-mtt-tensix-optimize-dce
+	-mtt-tensix-optimize-dst-ownership
 	-mtt-tensix-optimize-lut-select
 	-mtt-tensix-optimize-replay
 	-mtt-tensix-optimize-setexp-fold

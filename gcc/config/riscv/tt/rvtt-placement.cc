@@ -94,7 +94,8 @@ rvtt_place_net_benefit (unsigned words_body_saved, unsigned words_entry_paid,
    same basic block (the RTL fold's record scope is per-block).  The census
    is a structural demand count only: whether any individual shape folds is
    decided, with all its proofs (RWC/layout epochs, CC lattice, noval, its
-   own pressure guard), by the RTL fold itself.  */
+   own pressure guard), by the RTL fold itself
+   (rtl-rvtt-dst-ownership.cc).  */
 
 struct fold_shape_key
 {
@@ -121,7 +122,8 @@ struct fold_shape_key
    the unpriceable count; a census with more than RVTT_PLACE_MAX_CANDIDATES
    distinct tuples refuses whole (zero demand).  DECIDE selects registry
    refusals (deciding mode) over shadow dump lines.  Structural demand only
-   -- whether a shape actually folds is decided by the RTL fold itself.  */
+   -- whether a shape actually folds is decided by the RTL fold itself
+   (rtl-rvtt-dst-ownership.cc).  */
 
 rvtt_place_fold_demand
 rvtt_place_fold_demand_of (function *fn, FILE *dump, bool decide)
