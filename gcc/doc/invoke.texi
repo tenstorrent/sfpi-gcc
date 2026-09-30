@@ -1299,6 +1299,7 @@ See RS/6000 and PowerPC Options.
 -mtt-optimize-hll
 -mtt-tensix-optimize-cc  -mno-tt-tensix-optimize-cc
 -mtt-tensix-optimize-dce  -mno-tt-tensix-optimize-dce
+-mtt-tensix-optimize-setexp-fold  -mno-tt-tensix-optimize-setexp-fold
 -mtt-tensix-optimize-native-compare
 -mtt-tensix-optimize-cc-region-general
 -mtt-tensix-optimize-round-interleave
@@ -1315,6 +1316,7 @@ See RS/6000 and PowerPC Options.
 -mtt-tensix-optimize-launch-flatten
 -mtt-tensix-macro-planner-replay
 -mtt-tensix-optimize-reassoc
+-mtt-tensix-optimize-reassoc-mad-restructure
 -mtt-tensix-dump-effects}
 
 @emph{RL78 Options} (@ref{RL78 Options})
@@ -31857,8 +31859,8 @@ Unless explicitly stated otherwise, these optimizations never change
 the values a kernel computes, only the instruction sequence that
 computes them.  The exceptions are documented as value-changing below
 and require their own explicit opt-in:
-@option{-mtt-tensix-optimize-reassoc} additionally requires
-@option{-fassociative-math}.
+@option{-mtt-tensix-optimize-reassoc} and its companion reassociation
+options additionally require @option{-fassociative-math}.
 @end table
 
 Options marked @emph{Blackhole only} have no effect on other Tensix
@@ -31937,6 +31939,12 @@ saves, restores, and enables.  Enabled by default.
 @itemx -mno-tt-tensix-optimize-dce
 Remove Tensix instructions whose results are provably unused.  Enabled
 by default.
+
+@opindex mtt-tensix-optimize-setexp-fold
+@item -mtt-tensix-optimize-setexp-fold
+@itemx -mno-tt-tensix-optimize-setexp-fold
+Fold an exponent extract that feeds @code{SFPSETEXP} into the
+instruction's exponent-copy addressing mode.  Enabled by default.
 
 @opindex mtt-tensix-optimize-native-compare
 @item -mtt-tensix-optimize-native-compare
@@ -32127,7 +32135,7 @@ The options in this section are the only Tensix optimization options
 that can change the values a kernel computes.  Each is disabled by
 default, changes values only in the narrowly defined class stated in
 its entry, and declines with a recorded reason everywhere outside that
-class.  @option{-mtt-tensix-optimize-reassoc} additionally requires
+class.  The reassociation options additionally require
 @option{-fassociative-math}, the generic opt-in to value-changing
 floating-point reassociation (@pxref{Optimize Options}): with either
 option of the pair absent, every candidate site declines and code
@@ -32142,6 +32150,15 @@ fusion.  The value change is limited to the different rounding of a
 re-associated evaluation order.  Requires @option{-fassociative-math}.
 Integer and bitwise chain rebalancing under this option alone is
 value-identical and needs no such opt-in.
+
+@opindex mtt-tensix-optimize-reassoc-mad-restructure
+@item -mtt-tensix-optimize-reassoc-mad-restructure
+Permit fusing a single-use multiply-and-add pair---two serial
+roundings---into one @code{SFPMAD}---a single rounding---removing one
+dependent latency hop.  The value change is double versus single
+rounding on the fused product, plus the signed-zero flush the
+immediate-multiply form performs and @code{SFPMAD} does not.  Requires
+@option{-fassociative-math}.
 
 @end table
 @node Tensix Diagnostic Options
