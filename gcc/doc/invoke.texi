@@ -1308,6 +1308,7 @@ See RS/6000 and PowerPC Options.
 -mtt-tensix-optimize-int-abs
 -mtt-tensix-optimize-int-not
 -mtt-tensix-optimize-native-compare
+-mtt-tensix-optimize-repr-prop
 -mtt-tensix-optimize-store-fold
 -mtt-tensix-optimize-store-source-tier
 -mtt-tensix-optimize-transp-involution
@@ -32038,6 +32039,15 @@ Reserved for lowering strict-greater and less-or-equal floating-point
 vector comparisons to the native Blackhole @code{SFPGT} and
 @code{SFPLE} instructions.  The option is accepted but currently has
 no effect.  @emph{Blackhole only.}
+
+@opindex mtt-tensix-optimize-repr-prop
+@item -mtt-tensix-optimize-repr-prop
+Cancel pairs of representation-conversion instructions that are proven
+bit-level involutions (for example the Blackhole
+sign-magnitude/two's-complement cast) when they face each other across
+a web of operations that only choose bits lane-wise (copies, control
+joins, predicated merges).  Any unproven conversion or non-transparent
+intermediate operation declines.
 
 @opindex mtt-tensix-optimize-store-fold
 @item -mtt-tensix-optimize-store-fold
