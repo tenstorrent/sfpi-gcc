@@ -1,0 +1,8 @@
+# cc-enable refusal-identity manifest: test cpu off-s planner-s (must be equal)
+# (each column: sha256 over the -S assembly output)
+# minted from sfpi-gcc 8b62a832aaf984c2b11ee3a61ee9e815028e927f
+macro-planner-cc-enable-unproved-bh      bh    4ec0f89f1968c942c551f86c444decdd31b83a5dac96d710816275fee09ea1e0 4ec0f89f1968c942c551f86c444decdd31b83a5dac96d710816275fee09ea1e0
+macro-planner-cc-enable-unproved-wh      wh    b018b0ea30b7a3e587b4b6d9c333167c766e984f1066bb979200b826e0ab4499 b018b0ea30b7a3e587b4b6d9c333167c766e984f1066bb979200b826e0ab4499
+macro-planner-cc-enable-varied-bh        bh    a1c93a7ec30d5a8dd21166307ccb3063cf44112a5e1fe1cb7d391b211fc93b89 a1c93a7ec30d5a8dd21166307ccb3063cf44112a5e1fe1cb7d391b211fc93b89
+macro-planner-cc-enable-loop-bh          bh    ffedb0771489da7fe36b17b98624ed8cc5694e5180f0a37908a7a9c591d100ff ffedb0771489da7fe36b17b98624ed8cc5694e5180f0a37908a7a9c591d100ff
+macro-planner-cc-enable-unproved-qsr     qsr32 8d5df3fba1e1c953ac753279fa6f4b804649b29c53d316ab804e5b9cb96e0c5f 8d5df3fba1e1c953ac753279fa6f4b804649b29c53d316ab804e5b9cb96e0c5f

@@ -1899,8 +1899,20 @@ riscv_float_const_rtx_index_for_fli (rtx x)
 /* Implement TARGET_LEGITIMATE_CONSTANT_P.  */
 
 static bool
-riscv_legitimate_constant_p (machine_mode mode ATTRIBUTE_UNUSED, rtx x)
+riscv_legitimate_constant_p (machine_mode mode, rtx x)
 {
+  /* The SFPU can materialise exactly one vector constant: zero, which
+     lives in a constant LREG and costs no register (movxtt32si turns it
+     into that read).  Anything else has no move form -- rvtt_sfpassign
+     accepts only a register, memory or a constant LREG -- and would
+     reach recog as an unrecognizable insn, so keep the middle end from
+     forming one.  */
+  if (TARGET_XTT_TENSIX
+      && GET_CODE (x) == CONST_VECTOR
+      && (mode == XTT32SImode || mode == XTT64SImode
+	  || mode == XTT128SImode))
+    return x == CONST0_RTX (mode);
+
   /* With the post-reload usage, it seems best to just pass in FALSE
      rather than pass ALLOW_NEW_PSEUDOS through the call chain.  */
   return riscv_const_insns (x, false) > 0;
@@ -10718,6 +10730,28 @@ riscv_convert_vector_chunks (struct gcc_options *opts)
 void
 riscv_override_options_internal (struct gcc_options *opts)
 {
+  /* The quarantined exact-calendar SFPLOADMACRO pass was deleted at
+     WP8; its opt-in flags error rather than silently doing nothing.
+     The generic macro planner replaces it.  */
+  if (opts->x_riscv_tt_analyze_loadmacro || opts->x_riscv_tt_emit_loadmacro)
+    error ("%<-mtt-tensix-analyze-loadmacro%> and "
+	   "%<-mtt-tensix-emit-loadmacro%> were removed with the "
+	   "quarantined exact-calendar pass; use "
+	   "%<-mtt-tensix-macro-planner%>");
+
+  /* The Tensix instruction-combine flag was a dead knob: its variable had
+     no consumer, so both the enable and the -mno- form silently did
+     nothing.  It now errors rather than mislead.  */
+  if (opts->x_riscv_tt_opt_combine != -1)
+    error ("%<-mtt-tensix-optimize-combine%> was removed; it had no effect");
+
+  /* -mtt-tensix-optimize-lp-schedule was a historical alias with no
+     in-tree or external consumer; it now errors rather than silently
+     forward to the pressure scheduler.  */
+  if (opts->x_riscv_tt_opt_lp_schedule != -1)
+    error ("%<-mtt-tensix-optimize-lp-schedule%> was removed; use "
+	   "%<-mtt-tensix-optimize-pressure-schedule%>");
+
   if (auto cpu = opts->x_riscv_cpu_string)
     {
       // TT cpu implications
@@ -14655,6 +14689,22 @@ bool need_shadow_stack_push_pop_p ()
 
 #undef TARGET_COMP_TYPE_ATTRIBUTES
 #define TARGET_COMP_TYPE_ATTRIBUTES riscv_comp_type_attributes
+
+/* Emit the generated Tensix architectural effect set of each instruction
+   as an assembler comment under -mtt-tensix-dump-effects; DejaGnu golden
+   tests pin these annotations (macro-planner Layer-1 self-check).  */
+
+static void
+riscv_asm_final_postscan_insn (FILE *file, rtx_insn *insn,
+			       rtx *operands ATTRIBUTE_UNUSED,
+			       int noperands ATTRIBUTE_UNUSED)
+{
+  if (riscv_tt_dump_effects)
+    rvtt_dump_insn_effects (file, insn);
+}
+
+#undef TARGET_ASM_FINAL_POSTSCAN_INSN
+#define TARGET_ASM_FINAL_POSTSCAN_INSN riscv_asm_final_postscan_insn
 
 struct gcc_target targetm = TARGET_INITIALIZER;
 

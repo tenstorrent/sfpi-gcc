@@ -72,6 +72,24 @@ RVTT_FN (sfpbankdone,     qsr,,VOID_FTYPE_USI_USI_USI,                          
 
 RVTT_FN (sfpreadlreg,        ,,XTT_VEC_FTYPE_USI,                                            EMP, ({CU, 4}))
 RVTT_FN (sfpwritelreg,       ,,VOID_FTYPE_XTT_VEC_USI,                                       VOL|EMP, ({CU, 3}))
+// Metadata only: raw LLK code uses this after an opaque instruction region to
+// release architectural LREG ownership and/or describe newly written LREGs.
+// Operand 0 is a release/last-use mask, not a mask of ordinary non-final reads;
+// operand 1 is a write/new-live-value mask.  Deliberately NOT EMP: rvtt.md
+// gives it length 0 and it emits no Tensix instruction, but it must survive as
+// an RTL insn until the pre-IRA lreg-livein pass recognises it
+// (rtl-rvtt-lreg-livein.cc, recog_memoized).
+RVTT_FN (sfprawlreg_access,  ,,VOID_FTYPE_USI_USI,                                           VOL, ({CU, 8}, {CU, 8}))
+// Metadata only (D2 compiler half): raw LLK code brackets an opaque
+// instruction region with a TRUSTED typed effects declaration.  Operand 0
+// of the begin marker is the mask of SFPCONFIG destinations 0..15 the
+// region writes (bit 15 = LaneConfig may never be claimed); operand 1 is
+// reserved flag space (0).  The declared region additionally asserts it
+// neither reads nor writes any other PRGM register.  Both markers must sit
+// in the same basic block as the raw statements they cover; the reference simulator is the
+// check (the sfprawlreg_access discipline).
+RVTT_FN (ttregion_begin,     ,,VOID_FTYPE_USI_USI,                                           VOL, ({CU, 16}, {CU, 8}))
+RVTT_FN (ttregion_end,       ,,VOID_FTYPE,                                                   VOL, ())
 
 RVTT_FN (sfpnovalue,         ,,XTT_VEC_FTYPE,                                                0, ())
 RVTT_FN (sfpselect2,         ,,XTT_VEC_FTYPE_XTT_VEC2_USI,                                   0, ({CU, 1}))
@@ -80,6 +98,13 @@ RVTT_FN (sfpselect4,         ,,XTT_VEC_FTYPE_XTT_VEC4_USI,                      
 RVTT_FN (sfpsetcc,        ,_wh,VOID_FTYPE_XTT_VEC_USI,                                       CC(), ({M, 0x55}))
 RVTT_OVR(sfpsetcc,        qsr,,VOID_FTYPE_XTT_VEC_USI_USI,                                   CC(), ({M, 0x55}, {U, 1}))
 RVTT_FN (sfpencc,            ,,VOID_FTYPE_USI_USI,                                           CC(), ({M, 0x707}, {U, 2}))
+// PRE-EXISTING QUIRK (documented lane CA, not changed here): the ops
+// spec checks (arg1 imm12 {U,2}, arg2 mod1 {M,0x707}) while the direct
+// positional expansion maps (arg1 -> operand0 = mod1, arg2 -> operand1
+// = imm12); the compiler-built calls (gimple-rvtt-cc.cc) use the
+// expansion order and are inserted after the checkers.  Compiler-side
+// emission of the all-lanes enable uses the zero-argument
+// sfpencc_all_lanes below instead of relying on either order.
 RVTT_FN (sfpcompc,           ,,VOID_FTYPE,                                                   CC(), ())
 RVTT_FN (sfppushc,           ,,VOID_FTYPE_USI,                                               VOL|CC(0x2000), ({M, 0xffff}))
 RVTT_FN (sfppopc,            ,,VOID_FTYPE_USI,                                               VOL|CC(), ({M, 0xffff}))
@@ -130,11 +155,33 @@ RVTT_FN (sfplut,              ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_US
 RVTT_OVR(sfplut,       qsr,_qsr,XTT_VEC_FTYPE_XTT_VEC_USI,                                    0, ({M, 0x0011}))
 RVTT_FN (sfplutfp32,       qsr,,XTT_VEC_FTYPE_XTT_VEC_USI,                                    0, ({M, 0x44dd}))
 RVTT_FN (sfplutfp32_3r,  wh_bh,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_USI,            0, ({M, 0x4400}))
+// Mod values {0,2,3} select the FP32-3ENTRY/FP16-6ENTRY-T1/T2 tables and +4
+// is SGN_RETAIN, all architecturally defined for the 6-register form; values
+// with bit 3 (indirect destination via LReg7) stay refused because this
+// builtin's pattern encodes the destination register directly.  main reaches
+// the same acceptance set by arch-splitting rather than by a _6r qsr
+// override: wh_bh carries 0x00dd here, and Quasar keeps its conservative set
+// in the sfplutfp32 entry above because its SFPLUT-family execution is
+// unvalidated.
 RVTT_FN (sfplutfp32_6r,  wh_bh,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_USI, 0, ({M, 0x00dd}))
 
 RVTT_FN (sfpswap,          ,_wh,XTT_VEC2_FTYPE_XTT_VEC_XTT_VEC_USI,                          0, ({M, 0x1ff}))
 RVTT_OVR(sfpswap,          qsr,,XTT_VEC2_FTYPE_XTT_VEC_XTT_VEC_USI_USI,                      0, ({M, 0x1ff}, {U, 1}))
 RVTT_FN (sfptransp,           ,,XTT_VEC4_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC,              0, ())
+// Architecturally complete index-tracking forms.  These are distinct from the
+// ordinary operations because IndexEn makes SFPSWAP update the L4--L7
+// companions and SFPTRANSP always transforms both four-register banks.
+RVTT_FN (sfpswap_indexed,     ,,XTT_VEC4_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_USI,          0, ({M, 0x1ff}))
+RVTT_FN (sfptransp8,          ,,XTT_VEC4_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC, 0, ())
+// Compiler-internal companion-preserving involution bundle (formed by the
+// transp-involution pass, never spelled by users): SFPTRANSP, four
+// constant-address full-bank SFPLOADs into L0-L3, SFPTRANSP -- one atomic
+// instruction whose net effect on the L4-L7 companion bank is the identity.
+// Args: addr0..addr3, mod0, addr_mode.  (The RTL insn carries a seventh
+// leading-all-lanes-enable operand; the builtin lowering always passes 0 --
+// the pass materializes any needed enable as a separate typed SFPENCC so it
+// also covers the parked stores of the formation group.)
+RVTT_FN (sfptransp_gather,    ,,XTT_VEC4_FTYPE_USI_USI_USI_USI_USI_USI,                      VOL, ({CU, 13}, {CU, 13}, {CU, 13}, {CU, 13}, {CU, 4}, {CU, 3}))
 RVTT_FN (sfpshft2_copy4,      ,,XTT_VEC4_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_USI,                  0, ({M, 0x1}))
 RVTT_FN (sfpshft2_subvec_copy4, ,,XTT_VEC4_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_USI,        0, ({M, 0x2}))
 RVTT_FN (sfpshft2_subvec_shfl1_copy4, ,,XTT_VEC4_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_USI,  0, ({M, 0x4}))
@@ -145,6 +192,9 @@ RVTT_FN (sfpshft2_subvec_shfl1_lv, ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,         
 RVTT_FN (sfpload,              ,,XTT_VEC_FTYPE_XTT_IPTR_USI_USI_USI_USI_USI,                 VOL, ({CE, 14}, {M, 0xffff}, {CU, 2}))
 RVTT_OVR(sfpload,            bh,,XTT_VEC_FTYPE_XTT_IPTR_USI_USI_USI_USI_USI,                 VOL, ({CE, 13}, {M, 0xcfff}, {CU, 3}))
 RVTT_OVR(sfpload,           qsr,,XTT_VEC_FTYPE_XTT_IPTR_USI_USI_USI_USI_USI,                 VOL, ({CE, 10}, {M, 0xcfff}, {CU, 3}))
+RVTT_FN (sfploaddiscard,       ,,VOID_FTYPE_USI_USI_USI,                                     VOL, ({CE, 14}, {M, 0xffff}, {CU, 2}))
+RVTT_OVR(sfploaddiscard,     bh,,VOID_FTYPE_USI_USI_USI,                                     VOL, ({CE, 13}, {M, 0xcfff}, {CU, 3}))
+RVTT_OVR(sfploaddiscard,    qsr,,VOID_FTYPE_USI_USI_USI,                                     VOL, ({CE, 10}, {M, 0xcfff}, {CU, 3}))
 RVTT_FN (sfpload_lv,           ,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI_USI,         VOL|LV, ({CE, 14}, {M, 0xffff}, {CU, 2}))
 RVTT_OVR(sfpload_lv,         bh,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI_USI,         VOL|LV, ({CE, 13}, {M, 0xcfff}, {CU, 3}))
 RVTT_OVR(sfpload_lv,        qsr,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI_USI,         VOL|LV, ({CE, 10}, {M, 0xcfff}, {CU, 3}))
@@ -225,6 +275,33 @@ RVTT_FN (sfple,           bh,_bh,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,             
 RVTT_OVR(sfple,             qsr,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI_USI,                      CC(0xeeee), ({M, 0xffff}, {U, 1}))
 RVTT_FN (sfple_lv,        bh,_bh,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_USI,                  LV|CC(0xeeee), ({M, 0xffff}))
 RVTT_OVR(sfple_lv,          qsr,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_USI_USI,              LV|CC(0xeeee), ({M, 0xffff}, {U, 1}))
+// Immediate-form SFPCONFIG (lane FA, 2026-08-21): (imm16, dest, mod1).
+// MOD1_IMM16_IS_VALUE (bit 0) is mandatory -- the mod mask 0xaa admits only
+// {1,3,5,7} (write/OR/AND/XOR of Imm16) so the instruction never reads
+// LReg[0]; that register-free property is the whole point (the value form
+// above stages through LReg[0] -- a 9th live vector, pressure-infeasible in
+// 8-live sort kernels).  The audited destination envelope is LaneConfig
+// (dest == 15) only, enforced by a named check in gimple-rvtt-check.cc
+// (sfpconfig-imm-dest-unaudited); dests 0-8 (LoadMacroConfig) stay owned by
+// the macro planner, 9-10 are NonContractualBehavior, and 11-14 imm-form
+// writes (fixed default constants) are refused until the prgm-const pass
+// models them.  Lane-mask forms (mod1 bit 3) take the value from LReg[0]
+// (SFPCONFIG.md functional model) and are therefore NOT immediate-form:
+// refused by the same mod mask.
+RVTT_FN (sfpconfig_i,           ,,VOID_FTYPE_USI_USI_USI,                                    VOL, ({CU, 16}, {CU, 4}, {M, 0xaa}))
+// Owned SETC16 programming, gimple-spellable (the init hoist): the
+// caller-side materialization of a callee's owned address-modifier
+// program.  Args: SETC16 configuration register index, 16-bit value.
+RVTT_FN (ttsetc16,              ,,VOID_FTYPE_USI_USI,                                        VOL, ({CU, 8}, {CU, 16}))
+// Canonical proven all-lanes enable, gimple-spellable (the init
+// hoist): expands to the architectural all-lanes SFPENCC encoding from
+// the capability tables (the exact word cc_enable_all_lanes_proved_p
+// proves against); zero arguments by design.
+// No CC() flag by design: the structured-CC validator owns pushc/popc
+// nesting, and this enable is inserted only at a proven loop preheader
+// at the architectural outermost depth -- the expanded rvtt_sfpencc
+// insn carries the authoritative CC effect attributes at RTL.
+RVTT_FN (sfpencc_all_lanes,     ,,VOID_FTYPE,                                                VOL, ())
 
 RVTT_FN (sfpmul24,       bh_qsr,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,                          0, ({M, 0x3}))
 RVTT_FN (sfpmul24_lv,    bh_qsr,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_USI,                  LV, ({M, 0x3}))
@@ -233,8 +310,38 @@ RVTT_FN (sfparecip_lv,       bh,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,             
 RVTT_FN (sfpnonlinear,      qsr,,XTT_VEC_FTYPE_XTT_VEC_USI,                                  0, ({M, 0x3f}))
 RVTT_FN (sfpnonlinear_lv,   qsr,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,                          LV, ({M, 0x3f}))
 
+RVTT_FN (ttsetrwc,             ,,VOID_FTYPE_USI_USI_USI_USI_USI_USI,                         VOL, ({CU, 2}, {CU, 4}, {CU, 4}, {CU, 4}, {CU, 4}, {CU, 6}))
+// Typed architectural Dst/RWC face advance: two architectural Dst += 8
+// steps; no LREG, CC, or configuration effect.  Zero value operands.
+RVTT_FN (ttdstface,            ,,VOID_FTYPE,                                                 VOL, ())
 RVTT_FN (ttincrwc,             ,,VOID_FTYPE_SI_SI_SI_SI,                                     VOL, ({CS, 6}, {CS, 4}, {CS, 4}, {CS, 4}))
 RVTT_FN (ttreplay,             ,,VOID_FTYPE_XTT_IPTR_USI_USI_USI_USI_USI_USI,                VOL, ({CU, 5, 4, 1}, {CU, 5}, {CU, 1}, {CU, 1}))
+
+// FPU face-transpose family: the Matrix-Unit (FPU) Dst <->
+// SrcA/SrcB row moves, the SrcB[16:32) 16x16 transpose, the backend-config
+// byte RMW, and the wait-gate stall the hand face-transpose choreography
+// issues (tt-isa-documentation WormholeB0 MOVD2B/MOVB2A/MOVB2D/MOVA2D/
+// TRNSPSRCB/RMWCIB .md pages carry the BH arms; BlackholeA0 tree = doc gap,
+// pinned sim is the BH oracle).  Immediate-only, no LREG dataflow; effect
+// attributes deliberately UNAUDITED at RTL so rvtt_insn_effects () keeps
+// them opaque and every optimization layer refuses around them (the
+// refusing-default architecture).  Operand widths are the architectural
+// encoding-field widths (ckernel_ops.h TT_*_VALID; gas enforces the same).
+// ttmovd2b (UseDst32bLo, SrcBRow, AddrMod, Move4Rows, DstRow)
+RVTT_FN (ttmovd2b,             ,,VOID_FTYPE_USI_USI_USI_USI_USI,                             VOL, ({CU, 1}, {CU, 6}, {CU, 3}, {CU, 2}, {CU, 12}))
+// ttmovb2a (SrcARow, AddrMod, Move4Rows, SrcBRow)
+RVTT_FN (ttmovb2a,             ,,VOID_FTYPE_USI_USI_USI_USI,                                 VOL, ({CU, 7}, {CU, 3}, {CU, 2}, {CU, 12}))
+// ttmovb2d (UseDst32bLo, SrcBRow, AddrMod, Mode{Move4Rows|Bcast8|BcastCol0}, DstRow)
+RVTT_FN (ttmovb2d,             ,,VOID_FTYPE_USI_USI_USI_USI_USI,                             VOL, ({CU, 1}, {CU, 6}, {CU, 3}, {CU, 3}, {CU, 11}))
+// ttmova2d (UseDst32bLo, SrcARow, AddrMod, Move8Rows, DstRow)
+RVTT_FN (ttmova2d,             ,,VOID_FTYPE_USI_USI_USI_USI_USI,                             VOL, ({CU, 1}, {CU, 6}, {CU, 3}, {CU, 2}, {CU, 12}))
+RVTT_FN (tttrnspsrcb,          ,,VOID_FTYPE,                                                 VOL, ())
+// ttstallwait (StallRes, WaitRes)
+RVTT_FN (ttstallwait,          ,,VOID_FTYPE_USI_USI,                                         VOL, ({CU, 9}, {CU, 15}))
+// ttrmwcib (ByteIndex 0..3, Mask8, Data8, CfgAddr8): byte-granular RMW of
+// the CURRENT-state backend configuration word (the cfg_reg_rmw_tensix
+// lowering); byte index selects RMWCIB0..3.
+RVTT_FN (ttrmwcib,             ,,VOID_FTYPE_USI_USI_USI_USI,                                 VOL, ({CU, 2}, {CU, 8}, {CU, 8}, {CU, 8}))
 
 // Make sure the last defn is never something we ask for get-live of.
 
