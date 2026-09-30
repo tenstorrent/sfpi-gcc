@@ -1301,6 +1301,7 @@ See RS/6000 and PowerPC Options.
 -mtt-tensix-optimize-dce  -mno-tt-tensix-optimize-dce
 -mtt-tensix-optimize-setexp-fold  -mno-tt-tensix-optimize-setexp-fold
 -mtt-tensix-optimize-ccmask
+-mtt-tensix-optimize-int-abs
 -mtt-tensix-optimize-native-compare
 -mtt-tensix-optimize-cc-region-general
 -mtt-tensix-optimize-round-interleave
@@ -31953,6 +31954,14 @@ Fold a predicated region whose only effect is zeroing selected lanes
 under a floating-point ordering test against @code{+0.0} into an
 unpredicated compare and bitwise AND, removing the CC save/restore
 pair.  Non-matching regions decline.
+
+@opindex mtt-tensix-optimize-int-abs
+@item -mtt-tensix-optimize-int-abs
+Fold a predicated region performing a conditional two's-complement
+negation under a sign test into the single integer @code{SFPABS}
+instruction.  The equivalence is backed by an exhaustive check over all
+32-bit inputs, recorded in the source tree; non-matching regions
+decline.
 
 @opindex mtt-tensix-optimize-native-compare
 @item -mtt-tensix-optimize-native-compare

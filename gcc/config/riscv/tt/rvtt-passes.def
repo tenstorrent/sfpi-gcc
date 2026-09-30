@@ -27,6 +27,13 @@ INSERT_PASS_BEFORE (pass_all_optimizations, 1, pass_rvtt_check_early);
    before pass_rvtt_immvar_expand while the canonical structured forms
    are intact.  */
 INSERT_PASS_BEFORE (pass_all_optimizations, 1, pass_rvtt_ccmask);
+/* The integer-abs fold rewrites structured conditional-negate v_if
+   regions into the single integer SFPABS, citing the exhaustive
+   equivalence proof in tt/proofs/int-abs-negate-select/.  Same
+   placement rationale as the ccmask fold above: run while the
+   canonical structured forms are intact and before the invariant pass
+   so the removed CC statement no longer bars the loop's hoists.  */
+INSERT_PASS_BEFORE (pass_all_optimizations, 1, pass_rvtt_int_abs);
 /* Place semantic SFPU constants outside counted loops while values are still
    SSA pseudos.  Doing this after allocation would extend hard-LREG lifetimes.  */
 INSERT_PASS_BEFORE (pass_all_optimizations, 1, pass_rvtt_invariant);

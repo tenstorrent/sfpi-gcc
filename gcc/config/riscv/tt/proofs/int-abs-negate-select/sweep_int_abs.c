@@ -1,0 +1,110 @@
+/* Copyright (C) 2026 Tenstorrent Inc.
+
+This file is part of GCC.
+
+GCC is free software; you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free
+Software Foundation; either version 3, or (at your option) any later
+version.
+
+GCC is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or
+FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+for more details.
+
+You should have received a copy of the GNU General Public License
+along with GCC; see the file COPYING3.  If not see
+<http://www.gnu.org/licenses/>.  */
+
+/* Exhaustive 2^32 comparison for the int-abs peephole (rvtt_int_abs).
+ *
+ * CUT: the conditional-negate CC region of an SFPI integer abs kernel,
+ * transcribed from its GIMPLE and emission (cut-gimple-pin13.txt;
+ * emitted row SFPLOAD mod0=4 / SFPSETCC mod1=0 / SFPIADD L9 mod1=6 /
+ * SFPENCC 3,10 / SFPSTORE mod0=4):
+ *   cc  = raw bit31 of w            (SFPSETCC mod1=0, is_negative raw bit)
+ *   neg = 0 - w  (wrap mod 2^32)    (SFPIADD mod1=6 = ARG_2SCOMP|CC_NONE,
+ *                                    src = LCONST_0 - w)
+ *   cut = cc ? neg : w              (predicated write + ENCC restore)
+ * Load/store are mod0=4 (INT32_2S_COMP), raw 32-bit on BH -- the chain
+ * is closed over the raw Dst word.
+ *
+ * HW: SFPABS instr_mod1=0 (integer), as the reference simulator
+ * implements it in the TT_VERSION<=1 arm shared by WH and BH:
+ *   if (src >= 0x80000000) src = -src;
+ *
+ * Output: per-class mismatch census (expected all-zero => EQUAL) + SHA256
+ * over the full 2^32 output streams of both denotations (input-order,
+ * little-endian u32).  Classes partition the input space so `other`
+ * cannot occur; the sweep proves the counts.
+ *
+ * Build: cc -O2 sweep_int_abs.c -o sweep -lcrypto
+ */
+#include <stdint.h>
+#include <stdio.h>
+#include <string.h>
+#include <openssl/evp.h>
+
+/* ---- Cut denotation (region lowering) ---- */
+static inline uint32_t cut_negate_select(uint32_t w) {
+    uint32_t cc = w & 0x80000000u;          /* SFPSETCC mod1=0: raw sign bit */
+    uint32_t neg = 0u - w;                  /* SFPIADD mod1=6: 0 - w, wrap */
+    return cc ? neg : w;                    /* predicated merge */
+}
+
+/* ---- SFPABS integer semantics ---- */
+static inline uint32_t hw_sfpabs_int(uint32_t src) {
+    if (src >= 0x80000000u) {
+        src = -src;
+    }
+    return src;
+}
+
+int main(void) {
+    uint64_t total_mismatch = 0;
+    uint64_t mm_mostneg = 0;   /* w == 0x80000000 (INT32_MIN)   */
+    uint64_t mm_neg = 0;       /* bit31 set, w != 0x80000000    */
+    uint64_t mm_zero = 0;      /* w == 0                        */
+    uint64_t mm_pos = 0;       /* bit31 clear, w != 0           */
+    EVP_MD_CTX *hc = EVP_MD_CTX_new(), *hh = EVP_MD_CTX_new();
+    EVP_DigestInit_ex(hc, EVP_sha256(), NULL);
+    EVP_DigestInit_ex(hh, EVP_sha256(), NULL);
+    enum { CH = 1 << 20 };
+    static uint32_t bc[CH], bh[CH];
+    uint64_t u = 0;
+    do {
+        for (uint32_t i = 0; i < CH; i++, u++) {
+            uint32_t x = (uint32_t)u;
+            uint32_t c = cut_negate_select(x);
+            uint32_t h = hw_sfpabs_int(x);
+            bc[i] = c; bh[i] = h;
+            if (c != h) {
+                total_mismatch++;
+                if (x == 0x80000000u) mm_mostneg++;
+                else if (x & 0x80000000u) mm_neg++;
+                else if (x == 0) mm_zero++;
+                else mm_pos++;
+            }
+        }
+        EVP_DigestUpdate(hc, bc, sizeof bc);
+        EVP_DigestUpdate(hh, bh, sizeof bh);
+    } while (u != 0x100000000ull);
+    unsigned char dc[32], dh[32]; unsigned int L;
+    EVP_DigestFinal_ex(hc, dc, &L);
+    EVP_DigestFinal_ex(hh, dh, &L);
+    printf("inputs swept          : 4294967296\n");
+    printf("total mismatches      : %llu\n", (unsigned long long)total_mismatch);
+    printf("  INT32_MIN (0x80000000)      : %llu\n", (unsigned long long)mm_mostneg);
+    printf("  negative (bit31 set)        : %llu\n", (unsigned long long)mm_neg);
+    printf("  zero                        : %llu\n", (unsigned long long)mm_zero);
+    printf("  positive (bit31 clear)      : %llu\n", (unsigned long long)mm_pos);
+    printf("verdict               : %s\n",
+           total_mismatch ? "NOT-EQUAL (proof obligation FAILS)" : "EQUAL");
+    char hex[65];
+    for (int k = 0; k < 2; k++) {
+        const unsigned char *d = k ? dh : dc;
+        for (int i = 0; i < 32; i++) sprintf(hex + 2*i, "%02x", d[i]);
+        printf("%s sha256 = %s\n", k ? "hw-stream " : "cut-stream", hex);
+    }
+    return 0;
+}

@@ -96,3 +96,12 @@ streams with OpenSSL.)
   lowering (gimple-rvtt-pred.cc, expand_cmp_using_gtle) takes
   arbitrary operands, commutes LT/GE into GT/LE and covers SMAG and
   integer types, which this proof does not.
+- int-abs-negate-select/ — conditional-negate CC region (v_if (v<0)
+  r=0-v) vs SFPABS mod1=0 integer.  EQUAL (0/2^32, INT32_MIN included;
+  streams hash-identical).  LICENSES the rvtt_int_abs fold
+  (-mtt-tensix-optimize-int-abs, gimple-rvtt-int-abs.cc).  Proven on
+  the BH model; the simulator changes integer abs of INT32_MIN on
+  later architectures, so the pass gate is BH-only.  REDUCTION.md
+  records the complete set of source spellings that reduce pointwise
+  to this RESULT's value function (LE polarity; GE/GT else-forms);
+  they stand or fall with the RESULT.
