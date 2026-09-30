@@ -755,7 +755,9 @@ Hoist loop-invariant Tensix immediate-vector materializations before register al
 
 
 
-
+mtt-tensix-optimize-dst-ownership
+Target Var(riscv_tt_opt_dst_ownership) Init(1)
+Fold proven-identity Dst reloads into register-resident values using the Dst ownership analysis.
 
 mtt-tensix-optimize-lut-select
 Target Var(riscv_tt_opt_lut_select) Init(1)
