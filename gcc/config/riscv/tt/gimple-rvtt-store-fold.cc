@@ -60,9 +60,16 @@ along with GCC; see the file COPYING3.  If not see
    The exhaustive per-pair sweep (semantics lifted verbatim from the
    pinned simulator) ships in tt/proofs/store-sink-roundtrip/:
 
+   WHAT THAT SWEEP COVERS, EXACTLY -- it is narrower than the pass
+   admits, and the rows carry the difference so a reader does not have
+   to take this comment's word for it:
      - (INT32, INT32) raw pair: EQUAL over 2^32 -- conversion-free in
-       both directions on Blackhole.  LICENSED.
-     - every float pair (SRCB/FP16/BF16/FP32): NOT-EQUAL -- the store
+       both directions.  FIRE (value-preserving; no license token is
+       consulted).  Proven on BLACKHOLE ONLY (the RESULT labels it
+       "INT32 raw, Dst32b (BH)"), so the row is keyed BH and a WH
+       compilation finds no row and refuses.
+     - the DIAGONAL float pairs (FP16,FP16) and (BF16,BF16), 16-bit Dst
+       layout, and (FP32,FP32), Dst32b (BH): NOT-EQUAL -- the store
        conversion canonicalizes Dst (denormal flush; BF16 254/2^16,
        FP16 2046/2^16, FP32 16777214/2^32 witnesses).  Eliding the
        write-back preserves the original bits, so the sink refuses
@@ -71,6 +78,27 @@ along with GCC; see the file COPYING3.  If not see
        stores only under the predicate has architecturally different
        Dst-canonicalization behavior than the all-lanes write-back its
        semantic twin compiles to.
+     - (SRCB, SRCB) IS NOT SWEPT.  `grep -i srcb' the RESULT and you
+       get nothing: the row is DERIVED, as the most-refusing class of
+       the diagonal float pairs, on the assumption that SFPLOAD and
+       SFPSTORE resolve MOD0_FMT_SRCB to the SAME concrete format.
+       The ISA models do not grant that (SFPLOAD.md:67-82 takes SrcBFmt
+       from ThreadConfig.SFPU_DEST_FMT_Base on Blackhole when
+       SFPU_DEST_FMT_Enable is set; SFPSTORE.md:58-71 has no such
+       clause and records its BH SrcB behaviour as "not fully
+       characterized"), so the row quantifies over nine
+       (load-resolution, store-resolution) cells and the proof sweeps
+       three.  The other six were swept afterwards
+       (sweep_store_sink_roundtrip.c --cross): four are a WIDTH
+       MISMATCH (FP32's 32-bit Dst datum against the 16-bit one) and
+       the two same-width cells are NOT-EQUAL on 65530 of 65536 Dst
+       bit patterns, against 254 and 2046 on the diagonal.  The row's
+       LICENSED/DENORMAL_FLUSH class is therefore sound only on the
+       three cells it ranks.  An open item, recorded rather than
+       papered over: the honest repair is a same-resolution
+       precondition, which needs an ISA guarantee this pass cannot
+       currently cite, not a dropped row -- dropping it would cost a
+       real optimisation on 13 corpus ops.
 
    THE STORE-SINK LICENSE (-mtt-tensix-optimize-store-sink, owner
    ratification 2026-08-26): the float-pair refusal above is the
@@ -373,6 +401,19 @@ constexpr unsigned SFPSTORE_MAX_SRC_LREG = 12;
    store-sink; REFUSE = divergence outside the ratified class); a pair
    without a row has no proof on record.  */
 
+/* The target a generated row was proven on.  The pass admits BH or
+   WH; the RESULT's rows do not all cover both, so a row that does not
+   name this target is no row at all (see the sweep-coverage note at
+   the top of this file).  */
+
+enum storefold_arch
+{
+  STOREFOLD_ARCH_BH = 1,
+  STOREFOLD_ARCH_WH = 2,
+  STOREFOLD_ARCH_SHARED = STOREFOLD_ARCH_BH | STOREFOLD_ARCH_WH,
+  STOREFOLD_ARCH_NONE = 0
+};
+
 enum storefold_license
 {
   STOREFOLD_FIRE,
@@ -384,7 +425,21 @@ struct storefold_sink_row
 {
   long lfmt, sfmt;
   storefold_license license;
+  unsigned arch;
 };
+
+/* The arch bit for the target being compiled; 0 outside the pass gate
+   (which refuses store-fold-target-unproven before any row is read).  */
+
+static inline unsigned
+storefold_this_arch ()
+{
+  if (TARGET_XTT_TENSIX_BH)
+    return STOREFOLD_ARCH_BH;
+  if (TARGET_XTT_TENSIX_WH)
+    return STOREFOLD_ARCH_WH;
+  return STOREFOLD_ARCH_NONE;
+}
 
 struct stochrnd_store_row
 {
@@ -393,8 +448,8 @@ struct stochrnd_store_row
 
 #define RVTT_STOREFOLD_PROOF(path, sha256)
 #define RVTT_STOREFOLD_SINK_PAIR(lfmt, sfmt, verdict, divergence, license, \
-				 rsha, isha)	\
-  { lfmt, sfmt, STOREFOLD_##license },
+				 arch, rsha, isha)	\
+  { lfmt, sfmt, STOREFOLD_##license, arch },
 #define RVTT_STOCHRND_STORE_PAIR(conv, sfmt, fsha, dsha)
 static constexpr storefold_sink_row storefold_sink_rows[] = {
 #include "rvtt-storefold-verdicts.def"
@@ -403,7 +458,7 @@ static constexpr storefold_sink_row storefold_sink_rows[] = {
 #undef RVTT_STOCHRND_STORE_PAIR
 
 #define RVTT_STOREFOLD_SINK_PAIR(lfmt, sfmt, verdict, divergence, license, \
-				 rsha, isha)
+				 arch, rsha, isha)
 #define RVTT_STOCHRND_STORE_PAIR(conv, sfmt, fsha, dsha) { conv, sfmt },
 static constexpr stochrnd_store_row stochrnd_store_rows[] = {
 #include "rvtt-storefold-verdicts.def"
@@ -787,10 +842,15 @@ fold_merge_store (rvtt_cc_region_tree *ccr, gcall *assign, gcall *store)
      exhaustively swept Dst round trip plus the runtime-resolved SRCB
      row; tt/rvtt-storefold-verdicts.def, byte-checked against
      tt/proofs/store-sink-roundtrip/RESULT.txt every build).  A pair
-     without a row has no round-trip proof on record.  */
+     without a row has no round-trip proof on record -- and so does a
+     pair whose row was proven on the OTHER target: the (INT32,INT32)
+     FIRE row and the (FP32,FP32) row are Dst32b (BH) evidence, and
+     the RESULT's own WH row (INT32_SM) exists because WH's integer
+     Dst path differs from BH's.  */
   const storefold_sink_row *pair = nullptr;
+  unsigned this_arch = storefold_this_arch ();
   for (const storefold_sink_row &r : storefold_sink_rows)
-    if (r.lfmt == lfmt && r.sfmt == sfmt)
+    if (r.lfmt == lfmt && r.sfmt == sfmt && (r.arch & this_arch))
       {
 	pair = &r;
 	break;

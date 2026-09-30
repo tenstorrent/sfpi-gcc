@@ -54,6 +54,19 @@ along with GCC; see the file COPYING3.  If not see
        float paths (the row's ALU config owns the
        resolution), so the emitted SRCB row carries the
        MOST REFUSING class of the swept float pairs (FP16/BF16/FP32).
+     - EVERY ROW CARRIES THE TARGET IT WAS PROVEN ON.  The sink pass
+       admits BH or WH, but the RESULT's rows do not all cover both:
+       a description ending "(BH)" or "(WH)" is that target only, and
+       one without an arch marker is the shared TT_VERSION<=1
+       simulator arm both pinned oracles compile.  Without this key
+       the (INT32,INT32) FIRE row and the (FP32,FP32) LICENSED row --
+       both labelled Dst32b (BH) -- were admitted on WH with no WH
+       evidence, while the one WH-labelled row (INT32_SM) exists
+       precisely because WH's integer Dst path differs from BH's.  The
+       derived SRCB row takes the INTERSECTION of the arches of the
+       pairs it ranks, because a derivation is no broader than its
+       narrowest input.  A pair with no row FOR THIS TARGET refuses
+       store-fold-sink-format-unproven.
      - each stochrnd proof row pairs one SFPSTOCHRND float conversion
        with its matching-precision store Mod0 (that pairing IS the
        sweep's definition), and AN ADMISSION KEY MUST NAME A FORMAT
@@ -432,6 +445,7 @@ parse_sink_pairs (const input &in, std::vector<sink_pair> *out)
 
 struct stochrnd_row {
   char tag = 0;			/* 'A', 'B', ... */
+  std::string line;		/* the RESULT's own row line, verbatim */
   std::string conv;		/* fp16a / fp16b */
   long smod = -1;
   std::string verdict;
@@ -516,6 +530,42 @@ parse_stochrnd_rows (const input &in, std::vector<stochrnd_row> *out)
   return true;
 }
 
+}
+
+/* The target a proven row covers, read off the RESULT's own pair
+   description: a trailing "(BH)" or "(WH)" narrows the row to that
+   target, and no marker means the shared simulator arm both pinned
+   oracles compile.  Returns the symbolic token the .def carries.  */
+
+static const char *
+arch_token (const std::string &desc)
+{
+  if (desc.find ("(BH)") != std::string::npos)
+    return "STOREFOLD_ARCH_BH";
+  if (desc.find ("(WH)") != std::string::npos)
+    return "STOREFOLD_ARCH_WH";
+  return "STOREFOLD_ARCH_SHARED";
+}
+
+/* Rank a token for intersection: the derived SRCB row is no broader
+   than the narrowest pair it ranks.  */
+
+static unsigned
+arch_mask (const char *tok)
+{
+  if (strcmp (tok, "STOREFOLD_ARCH_BH") == 0)
+    return 1u;
+  if (strcmp (tok, "STOREFOLD_ARCH_WH") == 0)
+    return 2u;
+  return 3u;
+}
+
+static const char *
+arch_of_mask (unsigned m)
+{
+  return m == 1u ? "STOREFOLD_ARCH_BH"
+    : m == 2u ? "STOREFOLD_ARCH_WH"
+    : m == 3u ? "STOREFOLD_ARCH_SHARED" : "STOREFOLD_ARCH_NONE";
 }
 
 /* True when MOD0 names a store format the hardware resolves
@@ -616,6 +666,17 @@ main (int argc, const char **argv)
 		   " regenerated\n", argv[2], r.tag, r.verdict.c_str ());
 	  return 1;
 	}
+      if (r.line.find ("(BH)") != std::string::npos
+	  || r.line.find ("(WH)") != std::string::npos)
+	{
+	  fprintf (stderr, "genrvtt-storefold: %s: row %c names a single"
+		   " target, but RVTT_STOCHRND_STORE_PAIR has no arch"
+		   " column -- emitting it would admit the pair on the"
+		   " other target with no evidence, which is the defect the"
+		   " sink table's arch key exists to prevent.  Add the"
+		   " column before adding the row\n", argv[2], r.tag);
+	  return 1;
+	}
       if (!static_store_format_p (r.smod) && r.verdict == "EQUAL")
 	{
 	  fprintf (stderr, "genrvtt-storefold: %s: row %c stores through"
@@ -637,6 +698,7 @@ main (int argc, const char **argv)
       : strcmp (lic, "LICENSED") == 0 ? 1 : 2;
   };
   int srcb_rank = -1;
+  unsigned srcb_arch = 3u;
   bool srcb_not_equal = false;
   bool srcb_mixed = false;
   const char *srcb_class = "NONE";
@@ -649,6 +711,7 @@ main (int argc, const char **argv)
 	const char *lic = license_class (p.verdict, div);
 	if (rank (lic) > srcb_rank)
 	  srcb_rank = rank (lic);
+	srcb_arch &= arch_mask (arch_token (p.desc));
 	if (p.verdict == "NOT-EQUAL")
 	  srcb_not_equal = true;
 	if (strcmp (srcb_class, "NONE") == 0)
@@ -725,7 +788,8 @@ main (int argc, const char **argv)
 	   "   fidelity of every row below as a machine check.\n"
 	   "\n"
 	   "   RVTT_STOREFOLD_SINK_PAIR (lfmt, sfmt, verdict, divergence,\n"
-	   "				license, roundtrip_sha, identity_sha)\n"
+	   "				license, arch, roundtrip_sha,\n"
+	   "				identity_sha)\n"
 	   "     One S2-sink admission row per proven (load Mod0, store"
 	   " Mod0)\n"
 	   "     Dst round trip; license = FIRE (EQUAL pair) / LICENSED\n"
@@ -733,7 +797,12 @@ main (int argc, const char **argv)
 	   " only) /\n"
 	   "     REFUSE (divergence outside the ratified class).  Pairs"
 	   " without\n"
-	   "     a row refuse store-fold-sink-format-unproven.\n"
+	   "     a row refuse store-fold-sink-format-unproven.  arch is\n"
+	   "     the target the RESULT proved the row on -- BH, WH, or\n"
+	   "     SHARED for the simulator arm both pinned oracles\n"
+	   "     compile.  A pair with no row FOR THIS TARGET refuses the\n"
+	   "     same way as a pair with no row at all; the derived SRCB\n"
+	   "     row takes the intersection of the arches it ranks.\n"
 	   "   RVTT_STOCHRND_STORE_PAIR (conv_mod1, store_mod0, fused_sha,\n"
 	   "			       direct_sha)\n"
 	   "     One licensed matching-precision pairing for the stochrnd\n"
@@ -772,17 +841,22 @@ main (int argc, const char **argv)
 	       p.desc.c_str (), p.c.total, p.c.total == 1 ? "" : "es",
 	       p.c.swept);
       fprintf (out, "RVTT_STOREFOLD_SINK_PAIR (%s, %s, %s, %s, %s,\n"
+	       "\t\t\t  %s,\n"
 	       "\t\t\t  \"%s\",\n"
 	       "\t\t\t  \"%s\")\n",
 	       mod0_name (p.lmod), mod0_name (p.smod),
 	       p.verdict == "EQUAL" ? "EQUAL" : "NOT_EQUAL",
-	       div, lic,
+	       div, lic, arch_token (p.desc),
 	       p.roundtrip_sha.c_str (), p.identity_sha.c_str ());
     }
-  fprintf (out, "/* SRCB, runtime-resolved to a swept float path.  */\n");
+  fprintf (out, "/* SRCB, runtime-resolved to a swept float path;"
+	   " arch is the\n   intersection of the pairs this class is"
+	   " derived from.  */\n");
   fprintf (out, "RVTT_STOREFOLD_SINK_PAIR (SFPMEM_MOD0_FMT_SRCB,"
-	   " SFPMEM_MOD0_FMT_SRCB, %s, %s, %s,\n\t\t\t  \"-\", \"-\")\n\n",
-	   srcb_not_equal ? "NOT_EQUAL" : "EQUAL", srcb_class, srcb_lic);
+	   " SFPMEM_MOD0_FMT_SRCB, %s, %s, %s,\n\t\t\t  %s,\n"
+	   "\t\t\t  \"-\", \"-\")\n\n",
+	   srcb_not_equal ? "NOT_EQUAL" : "EQUAL", srcb_class, srcb_lic,
+	   arch_of_mask (srcb_arch));
 
   for (const stochrnd_row &r : rows)
     {
