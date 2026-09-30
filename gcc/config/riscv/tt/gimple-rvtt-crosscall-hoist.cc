@@ -1401,8 +1401,8 @@ rvtt_crosscall_init_hoist (function *callee_fn,
    address-modifier slot on every invocation, although the program is
    the same compile-time constant triple on every call.  A hand kernel
    programs its ADDR_MOD slots ONCE at kernel init.  This service --
-   called from the callee's Dst auto-increment formation while every
-   caller body is still gimple
+   called from the callee's Dst auto-increment pass
+   (rtl-rvtt-dst-autoincr.cc) while every caller body is still gimple
    (the pass-pipeline ordering fact) -- proves the caller side and, on a
    complete proof, inserts the slot program as typed ttsetc16 builtin
    calls in the caller's loop-entry preheader, LIFTED across enclosing
@@ -1434,7 +1434,8 @@ rvtt_crosscall_init_hoist (function *callee_fn,
 
    The callee-side conditions (whole-callee ownership census, entry
    distance guard, call-boundary crossing charge, all-groups/single-
-   stride/explicit-rows shape) live with the callee-side pricing.
+   stride/explicit-rows shape) live with the pricing in
+   rtl-rvtt-dst-autoincr.cc.
 
    Refusal vocabulary (stable, append-only; the scan reasons are the
    init face's own drain-init-* names -- it is the same audited scan):

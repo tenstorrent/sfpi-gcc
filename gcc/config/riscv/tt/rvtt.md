@@ -4889,8 +4889,8 @@
 ;; Compiler-owned address-modifier programming.  Operand 0 is a SETC16
 ;; configuration register index taken from a per-target capability table,
 ;; operand 1 the 16-bit value.  Only compiler passes that have proven
-;; ownership of the addressed slot emit this; the assembler owns the
-;; encoding.
+;; ownership of the addressed slot emit this (see rtl-rvtt-dst-autoincr.cc);
+;; the assembler owns the encoding.
 (define_insn "rvtt_ttsetc16_int"
   [(unspec_volatile:SI [
      (match_operand:SI    0 "const_int_operand" "n")

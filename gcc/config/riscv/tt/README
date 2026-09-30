@@ -41,8 +41,8 @@ a recorded reason (see section 5).
   LUT selection              If-conversion of piecewise range dispatch into
 			     SFPLUTFP32 table selection, including the FP16
 			     six-entry form.
-  Dst / RWC                  Dst row ownership tracking and store-to-load
-			     forwarding over Dst.
+  Dst / RWC                  Auto-increment addressing formation and
+			     store-to-load forwarding over Dst.
   crosscall                  Interprocedural LICM across noinline boundaries.
   effects                    rvtt-effects.h is the single source of truth for
 			     instruction effect classification.  New code must
