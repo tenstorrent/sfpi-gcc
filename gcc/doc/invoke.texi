@@ -32212,6 +32212,14 @@ callee's auto-increment groups run at zero per-call configuration cost.
 Soundness rests on a whole-callee census showing nothing else writes
 the owned configuration slots.  Every unproven link declines.
 
+@opindex mtt-tensix-optimize-crossloop-hoist
+@item -mtt-tensix-optimize-crossloop-hoist
+Hoist loop-invariant SFPU immediate materializations (and, with the
+programmable-constant options, their programming points) across
+enclosing loops whose bodies deliver only instruction words proven free
+of interfering effects.  Every unanalyzable word or statement class
+declines.
+
 @node Tensix Register Allocation Options
 @subsubsection Tensix Register Allocation Options
 
