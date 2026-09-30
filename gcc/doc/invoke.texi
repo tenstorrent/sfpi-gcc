@@ -32020,6 +32020,31 @@ saves, restores, and enables.  Enabled by default.
 Remove Tensix instructions whose results are provably unused.  Enabled
 by default.
 
+@opindex mtt-tensix-optimize-lut-select
+@item -mtt-tensix-optimize-lut-select
+@itemx -mno-tt-tensix-optimize-lut-select
+Select the SFPU lookup-table instructions (@code{SFPLUT},
+@code{SFPLUTFP32}) for value trees that dispatch on the magnitude of an
+input over encodable ranges with affine leaves.  Enabled by default.
+
+@opindex mtt-tensix-optimize-lut-select-leaf-ext
+@item -mtt-tensix-optimize-lut-select-leaf-ext
+Extend lookup-table selection to multiply-only and provably constant
+leaf classes, and permit duplicating a leaf across ranges when the tree
+has fewer branches than the table has entries.  Each extended class is
+admitted only where an exhaustive bit-exactness check over all
+input encodings has been recorded for the target instruction; ranges
+without a recorded certification decline.
+
+@opindex mtt-tensix-optimize-lut-select-fp16
+@item -mtt-tensix-optimize-lut-select-fp16
+Extend lookup-table selection to the six-entry FP16-coefficient
+@code{SFPLUTFP32} table modes: a six-range magnitude dispatch over the
+architectural range boundaries whose leaf coefficients are compile-time
+constants exactly representable in the instruction's coefficient
+format becomes one packed-coefficient instruction.  Unrepresentable
+coefficients and unproven ranges decline.
+
 @opindex mtt-tensix-optimize-setexp-fold
 @item -mtt-tensix-optimize-setexp-fold
 @itemx -mno-tt-tensix-optimize-setexp-fold
