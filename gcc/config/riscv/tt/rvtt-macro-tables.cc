@@ -348,7 +348,8 @@ static const caps table = {
 
 /* ------------------------------------------------------------------ */
 /* Lookup.  QSR is INTENTIONALLY ABSENT: no capability table exists    */
-/* because its seq_id / split-VD / done macro encoding is unproven.    */
+/* because its seq_id / split-VD / done macro encoding is unproven     */
+/* (SFPLOADMACRO_FORMATION.md "Architecture boundary").	       */
 /* ------------------------------------------------------------------ */
 
 const caps *
@@ -387,7 +388,8 @@ dst_address_encodable (const caps *c, unsigned address)
   if (!c)
     return false;
   /* Odd rows alias the macro VD-high encoding bit; rows above 1023
-     exceed the ten-bit address field.  */
+     exceed the ten-bit address field (SFPLOADMACRO_FORMATION.md "First
+     opt-in executable slice").  */
   return (address & 1u) == 0 && address < (1u << c->address_bits);
 }
 

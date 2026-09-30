@@ -6,7 +6,7 @@ backend.  This file is a map of it; read it before the sources.
 
 Machine descriptions here are named rvtt-*.md and are ordinary GCC .md files
 reached from ../riscv.md -- an rvtt-*.md file is a machine description,
-never Markdown.
+never Markdown.  Longer design notes live in doc/ and in <repo>/docs/.
 
 
 1. What the passes are for
@@ -29,9 +29,11 @@ a recorded reason (see section 5).
 2. Pass families
 ----------------
 
-  macro tables               SFPLOADMACRO target capability tables and
-			     template-slot ownership:
-			     rvtt-macro-{tables,ownership}.
+  macro regions              SFPLOADMACRO region description, descriptor
+			     verification and region scheduling against a
+			     resource reservation table:
+			     rvtt-macro-{desc,sched,epoch,tables,region,
+			     ownership,verify}.
   scheduling                 Post-RA scheduling of the SFPU instruction stream
 			     around hardware hazards.
   replay formation           Record/playback formation, including hoisting a
@@ -169,6 +171,11 @@ Host-compiled tooling that is NOT part of the compiler build also lives
 here; do not mistake it for dead code:
 
   *-test.cc		  opt-in unit harnesses, wired up in t-riscv-tt
+  rvtt-macro-vocab-enum.cc  an offline template-word vocabulary enumerator.
+			  It is in no build rule by design; it documents its
+			  own build line near the top of the file, and
+			  entries in rvtt-refusals.def cite it as the
+			  justification for their refusal reasons.
 
 
 8. Reading order for a newcomer
@@ -179,3 +186,4 @@ here; do not mistake it for dead code:
   3. rvtt-effects.h -- the effect vocabulary everything else should use
   4. a small self-contained pass, such as gimple-rvtt-int-not.cc, before
      one of the large ones
+  5. doc/SFPLOADMACRO_FORMATION.md, the SFPLOADMACRO formation contract

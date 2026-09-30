@@ -79,7 +79,8 @@ canonical_ttinsn_template_p (const char *s)
    operand-less-output `.ttinsn %0' asm with exactly one constant input
    (the TTI_ macro shape of ckernel_ops.h INSTRUCTION_WORD).  Anything
    else -- outputs, several inputs or words, a register operand, a
-   different template -- refuses.  */
+   different template -- refuses.  rvtt-macro-epoch.cc's
+   epoch_asm_check applies the same template discipline.  */
 
 static bool
 raw_ttinsn_const_word (rtx_insn *insn, uint32_t *word)

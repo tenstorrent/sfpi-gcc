@@ -38,8 +38,9 @@ along with GCC; see the file COPYING3.  If not see
    correspond one to one; see the comment on rvtt_macro::subunit_t).
 
    QSR is INTENTIONALLY TABLE-ABSENT: its SFPLOADMACRO seq_id / split-VD /
-   'done' encoding has not been proven equivalent to WH/BH.
-   rvtt_macro_caps_for_cpu (CPU_QSR) returns null and
+   'done' encoding has not been proven equivalent to WH/BH
+   (SFPLOADMACRO_FORMATION.md "Architecture boundary" and "First opt-in
+   executable slice").  rvtt_macro_caps_for_cpu (CPU_QSR) returns null and
    rvtt_macro_caps_refusal returns the stable refusal name
    "target-macro-encoding-unproven".  */
 
@@ -186,7 +187,7 @@ struct caps
   const char *name;
 
   /* Architectural resource counts.  Four instruction templates and four
-     delay sequences exist (MulInt32 handwritten
+     delay sequences exist (SFPLOADMACRO_FORMATION.md, MulInt32 handwritten
      init: "programs four instruction templates, four delay
      sequences").  */
   unsigned n_templates;

@@ -285,22 +285,166 @@ Conclusion: every sequence word reproduces bit-exactly from the
 schedule plus the Sec. 2 facts.  Misc words reproduce in every live
 bit; dead-bit and kind-nibble conventions differ as listed.
 
-## 4. Table interface
+## 4. The derivation layer
 
-The capability tables expose these facts at field level:
-`encode_sequence_bits` / `decode_sequence_bits` and
-`compose_sequence_word` / `decompose_sequence_word` for the sequence
-format (2.1), `subunit_legal_mask` and `subunit_result_latency` for
-placement and result latency (2.2), `opcode_needs_swap_adjacency` for
-(‡), `staging_copy_realization` for the one proven staging copy (3.1),
-`encode_misc_fields` for the misc layout (2.5), and
-`derived_stride_absorption_proven` for whether a calendar not taken
-from a proven program may absorb the row's Dst stride into a launch's
-auto-increment on a given CPU.  With these, a sequence word can be
-packed from per-event fields (case, delay, VD16, route) rather than
-looked up whole.
+### 4.1 Position in the pipeline
 
-## 5. Open questions
+Descriptor synthesis (`rvtt-macro-desc.cc`) proceeds as follows:
+
+1. Match the proven whole-word programs first, so the shapes they
+   cover keep byte-identical emission and their envelope restrictions.
+   Matching includes an operand-layout probe: a program whose template
+   rules reference source operands the accepted instruction does not
+   have (for example the constant-register SFPSWAP variants against a
+   two-register swap layout) does not match, instead of matching and
+   refusing `descriptor-encoding-failed`.
+2. If no proven program matches, use derived synthesis through the
+   freestanding core `rvtt-macro-derive-core.h`.  Any failed
+   obligation refuses by name and the scheduler falls back to its next
+   carrier-grouping candidate.
+
+### 4.2 Inputs
+
+From the schedule: per-carrier issue slots, hosted value events (in
+program order) and the delayed store, explicit issues and their slots,
+the row interval, VD policy, absorbed stride.  From the effects and
+tables: each event's template opcode byte (the realizing instruction:
+the source's own opcode, or a table-designated realization such as
+SFPSHFT2 for an explicit SFPSHFT), LReg def-use edges among row
+members, and each event's launch-VD consumption position (whether the
+launch value enters through VC, through the VD/VB side, or not at
+all).
+
+### 4.3 Algorithm (deterministic, refusing)
+
+1. **Placement.**  Each hosted value event goes to a sub-unit its
+   template opcode is legal on (2.2).  The legality sets are nearly
+   singletons; where an opcode admits several units the first legal
+   free byte in the order Simple, MAD, Round is taken.  A carrier
+   whose events collide on one byte refuses
+   `subunit-placement-unproven`, so the deterministic candidate search
+   proceeds.
+2. **Staging copies.**  If the store's data value lives neither in its
+   own carrier's VD nor in LReg16 at store time, insert the staging
+   copy (2.6, 3.1): SFPSHFT2 imm-0, route VB, VD16, on the producing
+   carrier's Round byte (`staging_copy_realization`).  If that byte is
+   occupied, or the producing value is not the producer carrier's
+   launch VD (the copy can only read its own launch VD), refuse
+   `store-source-unreachable`.
+3. **Delays.**  Earliest-feasible, iterated to a fixpoint over: (a)
+   dependence edges (2.6: producer + result latency; forward-issued
+   producers: their issue slot + 1); (b) sub-unit occupancy, one per
+   cycle globally, steady-state modulo ii; (c) (†) VD16 disjointness
+   for same-cycle Simple/Round pairs; (d) (‡) for every SFPSWAP; (e)
+   same-cycle write-set disjointness; (f) explicit issues' sub-units
+   clear of scheduled arrivals (2.3); (g) store exec after every write
+   to its source, and its source's next overwrite after the store.  A
+   delay > 7 refuses `delay-range-exceeded`; an unsatisfiable
+   constraint refuses `sequence-derivation-hazard`.
+4. **Bits.**  VD16 from the planned target (LReg16 staging or final
+   store staging); route from the launch-VD consumption position (VC
+   consumer -> 0, otherwise 1, which also shields a planned physical
+   VC); store byte source per the 3-way rule restricted to the proven
+   kinds {own launch VD, LReg16} (the leave-template-VD store form is
+   unproven and refuses).
+5. **Words.**  Sequence bytes packed by the tables' field packer
+   (`encode_sequence_bits`, `compose_sequence_word`); misc packed per
+   2.5; templates through `encode_template` with fields from the
+   accepted source operands or from table-designated realizations (the
+   staging copy).  Delay-kind bits per 2.4 with the SFPU-dense-window
+   obligation, else `delay-model-unproven`.
+6. **Drain** = greatest remaining exec distance past the last issue
+   slot.
+
+Stride absorption into a derived calendar's launch auto-increment is
+a per-CPU table fact (`derived_stride_absorption_proven`); a CPU
+without it refuses `derived-stride-absorption-unproven`.
+
+### 4.4 Verification
+
+The verifier re-derives the full calendar through the shared
+derivation core from the region's explicit facts, compares words
+field by field, then re-checks all Sec. 4.3 inequalities from the
+exchanged slots.  Because verifier and synthesis share the tables, the
+reproduction tests of Sec. 6 pin the derivation core against
+independently recorded words.
+
+### 4.5 Refusal vocabulary
+
+`subunit-placement-unproven`, `store-source-unreachable`,
+`sequence-derivation-hazard`, `delay-range-exceeded`,
+`delay-model-unproven`, `derived-stride-absorption-unproven`.
+
+## 5. Derived calendars
+
+### 5.1 Unary max/min
+
+Row: load, SFPSWAP with a constant register, store (in place, stride
+2), in a discovered loop region.  Candidate 0 (merged, ii=1): SWAP_N
+executes at N+1, SWAP_{N+1} at N+2, which violates (‡) (Simple idle
+the next cycle) and refuses `sequence-derivation-hazard`.  Candidate 1
+(store demoted, ii=2):
+
+* macro 0 (load carrier, alternating VD): Simple byte
+  T0(SFPSWAP-cst)/delay0/route1 = 0x84; Round byte staging copy
+  T1/delay2/VD16/route1 = 0xd5 (dependence gives >= 2; (‡) is
+  satisfied at delay 2 since the next SWAP executes at +3, not +2).
+  Word 0x00d50084.
+* macro 1 (store-only carrier, sacrificial VD, absorbs the stride):
+  Store byte d2/VD16 -> word 0x53000000, the same store program as the
+  proven minmax m1.
+* Templates: T0 packed from the accepted swap-constant source (opcode
+  byte, VC = the constant register's architectural index, mod1 = the
+  source's mod operand, destination selector 0xC); no hidden-write
+  claim (SFPSWAP drops writes to VC >= 8).  T1 = the staging copy
+  (destination selector 0xD).
+* Misc: store mode == carrier launch mode -> UsesLoadMod0 bit 5; no
+  forward-issued dependences -> kind nibble 0 -> 0x020.
+* (‡) checks: MAD always idle; Simple/Round idle at SWAP+1 (copy at
+  +3).  Same-cycle SWAP_{N+1}/copy_N at +3 satisfies (†) (the copy is
+  the VD16 side).  If SWAP's write claim defers one of them a cycle,
+  the dependence proof still holds: deferral only delays, and the
+  store's margin is proven from programmed times.
+
+### 5.2 Rows with more Simple events than carriers
+
+A row such as load a, cast, load b, cast, iadd, cast, store has four
+Simple-only value events.  Hosting all four on at most three carriers
+refuses `subunit-placement-unproven`.  Such a row forms only when the
+scheduler hosts at most one Simple event per carrier and leaves the
+remainder as explicit issues placed off the scheduled Simple cycles
+(2.3), with the final cast's destination planned to the store
+carrier's VD.
+
+### 5.3 MulInt32
+
+The row (load, load, mul24, store) derives directly: MUL24 is MAD-legal
+(S3) and is hosted on the store-demoted calendar as in S3's
+handwritten variants; the forward-issued load-b dependence sets the MAD
+kind bit with an all-SFPU window.  The derived words for the
+three-address variant equal S3's macro-1 program (MAD byte 0xCC =
+T0/d1/VD16/route1, store 0x5B = d3/L16; the store delay reflects the
+MAD result latency of 2).
+
+The handwritten one-slot in-place variant (`dst_index_in0 == in1 ==
+out`) fails the LReg16 lifetime proof: the next row's MUL24 rewrites
+LReg16 strictly before this row's store executes under both counting
+models at a one-slot initiation interval.  The two- and three-slot
+variants are sound, and the derivation refuses the one-slot shape.
+
+## 6. Tests
+
+* `rvtt-macro-derive-test.cc` (standalone, host-compiled like
+  `rvtt-macro-tables-test.cc`) feeds the proven calendars' schedules
+  into the derivation core and asserts the bit-exact sequence words
+  (3.1-3.3), the misc live-bit agreements and listed differences
+  (3.4), the S3 MulInt32 words and the one-slot lifetime refusal
+  (5.3), the placement refusal of 5.2, and the derived unary max/min
+  calendar (5.1).
+* Proven-program shapes still resolve through the proven-program table
+  first, so their byte-parity tests are unaffected.
+
+## 7. Open questions
 
 * Whether TTINCRWC (and other non-SFPU Tensix issues) decrement
   instruction-counted delays (2.4).  This only constrains shapes that
