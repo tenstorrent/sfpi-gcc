@@ -38,6 +38,9 @@ a recorded reason (see section 5).
 			     record out of a loop.
   prgm constants             Constant-register promotion and the priced
 			     residency walk that keeps invariants resident.
+  LUT selection              If-conversion of piecewise range dispatch into
+			     SFPLUTFP32 table selection, including the FP16
+			     six-entry form.
   effects                    rvtt-effects.h is the single source of truth for
 			     instruction effect classification.  New code must
 			     query it rather than write another switch.  It
@@ -79,6 +82,7 @@ The flags enabled by default are:
 
 	-mtt-tensix-optimize-cc
 	-mtt-tensix-optimize-dce
+	-mtt-tensix-optimize-lut-select
 	-mtt-tensix-optimize-replay
 	-mtt-tensix-optimize-setexp-fold
 

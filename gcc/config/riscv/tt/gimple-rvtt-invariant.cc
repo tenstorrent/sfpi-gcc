@@ -259,8 +259,8 @@ all_uses_in_loop_p (tree value, class loop *loop)
 } /* anonymous namespace */
 
 /* Shared loop invariant-materialization proofs (declared in
-   rvtt-macro-ownership.h): exported so that every loop-placement
-   pass shares the invariant-loadi pass's discipline.  */
+   rvtt-macro-ownership.h): the invariant-loadi pass below and the LUT
+   selection's coefficient placement consume the same discipline.  */
 
 /* Reject unrepresented calls, ordinary memory, CC changes, configuration,
    replay ownership, and every other volatile target effect.  Typed Dst
@@ -510,7 +510,7 @@ rvtt_invariant_constant_load_p (gcall *call, class loop *loop,
 {
   /* The early invariant pass runs before immediate shortening and sees
      only the canonical sfpxloadi form; consumers running after
-     pass_rvtt_immload_shorten opt in to
+     pass_rvtt_immload_shorten (LUT coefficient placement) opt in to
      the single-issue shortened form, whose operand layout is
      identical.  The early pass must not opt in: admitting direct
      sfploadi builtin calls there would change its established
