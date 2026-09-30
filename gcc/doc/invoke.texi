@@ -1345,6 +1345,7 @@ See RS/6000 and PowerPC Options.
 -mtt-tensix-optimize-dst-autoincr-load-carrier
 -mtt-tensix-macro-planner-replay
 -mtt-tensix-optimize-reassoc
+-mtt-tensix-optimize-reassoc-loop-carried
 -mtt-tensix-optimize-reassoc-mad-restructure
 -mtt-tensix-optimize-store-sink
 -mtt-tensix-optimize-stochrnd-store-fold
@@ -32106,9 +32107,10 @@ Generalize the recognizers of CC-consuming transformations.  The
 compiler builds a tree of the CC save/restore frames in each function;
 with this option, consumers whose recognizers otherwise demand one
 specific statement layout (the @option{-mtt-tensix-optimize-ccmask}
-fold, the cross-loop placement walk, and the loop-invariant containment
-check) accept any layout the frame tree proves equivalent.  Every
-unproven layout declines exactly as without the option.
+fold, the cross-loop placement walk, the loop-invariant containment
+check, and the reassociation window) accept any layout the frame tree
+proves equivalent.  Every unproven layout declines exactly as without
+the option.
 @end table
 @node Tensix Scheduling Options
 @subsubsection Tensix Scheduling Options
@@ -32429,6 +32431,15 @@ fusion.  The value change is limited to the different rounding of a
 re-associated evaluation order.  Requires @option{-fassociative-math}.
 Integer and bitwise chain rebalancing under this option alone is
 value-identical and needs no such opt-in.
+
+@opindex mtt-tensix-optimize-reassoc-loop-carried
+@item -mtt-tensix-optimize-reassoc-loop-carried
+Permit splitting a loop-carried floating-point accumulation chain into
+several round-robin partial accumulators initialized to @code{+0.0} and
+reduced by a balanced tree after the loop, cutting the recurrence bound
+by the number of partials.  The value change is re-association order
+only, including the treatment of signed zero in the identity element.
+Requires @option{-fassociative-math}.
 
 @opindex mtt-tensix-optimize-reassoc-mad-restructure
 @item -mtt-tensix-optimize-reassoc-mad-restructure
