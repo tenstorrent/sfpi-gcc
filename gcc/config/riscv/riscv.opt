@@ -622,21 +622,65 @@ Remove dead Tensix instructions.
 
 
 
+mtt-tensix-optimize-latency-schedule
+Target Var(riscv_tt_opt_latency_schedule) Init(0)
+Fill Tensix result-latency bubbles with independent ready SFPU instructions.
+
+mtt-tensix-optimize-interlock-schedule
+Target Var(riscv_tt_opt_interlock_schedule) Init(0)
+Fill known hardware-interlock stalls with independent SFPU instructions.
+
+mtt-tensix-optimize-list-schedule
+Target Var(riscv_tt_opt_list_schedule) Init(0)
+List-schedule straight-line SFPU regions against the modeled issue timeline.
+
+mtt-tensix-optimize-cyclic-region-schedule
+Target Var(riscv_tt_opt_cyclic_region_schedule) Init(0)
+Reschedule the interior regions of single-block SFPU loops to reduce the modeled steady-state initiation interval.
+
+mtt-tensix-optimize-ims
+Target Var(riscv_tt_opt_ims) Init(0)
+Schedule single-block SFPU loops by iterative modulo scheduling.
+
+mtt-tensix-ims-budget=
+Target Joined RejectNegative UInteger Var(riscv_tt_ims_budget) Init(0)
+Set the placement budget for the modulo-scheduling eviction loop (0 = the engine default).
+
+mtt-tensix-optimize-capture-rotation
+Target Var(riscv_tt_opt_capture_rotation) Init(0)
+Rotate replayed capture rows to fill known interlock stalls across the row boundary.
 
 
 
+mtt-tensix-optimize-window-pairing-stride
+Target Var(riscv_tt_opt_window_pairing_stride) Init(0)
+Extend window-pairing proofs to rows whose addresses advance with any issued word of the row.
 
+mtt-tensix-optimize-crossrow-pairing
+Target Var(riscv_tt_opt_crossrow_pairing) Init(0)
+Pair consecutive iterations of eligible single-row Dst loops into one doubled row (Blackhole only).
 
+mtt-tensix-optimize-crossrow-pairing-stall-words
+Target Var(riscv_tt_opt_crossrow_pairing_stall_words) Init(0)
+Admit next-slot-stall instructions into cross-row pairing, priced at two issue slots (Blackhole only).
 
+mtt-tensix-optimize-crossrow-pairing-seed
+Target Var(riscv_tt_opt_crossrow_pairing_seed) Init(0)
+Allow cross-row pairing to seed all-lanes copies so predicated value webs can be renamed (Blackhole only).
 
+mtt-tensix-optimize-crossrow-shared-reload
+Target Var(riscv_tt_opt_crossrow_shared_reload) Init(0)
+Share identical constant materializations between the two halves of a paired row (Blackhole only).
 
+mtt-tensix-optimize-mve-expand
+Target Var(riscv_tt_opt_mve_expand) Init(0)
+Realize the modulo-variable-expansion kernel unroll on eligible paired SFPU loops (Blackhole only).
 
-
-
-
-
-
-
+; Internal red/green test knob: deliberately breaks one rename so the
+; post-commit verification is seen to catch it; never a tuning knob.
+mtt-tensix-mve-expand-sabotage
+Target Undocumented Var(riscv_tt_mve_expand_sabotage) Init(0)
+Testing only: mis-rotate one committed modulo-variable-expansion rename to exercise the post-commit verification.
 
 
 mtt-tensix-optimize-prgm-const
