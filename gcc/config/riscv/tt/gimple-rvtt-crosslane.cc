@@ -101,6 +101,10 @@ along with GCC; see the file COPYING3.  If not see
 
    All refusals leave the function byte-identical.
 
+   The ENABLE_DEST_INDEX window model (the dest-index write
+   restriction) is enforced on the final RTL stream by the companion
+   pass rtl-rvtt-crosslane-window.cc, behind the same flag.
+
    Permutation recognition over a canonical form follows D. Nuzman,
    I. Rosen and A. Zaks, "Auto-vectorization of interleaved data for
    SIMD", PLDI 2006, pp. 132-143, where the algebra of the
