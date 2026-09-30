@@ -1310,6 +1310,7 @@ See RS/6000 and PowerPC Options.
 -mtt-tensix-optimize-native-compare
 -mtt-tensix-optimize-store-fold
 -mtt-tensix-optimize-store-source-tier
+-mtt-tensix-optimize-crosslane
 -mtt-tensix-optimize-cc-region-general
 -mtt-tensix-optimize-round-interleave
 -mtt-tensix-optimize-invariant-loadi
@@ -32054,6 +32055,15 @@ programmable constant registers directly, so parking a store-consumed
 constant there would cost a copy per store; this option routes such
 constants to the vector-register placement tier instead.  Effective
 only with @option{-mtt-tensix-optimize-const-residency}.
+
+@opindex mtt-tensix-optimize-crosslane
+@item -mtt-tensix-optimize-crosslane
+Recognize the canonical cross-lane instruction sequences
+(@code{SFPSHFT2} rotate chains, @code{SFPSWAP} compare-exchange stages,
+dual-bank @code{SFPTRANSP} and interleave frames) and simplify them
+through their proven permutation algebra: collapsing rotate chains,
+re-lowering lane slides per architecture, refolding swaps, and
+cancelling transpose and interleave round trips.
 
 @opindex mtt-tensix-optimize-cc-region-general
 @item -mtt-tensix-optimize-cc-region-general

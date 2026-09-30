@@ -44,6 +44,7 @@ a recorded reason (see section 5).
   Dst / RWC                  Auto-increment addressing formation and
 			     store-to-load forwarding over Dst.
   crosscall                  Interprocedural LICM across noinline boundaries.
+  crosslane                  Cross-lane permute and face-transpose surfaces.
   effects                    rvtt-effects.h is the single source of truth for
 			     instruction effect classification.  New code must
 			     query it rather than write another switch.  It
