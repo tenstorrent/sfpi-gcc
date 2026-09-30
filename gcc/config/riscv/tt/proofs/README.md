@@ -98,7 +98,21 @@ re-mined.
   (gimple-rvtt-store-fold.cc) — the explicit rounding instruction is
   semantics the store's own conversion path cannot reproduce; the
   "fold the rounding into the store" cut is never re-mined.  proved
-  2026-08-21.
+  2026-08-21.  EXTENDED 2026-09-30 (rows C and D) to the store the
+  fold actually meets when the kernel spells an untyped (vFloat) Dst
+  store, Mod0 0 = SRCB: an INDIRECTION, resolved at run time from the
+  row's ALU config, so it denotes no single function.  At the
+  MOD0_FMT_FP32 resolution the store is EXACT and the cut is the
+  IDENTITY (fp16b 4,286,513,662/2^32, fp16a 4,286,058,494/2^32 — every
+  finite normal off the target lattice, plus the -0/denormal sign and
+  NaN classes); the fp16a/bf16 resolutions reduce pointwise to rows B
+  and A, where the store does convert.  Cross-checks: rows C/D
+  direct-stream reproduces store-sink-roundtrip's FP32/Dst32b stream,
+  and row D fused-stream reproduces cast-fp16a-rne's hw-stream.  The
+  LICENSED (conv, mod0=0) pairs this table previously carried were
+  therefore never backed by it; genrvtt-storefold now refuses an
+  indirection as an admission key as a class, so the rows are recorded
+  SWEPT AND REFUSED rather than emitted.
 - store-sink-roundtrip/ — the Dst load->store round trip per format
   pair, for the predicated store-sink arm of the store-fold pass.
   (INT32,INT32) BH raw pair EQUAL over 2^32 — LICENSES the S2 sink for
