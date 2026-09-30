@@ -1318,6 +1318,7 @@ See RS/6000 and PowerPC Options.
 -mtt-tensix-optimize-crosscall-hoist
 -mtt-tensix-optimize-crosscall-config-prefix
 -mtt-tensix-optimize-crosscall-addrmod
+-mtt-tensix-optimize-crossloop-hoist
 -mtt-tensix-optimize-replay  -mno-tt-tensix-optimize-replay
 -mtt-tensix-replay-buffer-size=@var{words}
 -mtt-tensix-optimize-replay-hoist
@@ -32030,9 +32031,9 @@ Generalize the recognizers of CC-consuming transformations.  The
 compiler builds a tree of the CC save/restore frames in each function;
 with this option, consumers whose recognizers otherwise demand one
 specific statement layout (the @option{-mtt-tensix-optimize-ccmask}
-fold and the loop-invariant containment check) accept any layout the
-frame tree proves equivalent.  Every unproven layout declines exactly
-as without the option.
+fold, the cross-loop placement walk, and the loop-invariant containment
+check) accept any layout the frame tree proves equivalent.  Every
+unproven layout declines exactly as without the option.
 @end table
 @node Tensix Scheduling Options
 @subsubsection Tensix Scheduling Options
@@ -32143,6 +32144,14 @@ address-modifier slots into the proven caller's loop entry, so the
 callee's auto-increment groups run at zero per-call configuration cost.
 Soundness rests on a whole-callee census showing nothing else writes
 the owned configuration slots.  Every unproven link declines.
+
+@opindex mtt-tensix-optimize-crossloop-hoist
+@item -mtt-tensix-optimize-crossloop-hoist
+Hoist loop-invariant SFPU immediate materializations (and, with the
+programmable-constant options, their programming points) across
+enclosing loops whose bodies deliver only instruction words proven free
+of interfering effects.  Every unanalyzable word or statement class
+declines.
 
 @end table
 @node Tensix Register Allocation Options
