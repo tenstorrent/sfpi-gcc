@@ -1894,6 +1894,12 @@
 #endif
 
 
+/* Define if the host lp_solve library is available. */
+#ifndef USED_FOR_TARGET
+#undef HAVE_LPSOLVE
+#endif
+
+
 /* Define to 1 if you have the <limits.h> header file. */
 #ifndef USED_FOR_TARGET
 #undef HAVE_LIMITS_H
@@ -2868,4 +2874,3 @@
 #ifndef USED_FOR_TARGET
 #undef vfork
 #endif
-

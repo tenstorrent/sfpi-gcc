@@ -35,8 +35,8 @@ void bar (unsigned man) {
 **	lw	a3,%lo\(_ZN7ckernel13instrn_bufferE\)\(a3\)
 **	add	a5,a5,a4
 **	sw	a5, 0\(a3\)	# 1:SFPLOADI	L1, a5, 2
-**	srli	a0,a0,16
 **	li	a5, 1897398272	# 2:71180000
+**	srli	a0,a0,16
 **	add	a0,a0,a5
 **	sw	a0, 0\(a3\)	# 2:SFPLOADI	L1, a0, 8	# LV:L1
 **	SFPSETMAN	L1, L0, 0, 0

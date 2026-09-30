@@ -1484,6 +1484,68 @@ if test $gcc_cv_header_inttypes_h = yes; then
 	[Define if you have a working <inttypes.h> header file.])
 fi
 
+# Look for the optional host-side lp_solve library.  This is deliberately
+# disabled by default and is never searched for in the target sysroot.
+LPSOLVE_CPPFLAGS=
+LPSOLVE_LDFLAGS=
+LPSOLVE_LIBS=
+AC_SUBST(LPSOLVE_CPPFLAGS)
+AC_SUBST(LPSOLVE_LDFLAGS)
+AC_SUBST(LPSOLVE_LIBS)
+AC_ARG_WITH([lp-solve],
+	[AS_HELP_STRING([--with-lp-solve@<:@=no|auto|yes|PATH@:>@],
+		[build the optional Tensix scheduler lp_solve adapter (default=no)])],
+	[], [with_lp_solve=no])
+
+case "x$with_lp_solve" in
+  xno) ;;
+  xyes|xauto) ;;
+  x) with_lp_solve=no ;;
+  *) if test ! -r "$with_lp_solve/include/lpsolve/lp_lib.h"; then
+       AC_MSG_ERROR([--with-lp-solve=$with_lp_solve does not contain include/lpsolve/lp_lib.h])
+     fi
+     if test ! -r "$with_lp_solve/lib/liblpsolve55.a" \
+        && test ! -r "$with_lp_solve/lib/liblpsolve55.so" \
+        && test ! -r "$with_lp_solve/lib/lp_solve/liblpsolve55.so"; then
+       AC_MSG_ERROR([--with-lp-solve=$with_lp_solve does not contain a host liblpsolve55 library])
+     fi
+     LPSOLVE_CPPFLAGS="-I$with_lp_solve/include"
+     LPSOLVE_LDFLAGS="-L$with_lp_solve/lib -L$with_lp_solve/lib/lp_solve"
+     ;;
+esac
+
+if test "x$with_lp_solve" != xno; then
+  saved_CPPFLAGS="$CPPFLAGS"
+  saved_LDFLAGS="$LDFLAGS"
+  saved_LIBS="$LIBS"
+  CPPFLAGS="$CPPFLAGS $LPSOLVE_CPPFLAGS"
+  LDFLAGS="$LDFLAGS $LPSOLVE_LDFLAGS"
+  LIBS="-llpsolve55 -lcolamd -lsuitesparseconfig -lm -ldl $LIBS"
+
+  AC_CHECK_HEADER([lpsolve/lp_lib.h], [have_lpsolve_header=yes],
+		  [have_lpsolve_header=no])
+  AC_LINK_IFELSE(
+    [AC_LANG_PROGRAM([[#include <lpsolve/lp_lib.h>]],
+	[[lprec *lp = make_lp (0, 1); if (!lp) return 1; delete_lp (lp);]])],
+    [have_lpsolve_library=yes], [have_lpsolve_library=no])
+
+  CPPFLAGS="$saved_CPPFLAGS"
+  LDFLAGS="$saved_LDFLAGS"
+  LIBS="$saved_LIBS"
+
+  if test "x$have_lpsolve_header" = xyes \
+     && test "x$have_lpsolve_library" = xyes; then
+    AC_DEFINE([HAVE_LPSOLVE], [1],
+	[Define if the host lp_solve library is available.])
+    LPSOLVE_LIBS="-llpsolve55 -lcolamd -lsuitesparseconfig -lm -ldl"
+  elif test "x$with_lp_solve" != xauto; then
+    AC_MSG_ERROR([--with-lp-solve was requested, but lpsolve/lp_lib.h or the host library and its SuiteSparse dependencies could not be linked])
+  else
+    LPSOLVE_CPPFLAGS=
+    LPSOLVE_LDFLAGS=
+  fi
+fi
+
 # Look for the ZSTD package.
 ZSTD_INCLUDE=
 ZSTD_LIB=

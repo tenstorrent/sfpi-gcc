@@ -1,0 +1,52 @@
+Copyright (C) 2026 Tenstorrent Inc.
+
+This file is part of GCC.
+
+GCC is free software; you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free
+Software Foundation; either version 3, or (at your option) any later
+version.
+
+GCC is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or
+FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+for more details.
+
+You should have received a copy of the GNU General Public License
+along with GCC; see the file COPYING3.  If not see
+<http://www.gnu.org/licenses/>.
+
+k= 0 mismatches=0
+k= 1 mismatches=0
+k= 2 mismatches=0
+k= 3 mismatches=0
+k= 4 mismatches=0
+k= 5 mismatches=0
+k= 6 mismatches=0
+k= 7 mismatches=0
+k= 8 mismatches=0
+k= 9 mismatches=0
+k=10 mismatches=0
+k=11 mismatches=0
+k=12 mismatches=0
+k=13 mismatches=0
+k=14 mismatches=0
+k=15 mismatches=0
+k=16 mismatches=0
+k=17 mismatches=0
+k=18 mismatches=0
+k=19 mismatches=0
+k=20 mismatches=0
+k=21 mismatches=0
+k=22 mismatches=0
+k=23 mismatches=0
+k=24 mismatches=0
+k=25 mismatches=0
+k=26 mismatches=0
+k=27 mismatches=0
+k=28 mismatches=0
+k=29 mismatches=0
+k=30 mismatches=0
+k=31 mismatches=0
+total mismatches      : 0
+verdict               : EQUAL

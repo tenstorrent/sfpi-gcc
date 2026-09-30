@@ -423,6 +423,11 @@ GMPINC = @GMPINC@
 ISLLIBS = @ISLLIBS@
 ISLINC = @ISLINC@
 
+# Optional host-side MILP solver for the Tensix pressure scheduler.
+LPSOLVE_CPPFLAGS = @LPSOLVE_CPPFLAGS@
+LPSOLVE_LDFLAGS = @LPSOLVE_LDFLAGS@
+LPSOLVE_LIBS = @LPSOLVE_LIBS@
+
 # Set to 'yes' if the LTO front end is enabled.
 enable_lto = @enable_lto@
 
@@ -1152,7 +1157,7 @@ BUILD_LIBDEPS= $(BUILD_LIBIBERTY)
 LIBS = @LIBS@ libcommon.a $(CPPLIB) $(LIBINTL) $(LIBICONV) $(LIBBACKTRACE) \
 	$(LIBIBERTY) $(LIBDECNUMBER) $(HOST_LIBS)
 BACKENDLIBS = $(ISLLIBS) $(GMPLIBS) $(PLUGINLIBS) $(HOST_LIBS) \
-	$(ZLIB) $(ZSTD_LIB)
+	$(ZLIB) $(ZSTD_LIB) $(LPSOLVE_LDFLAGS) $(LPSOLVE_LIBS)
 # Any system libraries needed just for GNAT.
 SYSLIBS = @GNAT_LIBEXC@
 

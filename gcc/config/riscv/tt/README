@@ -1,0 +1,160 @@
+			The rvtt Tensix backend
+			=======================
+
+This directory implements the Tensix vector (SFPU) extensions to the RISC-V
+backend.  This file is a map of it; read it before the sources.
+
+Machine descriptions here are named rvtt-*.md and are ordinary GCC .md files
+reached from ../riscv.md -- an rvtt-*.md file is a machine description,
+never Markdown.
+
+
+1. What the passes are for
+--------------------------
+
+The Tensix SFPU is a 32-lane vector unit with a small architectural register
+file (8 LREGs), a tile-addressed destination file (Dst) reached through
+implicit read/write counters (RWC), and two mechanisms for amortising
+instruction delivery: replay (record a short sequence once, re-launch it
+cheaply) and SFPLOADMACRO (a descriptor-driven macro engine).  Every word the
+RISC-V core pushes costs an issue slot, so most of the optimisation effort
+is about delivering fewer words, not doing less work.
+
+Design rule: no pass may recognise an operation by name, by a
+coefficient fingerprint, or by a magic instruction word.  A transform that
+cannot be derived from typed program structure must refuse -- by name, with
+a recorded reason (see section 5).
+
+
+2. Pass families
+----------------
+
+  macro tables               SFPLOADMACRO target capability tables and
+			     template-slot ownership:
+			     rvtt-macro-{tables,ownership}.
+  scheduling                 Post-RA scheduling of the SFPU instruction stream
+			     around hardware hazards.
+  replay formation           Record/playback formation of repeated instruction
+			     runs.
+  effects                    rvtt-effects.h is the single source of truth for
+			     instruction effect classification.  New code must
+			     query it rather than write another switch.  It
+			     also holds the shared builtin-call helpers
+			     (argument readers, id predicates); add a new
+			     shared helper there rather than in a pass.
+
+Supporting infrastructure that is not a pass: rvtt-cost / rvtt-delivery-cost
+/ rvtt-timing (pricing engines), rvtt-bnb and rvtt-lpsolve (an
+exact branch-and-bound solver used where a heuristic would guess), and the
+opt-in host-compiled unit harnesses wired up in t-riscv-tt.
+
+
+3. Where passes run
+-------------------
+
+Registrations live in rvtt-passes.def.  They cluster on a few anchors:
+pass_all_optimizations and pass_expand for the GIMPLE passes, and the
+passes around register allocation (chiefly pass_postreload) for
+the RTL passes.
+
+IMPORTANT: within a single anchor, ordering is encoded by textual position in
+rvtt-passes.def, and INSERT_PASS_AFTER reverses it -- each later line on the
+same anchor lands closer to the anchor and therefore runs earlier.  This is
+the least obvious thing in the directory; check it before assuming an
+ordering.
+
+
+4. Flags: what is on, what is not
+---------------------------------
+
+The -mtt- options are declared in ../riscv.opt.  An optimisation flag with
+Init(1) is on by default and one with Init(0) is off.  Init(-1) means
+unset: the errata workarounds then follow the selected cpu and the numeric
+thresholds fall back to their cost-table defaults.  Removed options are kept
+as Undocumented records so that using one is diagnosed with an error.
+
+The flags enabled by default are:
+
+	-mtt-tensix-optimize-cc
+	-mtt-tensix-optimize-dce
+	-mtt-tensix-optimize-replay
+
+HOW TO ENABLE THE REST.  Everything else is opt-in on the command line:
+
+	riscv-tt-elf-g++ -mtt-tensix-optimize-<name> ...
+
+and can be turned back off with the -mno- spelling.  Check what a build is
+actually using rather than assuming:
+
+	riscv-tt-elf-g++ -Q --help=target | grep '^ *-mtt-'
+
+A flag being present is not a recommendation to use it.  The default-off
+options are a mix of optimisations, experimental knobs and measurement
+aids; the testing-only and measurement-only knobs are marked Undocumented.
+To see what a pass did or why it declined, add -fdump-<rtl|tree>-<pass name>
+and read the refusal (section 5).
+
+A new pass is added disabled by default, and with its flag off the emitted
+code is byte-identical to that of the compiler without the pass.
+
+
+5. Refusals
+-----------
+
+rvtt-refusals.def is a registry of named reasons a transform declined.  Every
+refusal a pass can emit is registered there; t-riscv-tt regenerates
+rvtt-refusals.txt from it and fails the build on a duplicate or unregistered
+name.  "It did not fire" is therefore never silent -- there is always a name.
+
+The registry is append-only by rule, and the testsuite pins dump text, so
+removing a name can break a test that asserts the exact string.  Note also
+that some names are composed at run time (rvtt_refusal_fire_composed), so a
+name absent from a grep of the sources is not necessarily dead.
+
+
+6. Vocabulary
+-------------
+
+Terms used throughout the sources that are not standard GCC:
+
+  Dst		 the destination tile register file, addressed in 16x16 faces
+  RWC		 read/write counters -- implicit Dst address pointers advanced
+		 by SETRWC/INCRWC, which passes must model to know which face
+		 is live
+  LREG		 one of the 8 architectural SFPU vector registers
+  replay	 record a short instruction sequence once, re-launch cheaply
+  MOP		 the Tensix zero-overhead hardware loop engine
+  row		 one issue of a parameterised instruction sequence
+  delivered word the unit the delivery cost model prices
+  refusal	 a named, recorded decision not to transform (section 5)
+  priced	 a decision taken by asking a cost engine, not a heuristic
+  licensed	 an optimisation permitted to change numerical results under
+		 an explicit option, backed by a machine-checked divergence
+		 certificate
+  proof		 an entry under proofs/ backing a transform's legality claim
+
+
+7. Testing
+----------
+
+Tests are in ../../../testsuite/g++.target/riscv/tt/.  Most passes carry
+dump-scan tests keyed to their dump name; the original lowering passes are
+covered by assembly scans instead.
+
+proofs/ holds machine-checked equivalence results.  Each is cited, from the
+sources or from proofs/README.md, as the legality argument for a transform or
+for the refusal it justifies; the build does not re-check them.
+
+Host-compiled tooling that is NOT part of the compiler build also lives
+here; do not mistake it for dead code:
+
+  *-test.cc		  opt-in unit harnesses, wired up in t-riscv-tt
+
+
+8. Reading order for a newcomer
+-------------------------------
+
+  1. this file
+  2. rvtt-passes.def -- the pipeline, with its ordering caveats
+  3. rvtt-effects.h -- the effect vocabulary everything else should use
+  4. a small self-contained pass before one of the large ones

@@ -1,0 +1,44 @@
+# Lane DS LREG-allocator acceptance arsenal: per-test verdict table.
+# Columns (tab-separated):
+#   test  dialect  label  today  future  golden
+# label  = machine-checked max simultaneous liveness (prgm_const model;
+#          tools/lreg_pressure_oracle.py --expect <label>)
+# today  = verdict on the pre-allocator compiler (pin >= 13)
+# future = REQUIRED verdict under the DSATUR + exact-only-Dst-spill
+#          allocator; the gate (tools/lreg_arsenal_gate.py --mode future)
+#          fails on any deviation
+#   compile                 = compiles, no diagnostics
+#   compile-noop            = compiles AND .text byte-identical to the
+#                             baseline compiler (allocator is a no-op)
+#   compile-bitexact:<g>    = compiles AND CRAQ output bit-equal to
+#                             golden <g> (see ARSENAL.md / tools/ladder_golden.py)
+#   refuse:<name>           = named user error containing <name>
+#   refuse:<a>|<b>          = either name acceptable
+#   refuse:<n>|compile-bitexact:<g> = both acceptable (densedst: any
+#                             spill row provably outside the kernel's
+#                             window must preserve all 64 checked rows)
+raw-ladder8-bh.C	raw	8	compile	compile-noop	-
+raw-ladder8-label-bh.C	raw	8	compile	compile-noop	-
+raw-ladder9-bh.C	raw	9	refuse:lreg-pressure-exceeded	compile-bitexact:ladder9	ladder9
+raw-ladder9-default-bh.C	raw	9	refuse:lreg-pressure-exceeded	compile-bitexact:ladder9	ladder9
+raw-ladder9-twin-bh.C	raw	9	refuse:lreg-pressure-exceeded	compile-bitexact:ladder9t	ladder9t
+raw-ladder9-wh.C	raw	9	refuse:lreg-pressure-exceeded	compile-bitexact:ladder9wh	ladder9wh
+raw-ladder10-bh.C	raw	10	refuse:lreg-pressure-exceeded	compile-bitexact:ladder10	ladder10
+raw-ladder12-bh.C	raw	12	refuse:lreg-pressure-exceeded	compile-bitexact:ladder12	ladder12
+raw-ladder16-bh.C	raw	16	refuse:lreg-pressure-exceeded	compile-bitexact:ladder16	ladder16
+raw-ladder16-twin-bh.C	raw	16	refuse:lreg-pressure-exceeded	compile-bitexact:ladder16t	ladder16t
+raw-ladder9-spilled-bh.C	raw	8	compile	compile-noop	ladder9
+raw-ladder10-spilled-bh.C	raw	8	compile	compile-noop	ladder10
+raw-ladder12-spilled-bh.C	raw	8	compile	compile-noop	ladder12
+raw-ladder16-spilled-bh.C	raw	8	compile	compile-noop	ladder16
+raw-bf16-ladder9-bh.C	raw	9	refuse:lreg-pressure-exceeded	refuse:lreg-spill-inexact-dst-mode	-
+raw-bf16-ladder9-twin-bh.C	raw	9	refuse:lreg-pressure-exceeded	refuse:lreg-spill-inexact-dst-mode	-
+raw-nofree9-rwc-bh.C	raw	9	refuse:lreg-pressure-exceeded	refuse:lreg-spill-no-free-dst	-
+raw-nofree9-rwc-twin-bh.C	raw	9	refuse:lreg-pressure-exceeded	refuse:lreg-spill-no-free-dst	-
+raw-densedst9-bh.C	raw	9	refuse:lreg-pressure-exceeded	refuse:lreg-spill-no-free-dst|compile-bitexact:densedst9	densedst9
+sfpi-victim-asinh-bh.C	sfpi	10	refuse:lreg-pressure-exceeded	compile	-
+sfpi-victim-atan2-bh.C	sfpi	10	refuse:lreg-pressure-exceeded	compile	-
+sfpi-victim-atanh-bh.C	sfpi	9	refuse:lreg-pressure-exceeded	compile	-
+sfpi-victim-welford-bh.C	sfpi	12	refuse:lreg-pressure-exceeded	compile	-
+sfpi-victim-xielu-bh.C	sfpi	9	refuse:lreg-pressure-exceeded	compile	-
+sfpi-victim-xielu-remat-bh.C	sfpi	-	compile	compile	-

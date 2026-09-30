@@ -550,47 +550,188 @@ Mask(XTT_ZBKB) Var(riscv_tt_subext)
 
 mtt-fix-qsrreplay
 Target Var(riscv_tt_fix_qsr_replay) Init(-1)
-Emit code to address Quasar replay erratum
+Emit code to address the Quasar replay erratum.
 
 mtt-fix-whfence
 Target Var(riscv_tt_fix_wh_fence) Init(-1)
-Emit code to address Wormhole's inoperative fence instruction
+Emit code to address Wormhole's inoperative fence instruction.
 
 mtt-fix-whbhebreak
 Target Var(riscv_tt_fix_whbh_ebreak) Init(-1)
-Emit code to address Wormhole/Blackhole ebreak erratum
+Emit code to address the Wormhole/Blackhole ebreak erratum.
 
 mtt-fix-whraw
 Target Var(riscv_tt_fix_wh_raw) Init(-1)
-Emit code to address Wormhole RAW hazard
+Emit code to address the Wormhole read-after-write hazard.
 
 mtt-optimize-extend
 Target Var(riscv_tt_opt_extend) Init(-1)
-TT-specific removal of extraneous zero/sign extension operations.
+Remove extraneous zero- and sign-extension operations.
 
 mtt-optimize-hll
 Target Var(riscv_tt_opt_hll) Init(-1)
-TT-specific scheduling of high latency loads.
+Schedule high-latency loads early to hide their latency.
+
+; ---------------------------------------------------------------------------
+; Tensix optimization options.
+;
+; Each Tensix SFPU optimization has its own -mtt-tensix-* option.  Most are
+; disabled by default; the few that are enabled by default carry Init(1) on
+; their own records.  The defaults are not grouped in this file, so check a
+; record's Init value before assuming what a pass does in a default build.
+;
+; An option documented as taking effect only under -fassociative-math or
+; -ffinite-math-only is not a candidate for enabling by default, since
+; kernels are normally compiled without those flags.
+; ---------------------------------------------------------------------------
 
 mtt-tensix-optimize-cc
 Target Var(riscv_tt_opt_cc) Init(1)
-Optimize Tensix CC usage.
+Optimize Tensix lane condition-code (CC) state handling.
 
 mtt-tensix-optimize-combine
-Target Var(riscv_tt_opt_combine) Init(1)
-Combine Tensix instructions.
+Target Undocumented Var(riscv_tt_opt_combine) Init(-1)
+Removed; using this option is an error.
 
 mtt-tensix-optimize-dce
 Target Var(riscv_tt_opt_dce) Init(1)
-Remove dead tensix instructions
+Remove dead Tensix instructions.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+mtt-tensix-optimize-lp-schedule
+Target Undocumented Var(riscv_tt_opt_lp_schedule) Init(-1)
+Removed; using this option is an error.
+
 
 mtt-tensix-optimize-replay
 Target Var(riscv_tt_opt_replay) Init(1)
-Generate Tensix replay instruction.
+Generate Tensix replay instructions.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+mtt-tensix-replay-hoist-min-benefit=
+Target Joined RejectNegative UInteger Var(riscv_tt_replay_hoist_min_benefit) Init(-1)
+Set the minimum modeled benefit, in hundredths of an issue slot, required to hoist a replay capture.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+mtt-tensix-optimize-reassoc
+Target Var(riscv_tt_opt_reassoc) Init(0)
+Allow value-changing floating-point reassociation in the Tensix SFPU passes; requires -fassociative-math to take effect.
+
+
+
+
+
+
+
+
+
+mtt-tensix-optimize-native-compare
+Target Var(riscv_tt_opt_native_compare) Init(0)
+Reserved for native Blackhole SFPGT/SFPLE comparison lowering; no effect.
+
+
+
+
+
+
+
+
+; Retired option retained so stale build flags produce a clear error.
+mtt-tensix-analyze-loadmacro
+Target Undocumented Var(riscv_tt_analyze_loadmacro) Init(0)
+Removed; using this option is an error.
+
+; Retired option retained so stale build flags produce a clear error.
+mtt-tensix-emit-loadmacro
+Target Undocumented Var(riscv_tt_emit_loadmacro) Init(0)
+Removed; using this option is an error.
+
+
+
+
+
+mtt-tensix-macro-planner-replay
+Target Var(riscv_tt_macro_planner_replay) Init(0)
+Admit planner-formed SFPLOADMACRO launches into automatic replay recording.
+
+
+
+
+mtt-tensix-dump-effects
+Target Var(riscv_tt_dump_effects) Init(0)
+Annotate assembler output with each instruction's modeled Tensix architectural effect set.
 
 mtt-tensix-replay-buffer-size=
 Target Joined RejectNegative Var(riscv_tt_replay_size) UInteger Init(32) IntegerRange(1,32)
-Length of replay buffer for replay optimization use.
+Set the length of the replay buffer available for replay optimization.
 
 TargetVariable
 int riscv_fmv_priority = 0

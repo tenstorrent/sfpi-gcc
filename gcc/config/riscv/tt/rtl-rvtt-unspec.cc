@@ -1,5 +1,4 @@
-/* Pass to generate SFPU synth-opcode and opcode synth sequences for
-   currently-non-constant operands.
+/* Combine-like RTL pass propagating SFPU special unspecs to their uses.
    Copyright (C) 2026 Tenstorrent Inc.
    Originated by Nathan Sidwell (nsidwell@tenstorrent.com, nathan@acm.org).
 
@@ -18,6 +17,30 @@ for more details.
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
+
+/* A combine-like pass over Tensix instructions that:
+
+   1. copies constant-LREG-read unspecs (UNSPEC_SFPCSTLREG) and NOVALUE
+      markers (UNSPEC_SFPNOVAL) into the instructions that use them, so
+      the constant register is encoded directly rather than routed
+      through a temporary.  As described in the companion GIMPLE pass
+      (gimple-rvtt-unspec.cc), the generic combine/late-combine/IRA
+      machinery does not reliably perform this fold for these unspecs;
+      the GIMPLE pass guarantees def and use share a block, and this
+      pass performs the actual substitution.
+
+   2. resolves multi-register builtin results: a constant-index select
+      from a cleave-together unspec (UNSPEC_SFPCLEAVE) is replaced by
+      the selected input directly.
+
+   Value tracking is strictly intra-block: a simple regno -> unspec
+   map is maintained while scanning each block, invalidated at
+   redefinitions, and consulted when a Tensix instruction reads a
+   tracked register.  match_dup operands reading the same register are
+   substituted as one change group.  Failed validations simply leave
+   the instruction unchanged (the register-routed form remains
+   correct).  */
+
 
 #define INCLUDE_ALGORITHM
 #define INCLUDE_VECTOR
@@ -47,16 +70,8 @@ along with GCC; see the file COPYING3.  If not see
 #include "print-rtl.h"
 #include "rvtt.h"
 
-// A combine-like pass that copies cstlreg unspecs into the insns that use
-// them. (As described in the related gimple pass, we can't rely on combine,
-// late-combine, ira or other passes to do this in all cases.)
-
-// A combine-like pass that
-// 1 copies cstlreg unspecs into the insns that use
-// them.  (As described in the related gimple pass, we can't rely on combine,
-// late-combine, ira or other passes to do this in all cases.)
-// 2. copies cleave-together inputs to cleave-apart outputs, thereby handling
-// multi-register builtin results.
+/* Scan FN, propagating tracked unspec values into Tensix instruction
+   operands as described in the file comment.  */
 
 static void
 transform (function *fn)
@@ -107,7 +122,7 @@ transform (function *fn)
 		rtx slot = XVECEXP (src, 0, 1);
 		if (GET_CODE (slot) == CONST_INT)
 		  {
-		    // select
+		    /* select */
 		    unsigned ix = INTVAL (slot);
 		    unsigned regno = REGNO (XVECEXP (src, 0, 0));
 
@@ -118,7 +133,8 @@ transform (function *fn)
 		      {
 			rtx sel = XVECEXP (reg_vals[regno].val, 0, ix);
 
-			bool ok = validate_change (insn, &SET_SRC (pattern), sel, false);
+			bool ok = validate_change (insn, &SET_SRC (pattern),
+						   sel, false);
 			gcc_assert (ok);
 			msg = "Replaced select";
 		      }
@@ -133,7 +149,7 @@ transform (function *fn)
 		    continue;
 		  }
 	      }
-	      // FALLTHROUGH
+	      /* FALLTHROUGH */
 
 	    case UNSPEC_SFPNOVAL:
 	    case UNSPEC_SFPCSTLREG:
@@ -147,19 +163,20 @@ transform (function *fn)
 	}
 
       auto find_operands
-	= [&operands, &invalidate, bb, reg_vals, insn](auto &self, rtx *slot) -> void
+	= [&operands, &invalidate, bb, reg_vals, insn]
+	  (auto &self, rtx *slot) -> void
       {
 	switch (GET_CODE (*slot))
 	  {
 	  default:
-	    // Unknown tensix insn component
+	    /* Unknown tensix insn component */
 	    gcc_unreachable ();
 
 	  case PARALLEL:
 	  case UNSPEC:
 	  case UNSPEC_VOLATILE:
 	    {
-	      // All 3 have the vector at position 0
+	      /* All 3 have the vector at position 0 */
 	      auto &vec = XVEC (*slot, 0);
 	      for (unsigned ix = GET_NUM_ELEM (vec); ix--;)
 		self (self, &RTVEC_ELT (vec, ix));
@@ -187,7 +204,7 @@ transform (function *fn)
 	  case CONST_INT:
 	  case MEM:
 	  case CLOBBER:
-	  case SCRATCH: 
+	  case SCRATCH:
 	  case USE:
 	    break;
 	  }
@@ -197,12 +214,13 @@ transform (function *fn)
 
       if (!operands.empty ())
 	{
-	  // We have to deal with match_dups, where multiple operands must be
-	  // changed simultaneously.  In general we could try every combination
-	  // of operands reading the same input register, but it is sufficient
-	  // just to try changing all such operands simultaneously.
+	  /* We have to deal with match_dups, where multiple operands must be
+	     changed simultaneously.  In general we could try every combination
+	     of operands reading the same input register, but it is sufficient
+	     just to try changing all such operands simultaneously.  */
 	  std::sort (operands.begin (), operands.end (),
-		     [] (auto const &a, auto const &b) { return a.regno < b.regno; });
+		     [] (auto const &a, auto const &b)
+		     { return a.regno < b.regno; });
 
 	  for (auto pos = operands.begin (); pos != operands.end ();)
 	    {
@@ -212,7 +230,7 @@ transform (function *fn)
 	      for (; pos != operands.end () && pos->regno == regno; ++pos)
 		{
 		  if (GET_CODE (val) == UNSPEC)
-		    // Do not share unspec RTL
+		    /* Do not share unspec RTL */
 		    val = gen_rtx_UNSPEC (GET_MODE (val), XVEC (val, 0),
 					  XINT (val, 1));
 
@@ -243,8 +261,8 @@ namespace {
 const pass_data pass_data_rvtt_unspec_prop_rtl =
 {
   RTL_PASS, /* type */
-  "rvtt_unspec_prop", /* name */
-  OPTGROUP_NONE, /* optinfo_flags */
+  "rvtt_unspec_prop_rtl", /* name */
+  OPTGROUP_OTHER, /* optinfo_flags */
   TV_NONE, /* tv_id */
   0, /* properties_required */
   0, /* properties_provided */
@@ -272,7 +290,10 @@ public:
   }
 };
 
-} // anon namespace
+} /* anon namespace */
+
+/* Instantiate the RTL unspec-propagation pass for CTXT; rvtt-passes.def
+   places it before lower_subreg, and it gates on the Tensix extension.  */
 
 rtl_opt_pass *
 make_pass_rvtt_unspec_prop_rtl (gcc::context *ctxt)

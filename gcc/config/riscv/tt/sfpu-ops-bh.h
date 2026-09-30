@@ -1,5 +1,10 @@
 #pragma once
 
+// Blackhole SFPU opcode table, derived from Tenstorrent's ckernel_ops.h
+// (see sfpu-ops-qsr.h for the generating sed recipe).  Copyright and
+// licence follow the upstream header; confirm before redistributing
+// this file separately from the sfpi-gcc tree.
+
 #define TT_OP_BH(opcode, params) ( (opcode << 24) + params )
 
 #define TT_OP_BH_ADDDMAREG(OpBisConst, ResultRegIndex, OpBRegIndex, OpARegIndex) \
@@ -266,8 +271,18 @@
 #define TT_OP_BH_SFPLOADI(lreg_ind, instr_mod0, imm16) \
   TT_OP_BH(0x71, (((lreg_ind) << 20) + ((instr_mod0) << 16) + ((imm16) << 0)))
 
+/* BH sfpu_addr_mode is a 3-bit field at bits 15:13, exactly as in
+   TT_OP_BH_SFPLOAD/TT_OP_BH_SFPSTORE above, not the 2-bit Wormhole field at
+   bits 15:14.  The reference simulator's ISA decode (SFPLOADMACRO
+   sfpu_addr_mode "15:13", dest_reg_addr "9:0"; Wormhole "15:14") and the
+   TT-Metal LLK header (tt_llk_blackhole common/inc/ckernel_ops.h
+   TT_OP_SFPLOADMACRO: << 13, is_valid (sfpu_addr_mode, 3)) agree, and
+   address mode 7 is not even representable at << 14 without overlapping
+   InstrMod0 at bit 16.  This macro has no in-tree consumers; the encodings
+   the compiler emits come from the capability tables
+   (rvtt-macro-tables-bh.def), which also place the field at << 13.  */
 #define TT_OP_BH_SFPLOADMACRO(lreg_ind, instr_mod0, sfpu_addr_mode, dest_reg_addr) \
-  TT_OP_BH(0x93, (((lreg_ind) << 20) + ((instr_mod0) << 16) + ((sfpu_addr_mode) << 14) + ((dest_reg_addr) << 0)))
+  TT_OP_BH(0x93, (((lreg_ind) << 20) + ((instr_mod0) << 16) + ((sfpu_addr_mode) << 13) + ((dest_reg_addr) << 0)))
 
 #define TT_OP_BH_SFPLUT(lreg_ind, instr_mod0, dest_reg_addr) \
   TT_OP_BH(0x73, (((lreg_ind) << 20) + ((instr_mod0) << 16) + ((dest_reg_addr) << 0)))
@@ -286,6 +301,12 @@
 
 #define TT_OP_BH_SFPMUL(lreg_src_a, lreg_src_b, lreg_src_c, lreg_dest, instr_mod1) \
   TT_OP_BH(0x86, (((lreg_src_a) << 16) + ((lreg_src_b) << 12) + ((lreg_src_c) << 8) + ((lreg_dest) << 4) + ((instr_mod1) << 0)))
+
+/* BH-only 24x24 integer multiply (no WH twin).  Field layout matches
+   upstream tt-llk ckernel_ops.h TT_OP_SFPMUL24 and the SFPMUL24.md
+   functional model (VA 19:16, VB 15:12, VC 11:8, VD 7:4, Mod1 3:0).  */
+#define TT_OP_BH_SFPMUL24(lreg_src_a, lreg_src_b, lreg_src_c, lreg_dest, instr_mod1) \
+  TT_OP_BH(0x98, (((lreg_src_a) << 16) + ((lreg_src_b) << 12) + ((lreg_src_c) << 8) + ((lreg_dest) << 4) + ((instr_mod1) << 0)))
 
 #define TT_OP_BH_SFPMULI(imm16_math, lreg_dest, instr_mod1) \
   TT_OP_BH(0x74, (((imm16_math) << 8) + ((lreg_dest) << 4) + ((instr_mod1) << 0)))

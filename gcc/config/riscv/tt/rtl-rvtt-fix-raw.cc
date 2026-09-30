@@ -1,5 +1,5 @@
-/* Pass to work around GS' memory aribtration bug
-   Copyright (C) 2022-2025 Tenstorrent Inc.
+/* Pass to work around the Wormhole load-store read-after-write hazard.
+   Copyright (C) 2022-2026 Tenstorrent Inc.
    Originated by Paul Keller (pkeller@tenstorrent.com).
    Rewritten by Nathan Sidwell (nsidwell@tenstorrent.com, nathan@acm.org).
 
@@ -18,6 +18,30 @@ for more details.
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
+
+/* Wormhole has a read-after-write hazard: a word-sized load issued
+   after a byte or half store can be issued before the store retires.
+   The hardware's address comparator is 32 bits wide, so when the
+   addresses MATCH exactly the hazard is detected and handled; the
+   problem arises for a narrow store followed by a load of a different
+   width/alignment over the same bytes (a word-aligned narrow store is
+   in fact safe, but we do not exploit that).  Memory logic prioritizes
+   loads over stores, and although there is no reorder buffer, two
+   loads can issue before a store drains.  Whether an intervening
+   unrelated store resolves the hazard is not established.
+
+   Because the failure is so sensitive, the workaround annuls it in all
+   cases: after every narrow (QI/HI) store to a plausible hazard target
+   (register-space stores are exempt, see rvtt_reg_store_p), a dummy
+   volatile load of the stored location is placed as LATE as possible
+   -- at the first control-flow change, write to the store's pointer
+   register, any load, another narrow store, or the end of the block --
+   forcing the store to drain before any subsequent real load can pass
+   it.
+
+   Enabled by -mtt-fix-whraw, defaulted on for -mcpu=tt-wh*; a
+   correctness workaround, not an optimization.  */
+
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
@@ -27,7 +51,9 @@ along with GCC; see the file COPYING3.  If not see
 #include "cfgbuild.h"
 #include "rvtt.h"
 
-#define DUMP(...) //fprintf(stderr, __VA_ARGS__)
+
+/* Is PAT a load: a SET reading memory into a register (excluding calls
+   and asm)?  */
 
 static bool
 load_mem_p (rtx pat)
@@ -46,6 +72,10 @@ load_mem_p (rtx pat)
   return contains_mem_rtx_p (src);
 }
 
+/* Extract the base register (*REG) and constant offset (*OFFSET) of
+   memory reference PAT (looking through extensions).  Returns false
+   for shapes without a simple base register.  */
+
 static bool
 get_mem_reg_and_offset (rtx pat, int *reg, int *offset)
 {
@@ -60,7 +90,7 @@ get_mem_reg_and_offset (rtx pat, int *reg, int *offset)
 
   if (REG_P (XEXP (pat, 0)))
     {
-      *reg = REGNO(XEXP(pat, 0));;
+      *reg = REGNO (XEXP (pat, 0));
       *offset = 0;
     }
   else if (GET_CODE (XEXP(pat, 0)) != PLUS
@@ -79,6 +109,9 @@ get_mem_reg_and_offset (rtx pat, int *reg, int *offset)
   return true;
 }
 
+/* Emit the hazard-annulling dummy load of MEM (forced volatile, into
+   x0) before or after INSN.  */
+
 static void
 emit_load (rtx_insn *insn, bool before, rtx mem)
 {
@@ -91,28 +124,21 @@ emit_load (rtx_insn *insn, bool before, rtx mem)
     emit_insn_after (new_insn, insn);
 }
 
-// WH has a read after write hazard bug where loading a word after a byte or
-// half store issues the load before the store.  The bug is in the address
-// comparator logic and it’s 32bits wide. if addresses match, RAW hazard will
-// be detected. So if the shorter store is word-aligned, we have no hazard. (we
-// do not take advantage of that) Mem logic is prioritizing loads over stores
-// and even though there’s no reorder buffer, 2 loads could get issued before a
-// store actually gets out. If there is an intervening store, it is not clear
-// whether the hazard is resolved.  As the bug is very sensitive, we anull it
-// in all cases by placing a short load as late as possible after the short
-// store. That's when we encounter the first control-flow change, write to
-// store's ptr register, a load of any size, or the end of the block. (It is
-// desirable to sink the load as late as possible.)
+/* Walk CFN placing the annulling loads; see the file comment.  Only
+   one pending narrow store is tracked at a time -- a second narrow
+   store first flushes the previous one's annulment.  */
 
 static void
 workaround_raw (function *cfn)
 {
-  DUMP("RAW pass on: %s\n", function_name(cfn));
+  if (dump_file)
+    fprintf (dump_file, "RAW pass on: %s\n", function_name(cfn));
 
   basic_block bb;
   FOR_EACH_BB_FN (bb, cfn)
     {
-      DUMP("Processing BB %d\n", bb->index);
+      if (dump_file)
+        fprintf (dump_file, "Processing BB %d\n", bb->index);
       rtx_insn *insn;
       bool have_store = false;
       int store_ptr_regno = 0;
@@ -143,7 +169,8 @@ workaround_raw (function *cfn)
 		       && refers_to_regno_p (store_ptr_regno, SET_DEST (insn_pat))))
 	    {
 	      // Emit the war when we hit a load or if the base reg gets modified
-	      DUMP("emitting raw war before load\n");
+	      if (dump_file)
+	        fprintf (dump_file, "emitting raw war before load\n");
 	      emit_load (insn, true, store_mem);
 	      have_store = false;
 	    }
@@ -158,18 +185,21 @@ workaround_raw (function *cfn)
 	      get_mem_reg_and_offset (SET_DEST (insn_pat), &store_ptr_regno, &dummy_offset);
 	      store_mem = SET_DEST (insn_pat);
 	      have_store = true;
-	      DUMP("raw war pending for [%d]\n", war_ptr_regno);
+	      if (dump_file)
+	        fprintf (dump_file, "raw war pending for [%d]\n", store_ptr_regno);
 	    }
 	}
 
       if (have_store)
 	{
-	  DUMP("emitting raw war at end of bb\n");
+	  if (dump_file)
+	    fprintf (dump_file, "emitting raw war at end of bb\n");
 	  emit_load (BB_END (bb), control_flow_insn_p (BB_END (bb)), store_mem);
 	  have_store = false;
 	}
     }
-  DUMP("out raw pass\n");
+  if (dump_file)
+    fprintf (dump_file, "out raw pass\n");
 }
 
 namespace {
@@ -178,7 +208,7 @@ const pass_data pass_data_rvtt_fix_raw =
 {
   RTL_PASS, /* type */
   "rvtt_fix_raw", /* name */
-  OPTGROUP_NONE, /* optinfo_flags */
+  OPTGROUP_OTHER, /* optinfo_flags */
   TV_NONE, /* tv_id */
   0, /* properties_required */
   0, /* properties_provided */
@@ -189,8 +219,6 @@ const pass_data pass_data_rvtt_fix_raw =
 
 class pass_rvtt_fix_raw : public rtl_opt_pass
 {
-private:
-
 public:
   pass_rvtt_fix_raw (gcc::context *ctxt)
     : rtl_opt_pass (pass_data_rvtt_fix_raw, ctxt)
@@ -201,7 +229,7 @@ public:
   {
     return riscv_tt_fix_wh_raw > 0;
   }
-  
+
   /* opt_pass methods: */
   virtual unsigned execute (function *cfn) override
     {
@@ -209,7 +237,7 @@ public:
 
       return 0;
     }
-}; // class pass_rvtt_fix_wh
+}; // class pass_rvtt_fix_raw
 
 } // anon namespace
 
