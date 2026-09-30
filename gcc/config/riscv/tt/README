@@ -144,12 +144,15 @@ Tests are in ../../../testsuite/g++.target/riscv/tt/.  Most passes carry
 dump-scan tests keyed to their dump name; the original lowering passes are
 covered by assembly scans instead.
 
-proofs/ holds machine-checked equivalence results.  Each is cited, from the
-sources or from proofs/README.md, as the legality argument for a transform or
-for the refusal it justifies; the build does not re-check them.
-native-compare-gtle is not cited by any source: it records the equivalence
-behind -mtt-tensix-optimize-native-compare, which currently has no effect (see
-proofs/README.md).
+proofs/ holds machine-checked equivalence results.  Two of them --
+store-sink-roundtrip and stochrnd-store-round -- are checked by the build:
+t-riscv-tt regenerates rvtt-storefold-verdicts.def from their RESULT files and
+fails if the checked-in table is not byte-identical.  The others are cited,
+from the sources or from proofs/README.md, as the legality argument for a
+transform or for the refusal it justifies, and are not re-checked by the
+build.  native-compare-gtle is not cited by any source: it records the
+equivalence behind -mtt-tensix-optimize-native-compare, which currently has no
+effect (see proofs/README.md).
 
 Host-compiled tooling that is NOT part of the compiler build also lives
 here; do not mistake it for dead code:

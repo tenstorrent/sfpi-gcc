@@ -111,3 +111,51 @@ streams with OpenSSL.)
   fold (-mtt-tensix-optimize-int-not, gimple-rvtt-int-not.cc).  Proven
   against the TT_VERSION<=1 simulator arm that BH and WH share; the
   pass gate is BH+WH, other targets fail closed.
+- stochrnd-store-round/ — SFPSTOCHRND(NEAREST, fp32->fp16b/fp16a) then
+  SFPSTORE(BF16/FP16) vs the direct store, per float row.  NOT-EQUAL
+  both rows (BF16 2,155,741,184/2^32; FP16 268,435,456/2^32; classes:
+  finite round-up vs truncation, -0/denormal sign normalization,
+  NaN->Inf): the explicit rounding instruction is semantics the
+  store's own conversion path cannot reproduce, so the store-fold pass
+  refuses to fold it (stochrnd-store-rounding-divergent).  Rows C and
+  D cover the store the fold meets when the kernel spells an untyped
+  (vFloat) Dst store, Mod0 0 = SRCB: an INDIRECTION, resolved at run
+  time from the row's ALU config, so it denotes no single function.
+  At the MOD0_FMT_FP32 resolution the store is EXACT and the cut is
+  the IDENTITY (fp16b 4,286,513,662/2^32, fp16a 4,286,058,494/2^32 —
+  every finite normal off the target lattice, plus the -0/denormal
+  sign and NaN classes); the fp16a/bf16 resolutions reduce pointwise
+  to rows B and A.  Cross-checks: the rows C/D direct stream
+  reproduces store-sink-roundtrip's FP32/Dst32b stream, and the row D
+  rounded stream reproduces cast-fp16a-rne's hw-stream.
+  genrvtt-storefold refuses an indirection as a verdict key, so the
+  SRCB rows are recorded as swept and refused.
+- store-sink-roundtrip/ — the Dst load->store round trip per format
+  pair, for the predicated store-sink arm of the store-fold pass.
+  (INT32,INT32) BH raw pair EQUAL over 2^32 — LICENSES the S2 sink for
+  that pair only.  BF16 (254/2^16), FP16 (2046/2^16), FP32
+  (16,777,214/2^32, all denormal-flush) and the WH INT32_SM pair
+  (1/2^32: -0) are NOT-EQUAL: an all-lanes write-back canonicalizes
+  Dst, so eliding it is architecturally visible.  The float pairs
+  refuse (store-fold-sink-format-canonicalizing) unless
+  -mtt-tensix-optimize-store-sink accepts their denormal-flush
+  divergence; the INT32_SM pair refuses regardless.  COVERAGE GAP: the
+  generated (SRCB, SRCB) sink row derives its class as the
+  most-refusing of the three DIAGONAL float pairs, which assumes the
+  load and the store resolve MOD0_FMT_SRCB to the SAME concrete
+  format.  SFPLOAD.md:67-82 takes SrcBFmt from
+  ThreadConfig.SFPU_DEST_FMT_Base on Blackhole when
+  SFPU_DEST_FMT_Enable is set; SFPSTORE.md:58-71 has no such clause
+  and records its BH SrcB behaviour as "not fully characterized", so
+  the two can resolve differently from one instant of config state.
+  The row therefore quantifies over nine (load-resolution,
+  store-resolution) cells and only three are enumerated.  `--cross'
+  enumerates the other six: four are WIDTH-MISMATCH (FP32 writes a
+  32-bit Dst datum against BF16/FP16's 16-bit one) and the two
+  same-width cells,
+  (BF16, FP16) and (FP16, BF16), are NOT-EQUAL on 65530 of 65536 Dst
+  bit patterns -- far outside the denormal-flush class (254 and 2046
+  on the diagonal).  The row's denormal-flush class is unsound over
+  six of its nine cells.  genrvtt-storefold reads this RESULT.txt and
+  stochrnd-store-round/RESULT.txt to generate the store-fold verdict
+  table.
