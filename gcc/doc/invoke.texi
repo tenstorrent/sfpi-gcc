@@ -32172,6 +32172,20 @@ otherwise.
 Schedule straight-line SFPU regions to reduce vector register pressure,
 using a list scheduler whose primary key is modeled pressure.
 
+@opindex mtt-tensix-optimize-pressure-schedule-prera
+@item -mtt-tensix-optimize-pressure-schedule-prera
+Run pressure-cost list scheduling on straight-line SFPU regions before
+register allocation, on pseudo-register RTL.  The algorithm is the
+model-schedule excess-cost-change formulation used by GCC's own
+@option{-fsched-pressure}, adapted to the Tensix region model: a
+pressure-minimizing model schedule bounds the achievable peak, ready
+instructions are ranked by pressure excess cost plus modeled stall, and
+a candidate schedule commits only when both its modeled peak pressure
+and its modeled length are no worse than the original order's, with a
+strict improvement in at least one.  Baseline and committed pressure
+are re-verified against the dataflow liveness oracle; any disagreement
+declines.
+
 @opindex mtt-tensix-pressure-schedule-use-milp
 @item -mtt-tensix-pressure-schedule-use-milp
 Use the built-in exact branch-and-bound solver for Tensix pressure

@@ -624,6 +624,9 @@ mtt-tensix-optimize-pressure-schedule
 Target Var(riscv_tt_opt_pressure_schedule) Init(0)
 Schedule straight-line SFPU regions to reduce vector register pressure.
 
+mtt-tensix-optimize-pressure-schedule-prera
+Target Var(riscv_tt_opt_pressure_schedule_prera) Init(0)
+Run pressure-cost list scheduling on straight-line SFPU regions before register allocation.
 
 mtt-tensix-optimize-latency-schedule
 Target Var(riscv_tt_opt_latency_schedule) Init(0)
