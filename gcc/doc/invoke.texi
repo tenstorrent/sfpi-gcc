@@ -1312,6 +1312,7 @@ See RS/6000 and PowerPC Options.
 -mtt-tensix-optimize-store-source-tier
 -mtt-tensix-optimize-transp-involution
 -mtt-tensix-optimize-crosslane
+-mtt-tensix-optimize-dst-iteration-fusion
 -mtt-tensix-optimize-cc-region-general
 -mtt-tensix-optimize-round-interleave
 -mtt-tensix-optimize-invariant-loadi
@@ -32074,6 +32075,11 @@ cancelling transpose and interleave round trips.  This option also
 enforces the architectural restriction on writes to registers
 @code{L4}--@code{L7} inside an indexed-destination window, reporting
 violations as compile-time errors.
+
+@opindex mtt-tensix-optimize-dst-iteration-fusion
+@item -mtt-tensix-optimize-dst-iteration-fusion
+Recognize adjacent Tensix Dst iterations that are provably legal to
+fuse, and fuse them.
 
 @opindex mtt-tensix-optimize-cc-region-general
 @item -mtt-tensix-optimize-cc-region-general
