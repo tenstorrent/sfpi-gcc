@@ -73,6 +73,7 @@ RVTT_OBJS := rvtt.o \
 	gimple-rvtt-crosscall-scan.o \
 	gimple-rvtt-crosscall-hoist.o \
 	gimple-rvtt-crossloop.o \
+	gimple-rvtt-reprprop.o \
 	gimple-rvtt-transp-involution.o \
 	gimple-rvtt-crosslane.o \
 	rtl-rvtt-crosslane-window.o \

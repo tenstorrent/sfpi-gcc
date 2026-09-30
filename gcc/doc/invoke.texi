@@ -32089,6 +32089,15 @@ all 2^32 compared bit patterns recorded in the source tree.  Other
 comparison directions and operand shapes keep the generic lowering.
 @emph{Blackhole only.}
 
+@opindex mtt-tensix-optimize-repr-prop
+@item -mtt-tensix-optimize-repr-prop
+Cancel pairs of representation-conversion instructions that are proven
+bit-level involutions (for example the Blackhole
+sign-magnitude/two's-complement cast) when they face each other across
+a web of operations that only choose bits lane-wise (copies, control
+joins, predicated merges).  Any unproven conversion or non-transparent
+intermediate operation declines.
+
 @opindex mtt-tensix-optimize-store-fold
 @item -mtt-tensix-optimize-store-fold
 Fold lane-predicated value merges into the Dst stores that consume
