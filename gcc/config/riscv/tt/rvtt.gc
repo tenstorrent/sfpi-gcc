@@ -139,7 +139,7 @@ deferred_combine () MULI_ADDI {
 
 // a + -fp16b(scalar)
 deferred_combine () MULI_ADDI {
-  cst|SA|OU = sfploadi (ptr, val, var, id, SFPLOADI_MOD0_FLOATB);
+  cst|SA|OU = sfploadi (0, val, 0, 0, SFPLOADI_MOD0_FLOATB);
   neg|SA|OU = sfpmov (cst, SFPMOV_MOD1_COMPL);
   res = sfpadd_lv (lv, %a, neg, 0);
   {}

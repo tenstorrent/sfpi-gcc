@@ -664,8 +664,6 @@ Combiner::replace (gimple_stmt_iterator *gsi, matched_data &matched, Deferred &d
       gsi_remove (&gsi, true);
     }
 
-  unlink_stmt_vdef (**gsi);
-  gsi_remove (gsi, true);
   *gsi = gsi_for_stmt (matched.replace[shapes[reps_hwm - 1].lhs]);
 
   if (dump_file)

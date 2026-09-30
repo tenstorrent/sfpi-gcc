@@ -746,7 +746,7 @@ parse (Combines &combines, Helpers &helpers, char const *name)
   char *buf;
   if (handle < 0
       || fstat (handle, &stat) < 0
-      || (buf = (char *)mmap (nullptr, stat.st_size, PROT_READ | PROT_WRITE, MAP_PRIVATE,
+      || (buf = (char *)mmap (nullptr, stat.st_size + 1, PROT_READ | PROT_WRITE, MAP_PRIVATE,
 			      handle, 0)) == MAP_FAILED)
     {
       lexer.error ("cannot read: %m");
