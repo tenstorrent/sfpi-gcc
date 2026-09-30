@@ -105,3 +105,9 @@ streams with OpenSSL.)
   records the complete set of source spellings that reduce pointwise
   to this RESULT's value function (LE polarity; GE/GT else-forms);
   they stand or fall with the RESULT.
+- int-not-allones-subtract/ — one's complement stated as (-1) - v
+  (SFPIADD mod1=2SCOMP|CC_NONE with all-ones minuend) vs SFPNOT.
+  EQUAL (0/2^32; streams hash-identical).  LICENSES the rvtt_int_not
+  fold (-mtt-tensix-optimize-int-not, gimple-rvtt-int-not.cc).  Proven
+  against the TT_VERSION<=1 simulator arm that BH and WH share; the
+  pass gate is BH+WH, other targets fail closed.

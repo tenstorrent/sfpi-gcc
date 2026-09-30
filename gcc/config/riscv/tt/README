@@ -163,4 +163,5 @@ here; do not mistake it for dead code:
   1. this file
   2. rvtt-passes.def -- the pipeline, with its ordering caveats
   3. rvtt-effects.h -- the effect vocabulary everything else should use
-  4. a small self-contained pass before one of the large ones
+  4. a small self-contained pass, such as gimple-rvtt-int-not.cc, before
+     one of the large ones
