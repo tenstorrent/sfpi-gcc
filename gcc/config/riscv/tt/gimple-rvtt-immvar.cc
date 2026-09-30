@@ -569,13 +569,11 @@ immload_combine (gimple_stmt_iterator gsi, const rvtt_insn_data *call_insnd,
 	{
 	  cst = int32_t (arg_info.get_cst ());
 	  if (mod & SFPIADD_MOD1_ARG_2SCOMP_LREG_DST)
-	    {
-	      cst = -cst;
-	      mod ^= SFPIADD_MOD1_ARG_2SCOMP_LREG_DST;
-	    }
+	    cst = -cst;
 	  auto upper = cst >> bits;
 	  if (!(upper && (!is_signed || upper != -1)))
 	    {
+	      mod &= ~SFPIADD_MOD1_ARG_2SCOMP_LREG_DST;
 	      keep_arg++;
 	      goto iadd_commute;
 	    }
