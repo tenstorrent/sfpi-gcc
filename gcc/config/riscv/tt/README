@@ -189,11 +189,16 @@ proofs/ holds eleven machine-checked equivalence results.  Be precise about
 what the build checks: only two of them -- store-sink-roundtrip and
 stochrnd-store-round -- are verified by t-riscv-tt, which regenerates
 rvtt-storefold-verdicts.def from their RESULT files and fails the build if the
-checked-in table is not byte-identical.  Six more are cited from the sources as
-the legality backing for a transform, and three (cast-fp16a-rne,
-shft-imm-vs-reg, sm32-cast-elision-shift) are cited only from proofs/README.md
-and the campaign notes that record the refusal they justify.  Nothing outside
-those two is enforced mechanically.
+checked-in table is not byte-identical.  FIVE more are cited from the sources as
+the legality backing for a transform (int-abs-negate-select,
+int-not-allones-subtract, ccmask-direction-complete, ccmask-eqne-zero,
+cc-narrowing-writers), three (cast-fp16a-rne, shft-imm-vs-reg,
+sm32-cast-elision-shift) are cited only from proofs/README.md and the campaign
+notes that record the refusal they justify, and ONE -- native-compare-gtle --
+is ORPHANED: the lowering functions it names were deleted upstream and its
+licence flag has no reader, so nothing in the tree cites it and nothing it
+licenses can fire (see proofs/README.md).  Nothing outside those two is
+enforced mechanically.
 
 Two kinds of host-compiled tooling live here and are NOT part of the compiler
 build, so do not mistake them for dead code:

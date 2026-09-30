@@ -58,6 +58,32 @@ along with GCC; see the file COPYING3.  If not see
  * conversion-free both directions) is EXPECTED EQUAL and licenses the
  * sink for that pair only.
  *
+ * SRCB CROSS-RESOLUTION EXTENSION (`--cross').  The generated verdict
+ * table also carries a (load Mod0 = 0, store Mod0 = 0) row, derived as
+ * the most-refusing of the three DIAGONAL float pairs swept above.
+ * That derivation assumes the load and the store resolve
+ * MOD0_FMT_SRCB to the SAME concrete format.  The ISA functional
+ * models do not guarantee that: SFPLOAD.md:67-82 and SFPSTORE.md:58-71
+ * read the SrcB format from DIFFERENT places on Blackhole --
+ *
+ *   SFPLOAD:  if (TTArchitecture == Blackhole
+ *                 && ThreadConfig[CurrentThread].SFPU_DEST_FMT_Enable)
+ *               SrcBFmt = ThreadConfig[CurrentThread].SFPU_DEST_FMT_Base;
+ *   SFPSTORE: (no such clause; the doc records
+ *             "Blackhole implied format behavior for SrcB not fully
+ *              characterized")
+ *
+ * -- so with SFPU_DEST_FMT_Enable set the two instructions can pick
+ * different formats from the same instant of config state, and any
+ * config write between them can do the same on either architecture.
+ * The (SRCB, SRCB) row therefore quantifies over all NINE
+ * (load-resolution, store-resolution) cells, of which only the three
+ * diagonal ones are swept above.  `--cross' sweeps the remaining six:
+ * four change the Dst datum WIDTH (FP32 writes 32 bits, BF16/FP16 write
+ * 16) and are structurally inadmissible rather than value-divergent;
+ * two -- (BF16, FP16) and (FP16, BF16) -- are same-width and get a
+ * full 2^16 value sweep.
+ *
  * Output: per-pair mismatch census + SHA256 stream commitments
  * (round-tripped stream vs identity stream, input-order LE).
  */
@@ -222,7 +248,50 @@ static void sweep32(const char *name, uint32_t (*ld)(uint32_t),
     EVP_MD_CTX_free(hr); EVP_MD_CTX_free(hi);
 }
 
-int main(void) {
+/* --cross: the six off-diagonal SRCB (load-resolution,
+   store-resolution) cells the diagonal sweeps do not cover.  */
+static void sweep16_cross(const char *name, uint32_t (*ld)(uint16_t),
+                          uint16_t (*st)(uint32_t)) {
+    uint64_t total = 0;
+    uint16_t first_bad = 0; uint16_t first_got = 0; int have_first = 0;
+    for (uint32_t u = 0; u < (1u << 16); u++) {
+        uint16_t d = (uint16_t)u;
+        uint16_t rt = st(ld(d));
+        if (rt != d) {
+            total++;
+            if (!have_first) { first_bad = d; first_got = rt; have_first = 1; }
+        }
+    }
+    printf("%s\n", name);
+    printf("  inputs swept      : 65536\n");
+    printf("  total mismatches  : %llu\n", (unsigned long long)total);
+    if (have_first)
+        printf("    first mismatch             : d=0x%04x -> 0x%04x\n",
+               first_bad, first_got);
+    printf("  verdict           : %s\n", total ? "NOT-EQUAL" : "EQUAL");
+}
+
+static int cross_sweep(void) {
+    printf("SRCB CROSS-RESOLUTION EXTENSION: (load Mod0=0, store Mod0=0)\n");
+    printf("resolution set (SFPLOAD.md:67-82 / SFPSTORE.md:58-71):"
+           " FP32 | BF16 | FP16\n");
+    printf("diagonal cells (FP32,FP32) (BF16,BF16) (FP16,FP16) are the"
+           " swept pairs above\n");
+    printf("pair (load SRCB->FP32, store SRCB->BF16) : WIDTH-MISMATCH"
+           " (32-bit Dst datum loaded, 16-bit stored)\n");
+    printf("pair (load SRCB->FP32, store SRCB->FP16) : WIDTH-MISMATCH\n");
+    printf("pair (load SRCB->BF16, store SRCB->FP32) : WIDTH-MISMATCH\n");
+    printf("pair (load SRCB->FP16, store SRCB->FP32) : WIDTH-MISMATCH\n");
+    sweep16_cross("pair (load SRCB->BF16, store SRCB->FP16)"
+                  "  16-bit Dst layout", load_bf16, store_fp16);
+    sweep16_cross("pair (load SRCB->FP16, store SRCB->BF16)"
+                  "  16-bit Dst layout", load_fp16, store_bf16);
+    return 0;
+}
+
+int main(int argc, char **argv) {
+    if (argc > 1 && strcmp(argv[1], "--cross") == 0)
+        return cross_sweep();
     sweep16("pair (load mod0=2, store mod0=2)  BF16, 16-bit Dst layout", load_bf16, store_bf16, 7);
     sweep16("pair (load mod0=1, store mod0=1)  FP16, 16-bit Dst layout", load_fp16, store_fp16, 10);
     sweep32("pair (load mod0=4, store mod0=4)  INT32 raw, Dst32b (BH)", load_int32, store_int32);
