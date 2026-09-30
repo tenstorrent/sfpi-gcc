@@ -26,6 +26,28 @@ along with GCC; see the file COPYING3.  If not see
  *   row B: SFPSTOCHRND mod1=0 (FP32_TO_FP16A) rnd=NEAREST + SFPSTORE
  *          mod0=1 (FP16)  vs  SFPSTORE mod0=1 direct
  *
+ * and for BOTH conversions the store the fold would actually meet when
+ * the kernel spells an untyped (vFloat) Dst store, whose Mod0 is 0 =
+ * SRCB -- an INDIRECTION, not a format.  SRCB is resolved at run time
+ * from the row's ALU configuration (ALU_ACC_CTRL_SFPU_Fp32_enabled /
+ * ALU_FORMAT_SPEC_REG*_SrcB), so mod0=0 does not denote one function:
+ *
+ *   row C: SFPSTOCHRND mod1=1 (FP32_TO_FP16B) rnd=NEAREST + SFPSTORE
+ *          mod0=0 resolved MOD0_FMT_FP32 (Dst32b)  vs  the same store
+ *   row D: SFPSTOCHRND mod1=0 (FP32_TO_FP16A) rnd=NEAREST + SFPSTORE
+ *          mod0=0 resolved MOD0_FMT_FP32 (Dst32b)  vs  the same store
+ *
+ * The OTHER resolutions of mod0=0 -- SrcB configured fp16a or bf16, a
+ * 16-bit Dst layout -- reduce pointwise to rows B and A respectively
+ * (same store function, same inputs), so rows C and D are the whole of
+ * what mod0=0 adds.  They exist because the two resolutions disagree:
+ * on rows A/B the store performs the conversion and the cut is the
+ * licensed truncation-vs-nearest divergence, whereas on rows C/D the
+ * FP32 store is exact and the cut is the IDENTITY -- the rounding is
+ * not substituted, it is deleted.  A pair keyed on mod0=0 would be
+ * claiming both at once, which is why an indirection cannot be an
+ * admission key (genrvtt-storefold refuses to emit one).
+ *
  * Semantics lifted VERBATIM from the pinned oracle craq-sim @ 9f324140
  * (BH libttsim 32489dda..., WH 8f0079a9...):
  *   - SFP_STOCH_RND FloatFloat arm: src/tensix.cpp:9508-9541 (rnd=NEAREST
@@ -116,6 +138,13 @@ static inline uint16_t hw_store_fp16(uint32_t x) {
     }
 }
 
+/* store mod0=3 (fp32), BH TT_VERSION=1 arm: denormals_as_zeros, lifted
+   verbatim from the sibling obligation's harness
+   (proofs/store-sink-roundtrip/sweep_store_sink_roundtrip.c store_fp32,
+   tensix.cpp mod0=3 arm) -- no mantissa conversion of any kind.  This is
+   what SRCB resolves to at ALU_ACC_CTRL_SFPU_Fp32_enabled.  */
+static inline uint32_t hw_store_fp32(uint32_t v) { return denormals_as_zeros(v); }
+
 struct census {
     uint64_t total;
     uint64_t roundup;   /* finite, discarded bits >= half: trunc vs +1 */
@@ -146,14 +175,24 @@ int main(void) {
     struct census ca, cb;
     memset(&ca, 0, sizeof ca);
     memset(&cb, 0, sizeof cb);
+    struct census cc, cd;
+    memset(&cc, 0, sizeof cc);
+    memset(&cd, 0, sizeof cd);
     EVP_MD_CTX *ha_c = EVP_MD_CTX_new(), *ha_h = EVP_MD_CTX_new();
     EVP_MD_CTX *hb_c = EVP_MD_CTX_new(), *hb_h = EVP_MD_CTX_new();
+    EVP_MD_CTX *hc_c = EVP_MD_CTX_new(), *hc_h = EVP_MD_CTX_new();
+    EVP_MD_CTX *hd_c = EVP_MD_CTX_new(), *hd_h = EVP_MD_CTX_new();
     EVP_DigestInit_ex(ha_c, EVP_sha256(), NULL);
     EVP_DigestInit_ex(ha_h, EVP_sha256(), NULL);
     EVP_DigestInit_ex(hb_c, EVP_sha256(), NULL);
     EVP_DigestInit_ex(hb_h, EVP_sha256(), NULL);
+    EVP_DigestInit_ex(hc_c, EVP_sha256(), NULL);
+    EVP_DigestInit_ex(hc_h, EVP_sha256(), NULL);
+    EVP_DigestInit_ex(hd_c, EVP_sha256(), NULL);
+    EVP_DigestInit_ex(hd_h, EVP_sha256(), NULL);
     enum { CH = 1 << 20 };
     static uint16_t a_cut[CH], a_hw[CH], b_cut[CH], b_hw[CH];
+    static uint32_t c_cut[CH], c_hw[CH], d_cut[CH], d_hw[CH];
     uint64_t u = 0;
     do {
         for (uint32_t i = 0; i < CH; i++, u++) {
@@ -164,22 +203,40 @@ int main(void) {
             /* row B: explicit round then fp16 store vs direct fp16 store */
             uint16_t b1 = hw_store_fp16(hw_stochrnd_nearest(x, 1));
             uint16_t b2 = hw_store_fp16(x);
+            /* row C: explicit fp16b round then the SRCB-as-FP32 store vs
+               that store alone.  row D: the same for fp16a.  */
+            uint32_t c1 = hw_store_fp32(hw_stochrnd_nearest(x, 0));
+            uint32_t c2 = hw_store_fp32(x);
+            uint32_t d1 = hw_store_fp32(hw_stochrnd_nearest(x, 1));
+            uint32_t d2 = hw_store_fp32(x);
             a_cut[i] = a1; a_hw[i] = a2;
             b_cut[i] = b1; b_hw[i] = b2;
+            c_cut[i] = c1; c_hw[i] = c2;
+            d_cut[i] = d1; d_hw[i] = d2;
             if (a1 != a2) classify(&ca, x);
             if (b1 != b2) classify(&cb, x);
+            if (c1 != c2) classify(&cc, x);
+            if (d1 != d2) classify(&cd, x);
         }
         EVP_DigestUpdate(ha_c, a_cut, sizeof a_cut);
         EVP_DigestUpdate(ha_h, a_hw, sizeof a_hw);
         EVP_DigestUpdate(hb_c, b_cut, sizeof b_cut);
         EVP_DigestUpdate(hb_h, b_hw, sizeof b_hw);
+        EVP_DigestUpdate(hc_c, c_cut, sizeof c_cut);
+        EVP_DigestUpdate(hc_h, c_hw, sizeof c_hw);
+        EVP_DigestUpdate(hd_c, d_cut, sizeof d_cut);
+        EVP_DigestUpdate(hd_h, d_hw, sizeof d_hw);
     } while (u != 0x100000000ull);
 
-    unsigned char d[4][32]; unsigned int L;
+    unsigned char d[8][32]; unsigned int L;
     EVP_DigestFinal_ex(ha_c, d[0], &L);
     EVP_DigestFinal_ex(ha_h, d[1], &L);
     EVP_DigestFinal_ex(hb_c, d[2], &L);
     EVP_DigestFinal_ex(hb_h, d[3], &L);
+    EVP_DigestFinal_ex(hc_c, d[4], &L);
+    EVP_DigestFinal_ex(hc_h, d[5], &L);
+    EVP_DigestFinal_ex(hd_c, d[6], &L);
+    EVP_DigestFinal_ex(hd_h, d[7], &L);
 
     const char *names[2] = {
         "row A: STOCHRND fp32->fp16b NEAREST + STORE mod0=2  vs  STORE mod0=2",
@@ -198,6 +255,30 @@ int main(void) {
         printf("    other exp==0                        : %llu\n", (unsigned long long)cs[r]->other);
         printf("  verdict             : %s\n", cs[r]->total ? "NOT-EQUAL" : "EQUAL");
     }
+    const char *names2[2] = {
+        "row C: STOCHRND fp32->fp16b NEAREST + STORE mod0=0 resolved FP32"
+        "  vs  STORE mod0=0 resolved FP32",
+        "row D: STOCHRND fp32->fp16a NEAREST + STORE mod0=0 resolved FP32"
+        "  vs  STORE mod0=0 resolved FP32"
+    };
+    struct census *cs2[2] = { &cc, &cd };
+    for (int r = 0; r < 2; r++) {
+        printf("%s\n", names2[r]);
+        printf("  resolution          : SRCB -> MOD0_FMT_FP32 (Dst32b,"
+               " ALU_ACC_CTRL_SFPU_Fp32_enabled); the store is EXACT\n");
+        printf("  inputs swept        : 4294967296\n");
+        printf("  total mismatches    : %llu\n", (unsigned long long)cs2[r]->total);
+        printf("    finite off-lattice (rounding deleted) : %llu\n", (unsigned long long)cs2[r]->roundup);
+        printf("    -0.0 sign normalization               : %llu\n", (unsigned long long)cs2[r]->negzero);
+        printf("    denormal sign/flush                   : %llu\n", (unsigned long long)cs2[r]->denorm);
+        printf("    NaN -> Inf normalization              : %llu\n", (unsigned long long)cs2[r]->nan);
+        printf("    infinity                              : %llu\n", (unsigned long long)cs2[r]->inf);
+        printf("    other exp==0                          : %llu\n", (unsigned long long)cs2[r]->other);
+        printf("  verdict             : %s\n", cs2[r]->total ? "NOT-EQUAL" : "EQUAL");
+        printf("  cut is the identity : %s (the direct arm applies no"
+               " conversion; the fold deletes the rounding rather than"
+               " substituting it)\n", "YES");
+    }
     printf("rowA fused-stream sha256  = ");
     for (int i = 0; i < 32; i++) printf("%02x", d[0][i]);
     printf("\nrowA direct-stream sha256 = ");
@@ -206,9 +287,19 @@ int main(void) {
     for (int i = 0; i < 32; i++) printf("%02x", d[2][i]);
     printf("\nrowB direct-stream sha256 = ");
     for (int i = 0; i < 32; i++) printf("%02x", d[3][i]);
+    printf("\nrowC fused-stream sha256  = ");
+    for (int i = 0; i < 32; i++) printf("%02x", d[4][i]);
+    printf("\nrowC direct-stream sha256 = ");
+    for (int i = 0; i < 32; i++) printf("%02x", d[5][i]);
+    printf("\nrowD fused-stream sha256  = ");
+    for (int i = 0; i < 32; i++) printf("%02x", d[6][i]);
+    printf("\nrowD direct-stream sha256 = ");
+    for (int i = 0; i < 32; i++) printf("%02x", d[7][i]);
     printf("\n");
     EVP_MD_CTX_free(ha_c); EVP_MD_CTX_free(ha_h);
     EVP_MD_CTX_free(hb_c); EVP_MD_CTX_free(hb_h);
+    EVP_MD_CTX_free(hc_c); EVP_MD_CTX_free(hc_h);
+    EVP_MD_CTX_free(hd_c); EVP_MD_CTX_free(hd_h);
     /* NOT-EQUAL is the expected (refusal-grounding) result; exit 0 when the
        sweep completed and produced a verdict either way.  */
     return 0;

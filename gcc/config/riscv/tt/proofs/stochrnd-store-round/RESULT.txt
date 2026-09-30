@@ -36,7 +36,35 @@ row B: STOCHRND fp32->fp16a NEAREST + STORE mod0=1  vs  STORE mod0=1
     infinity                            : 0
     other exp==0                        : 0
   verdict             : NOT-EQUAL
+row C: STOCHRND fp32->fp16b NEAREST + STORE mod0=0 resolved FP32  vs  STORE mod0=0 resolved FP32
+  resolution          : SRCB -> MOD0_FMT_FP32 (Dst32b, ALU_ACC_CTRL_SFPU_Fp32_enabled); the store is EXACT
+  inputs swept        : 4294967296
+  total mismatches    : 4286513662
+    finite off-lattice (rounding deleted) : 4261347840
+    -0.0 sign normalization               : 1
+    denormal sign/flush                   : 8388607
+    NaN -> Inf normalization              : 16777214
+    infinity                              : 0
+    other exp==0                          : 0
+  verdict             : NOT-EQUAL
+  cut is the identity : YES (the direct arm applies no conversion; the fold deletes the rounding rather than substituting it)
+row D: STOCHRND fp32->fp16a NEAREST + STORE mod0=0 resolved FP32  vs  STORE mod0=0 resolved FP32
+  resolution          : SRCB -> MOD0_FMT_FP32 (Dst32b, ALU_ACC_CTRL_SFPU_Fp32_enabled); the store is EXACT
+  inputs swept        : 4294967296
+  total mismatches    : 4286058494
+    finite off-lattice (rounding deleted) : 4260892672
+    -0.0 sign normalization               : 1
+    denormal sign/flush                   : 8388607
+    NaN -> Inf normalization              : 16777214
+    infinity                              : 0
+    other exp==0                          : 0
+  verdict             : NOT-EQUAL
+  cut is the identity : YES (the direct arm applies no conversion; the fold deletes the rounding rather than substituting it)
 rowA fused-stream sha256  = 19db69aa97722e714519007a3f4b84bd0eae812ac485a4633341d323e0a18699
 rowA direct-stream sha256 = 5ffcf34fd77dc07f475b6973cf1cb3c82fb480524cfa97c281884b035311023f
 rowB fused-stream sha256  = 28a5eaee3f513e52a9536b0eadc73f283a235b001c290d99510915d91513f8d8
 rowB direct-stream sha256 = 6880d6bcc3d44bf0693419bfae8870aca6ecd04f5c265bf0ba928453faa6dd65
+rowC fused-stream sha256  = 520fb154c1371d64c2ebdcfe90b93e33163f740b5b87fd7211bb9d17cf4b2175
+rowC direct-stream sha256 = f2bf368ce8bd5f53fe4ddd98f1474cf211a8e09014093a68d7f4c4fb291cf8e1
+rowD fused-stream sha256  = 600148d0715697a3dac5fdfbfb201c05d635d5940c6f1c3bd07e750b39e5e12b
+rowD direct-stream sha256 = f2bf368ce8bd5f53fe4ddd98f1474cf211a8e09014093a68d7f4c4fb291cf8e1

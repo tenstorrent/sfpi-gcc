@@ -3,13 +3,14 @@
 // shape: the -mtt-tensix-optimize-stochrnd-store-fold license token
 // ALONE (it gates the pass by itself; the S1/S2 merge folds stay off) --
 // the explicit deterministic-nearest FP32_TO_FP16B rounding word whose
-// only consumer is the converting Dst store is deleted through the
-// convert wrapper's all-lanes merge (validated against the S1 same-mask
-// contract) -- the store's own conversion path delivers the handwritten
+// only consumer is the STATICALLY BF16-typed converting Dst store is
+// deleted, and the store's own conversion path delivers the handwritten
 // idiom's truncating bits (the value change the license admits:
 // tt/proofs/stochrnd-store-round NOT-EQUAL, BF16 row 2,155,741,184/2^32;
 // classes round-up / -0 / denormal-sign / NaN->Inf).  The row body drops
-// from 5 to 4 delivered words.
+// from 5 to 4 delivered words.  The store's Mod0 must say BF16
+// statically: a vFloat-typed (SRCB) store refuses, see
+// stochrndfold-refuse-srcb-bh.C.
 // { dg-final { scan-tree-dump-times "store-fold: licensed stochrnd fold" 1 "rvtt_store_fold" } }
 // { dg-final { scan-tree-dump "stochrnd-folded=1" "rvtt_store_fold" } }
 // { dg-final { scan-assembler-not "SFPSTOCHRND" } }
@@ -26,8 +27,9 @@ stochrndfold_fire_fp16b ()
       const sfpi::vFloat a = sfpi::dst_reg[0];
       const sfpi::vFloat b = sfpi::dst_reg[32];
       sfpi::vFloat r = a - b;
-      r = sfpi::convert<sfpi::vFloat16b>(r, sfpi::RoundMode::Nearest);
-      sfpi::dst_reg[0] = r;
+      sfpi::vFloat16b c
+	= sfpi::convert<sfpi::vFloat16b>(r, sfpi::RoundMode::Nearest);
+      sfpi::dst_reg[0] = c;
       sfpi::dst_reg++;
     }
 }

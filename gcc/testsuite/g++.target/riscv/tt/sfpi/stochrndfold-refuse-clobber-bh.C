@@ -3,7 +3,8 @@
 // is no longer provably the round's, so the fold's masked-lanes
 // argument is gone -- refuse even with the license token.  (Raw
 // builtin form so the round feeds the store directly; mod1=1
-// FP32_TO_FP16B, rnd=0 NEAREST.)
+// FP32_TO_FP16B, rnd=0 NEAREST, and the store is statically BF16-typed
+// so the proven pair is reached and this belt is what refuses.)
 // { dg-final { scan-tree-dump "store-fold refused .stochrnd-store-fold-span-clobbered" "rvtt_store_fold" } }
 // { dg-final { scan-tree-dump "stochrnd-folded=0" "rvtt_store_fold" } }
 // { dg-final { scan-assembler "SFPSTOCHRND" } }
@@ -26,7 +27,7 @@ stochrndfold_refuse_clobber ()
 	  sfpi::dst_reg[16] = a;
 	}
       v_endif;
-      sfpi::dst_reg[0] = q;
+      sfpi::dst_reg[0] = sfpi::as<sfpi::vFloat16b> (q);
       sfpi::dst_reg++;
     }
 }

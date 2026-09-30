@@ -56,8 +56,22 @@ along with GCC; see the file COPYING3.  If not see
        MOST REFUSING class of the swept float pairs (FP16/BF16/FP32).
      - each stochrnd proof row pairs one SFPSTOCHRND float conversion
        with its matching-precision store Mod0 (that pairing IS the
-       sweep's definition); an SRCB pair is emitted per conversion
-       under the same runtime-resolution policy.
+       sweep's definition), and AN ADMISSION KEY MUST NAME A FORMAT
+       THE HARDWARE RESOLVES STATICALLY.  Mod0 0 (SRCB) does not: it
+       is an indirection into the row's ALU configuration
+       (ALU_ACC_CTRL_SFPU_Fp32_enabled / ALU_FORMAT_SPEC_REG*_SrcB),
+       which the compiler cannot observe, and its resolutions are not
+       one function -- the RESULT's rows C and D sweep the
+       MOD0_FMT_FP32 resolution and find the store EXACT, so the cut
+       is the IDENTITY (the rounding is deleted, not substituted),
+       while the fp16a/bf16 resolutions reduce to rows B and A where
+       the store does convert.  A row keyed on an indirection would
+       claim both at once.  Such rows are therefore RECORDED and
+       REFUSED, never emitted as a pair: the pass then refuses them by
+       name (stochrnd-store-fold-format-mismatch).  The sink policy
+       above may still derive its SRCB row because it ranks one round
+       trip's divergence within a fixed layout; this license needs a
+       converting store to exist at all.
 
    Mod0/Mod1 numeric encodings are transcribed to the symbolic
    capability constants (BlackholeA0 SFPSTORE.md/SFPLOAD.md and
@@ -504,6 +518,17 @@ parse_stochrnd_rows (const input &in, std::vector<stochrnd_row> *out)
 
 }
 
+/* True when MOD0 names a store format the hardware resolves
+   statically.  0 (SRCB) is the one encoding that does not: it is an
+   indirection into the row's ALU configuration, so it cannot key an
+   admission (see the policy note at the top of this file).  */
+
+static bool
+static_store_format_p (long mod0)
+{
+  return mod0 != 0;
+}
+
 /* Generator entry point: ARGV[1] the store-sink round-trip RESULT,
    ARGV[2] the stochrnd store RESULT, ARGV[3] the output .def path.
    Parse both inputs, cross-check every encoding and every verdict
@@ -589,6 +614,17 @@ main (int argc, const char **argv)
 		   " divergent class the license quantifies (verdict '%s');"
 		   " the licensed pairing policy must be re-reviewed, not"
 		   " regenerated\n", argv[2], r.tag, r.verdict.c_str ());
+	  return 1;
+	}
+      if (!static_store_format_p (r.smod) && r.verdict == "EQUAL")
+	{
+	  fprintf (stderr, "genrvtt-storefold: %s: row %c stores through"
+		   " Mod0 %ld (SRCB), which is a runtime indirection, and"
+		   " claims EQUAL.  Equality under ONE resolution does not"
+		   " make an indirection admissible -- the other resolutions"
+		   " are different functions.  Sweep each resolution as its"
+		   " own statically-named row instead\n",
+		   argv[2], r.tag, r.smod);
 	  return 1;
 	}
     }
@@ -703,13 +739,20 @@ main (int argc, const char **argv)
 	   "     One licensed matching-precision pairing for the stochrnd\n"
 	   "     store fold's pair_ok (-mtt-tensix-optimize-stochrnd-store-"
 	   "fold).\n"
+	   "     An admission key must name a STATICALLY resolved store\n"
+	   "     format.  Mod0 0 (SRCB) is an indirection into the row's\n"
+	   "     ALU config, and the RESULT's rows C/D sweep the\n"
+	   "     MOD0_FMT_FP32 resolution and find the store exact -- the\n"
+	   "     cut is the identity there, while rows A/B convert.  Such\n"
+	   "     rows are recorded above and refused, never admitted, so\n"
+	   "     an SRCB store refuses stochrnd-store-fold-format-mismatch.\n"
 	   "\n"
-	   "   SRCB rows carry no stream commitment of their own: the SRCB\n"
-	   "   store resolves at runtime to one of the swept float paths"
-	   " (the\n"
+	   "   The SINK SRCB row carries no stream commitment of its own:\n"
+	   "   the SRCB store resolves at runtime to one of the swept float"
+	   " paths (the\n"
 	   "   row's ALU config owns the resolution)"
 	   " --\n"
-	   "   their class is derived as the most refusing of the swept"
+	   "   its class is derived as the most refusing of the swept"
 	   " float\n"
 	   "   pairs.  */\n"
 	   "\n",
@@ -743,6 +786,19 @@ main (int argc, const char **argv)
 
   for (const stochrnd_row &r : rows)
     {
+      if (!static_store_format_p (r.smod))
+	{
+	  /* Swept, recorded, and REFUSED: an indirection cannot key an
+	     admission.  No row means the pass refuses the pair by name.  */
+	  fprintf (out, "/* row %c: fp32->%s nearest vs the bare mod0=%ld"
+		   " (%s)\n   store: SWEPT AND REFUSED -- a runtime"
+		   " indirection is not an\n   admission key, and at this"
+		   " row's resolution the store is\n   exact, so the cut is"
+		   " the identity.  No RVTT_STOCHRND_STORE_PAIR\n   is"
+		   " emitted; pair_ok refuses by name.  */\n",
+		   r.tag, r.conv.c_str (), r.smod, mod0_name (r.smod));
+	  continue;
+	}
       fprintf (out, "/* row %c: fp32->%s nearest vs the bare mod0=%ld"
 	       " store.  */\n", r.tag, r.conv.c_str (), r.smod);
       fprintf (out, "RVTT_STOCHRND_STORE_PAIR (%s, %s,\n"
@@ -750,8 +806,6 @@ main (int argc, const char **argv)
 	       "\t\t\t  \"%s\")\n",
 	       conv_name (r.conv), mod0_name (r.smod),
 	       r.fused_sha.c_str (), r.direct_sha.c_str ());
-      fprintf (out, "RVTT_STOCHRND_STORE_PAIR (%s, SFPMEM_MOD0_FMT_SRCB,"
-	       " \"-\", \"-\")\n", conv_name (r.conv));
     }
 
   fclose (out);

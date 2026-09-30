@@ -4,7 +4,9 @@
 // value class entirely, not just the stored bits -- refuse even with
 // the license token.  (Raw builtin form: the typed convert wrapper's
 // merge would gate on its own multi-use first; the builtin is the
-// wrapper's own lowering, mod1=1 FP32_TO_FP16B, rnd=0 NEAREST.)
+// wrapper's own lowering, mod1=1 FP32_TO_FP16B, rnd=0 NEAREST.  The
+// store is statically BF16-typed so the proven pair is reached and
+// this belt, not the format check, is what refuses.)
 // { dg-final { scan-tree-dump "store-fold refused .stochrnd-store-fold-multi-use" "rvtt_store_fold" } }
 // { dg-final { scan-tree-dump "stochrnd-folded=0" "rvtt_store_fold" } }
 // { dg-final { scan-assembler "SFPSTOCHRND" } }
@@ -23,7 +25,7 @@ stochrndfold_refuse_multiuse ()
       const sfpi::vFloat b = sfpi::dst_reg[32];
       sfpi::vFloat r = a - b;
       sfpi::vFloat q = __builtin_rvtt_sfpstochrnd_i (r.get (), 0, 1, 0);
-      sfpi::dst_reg[0] = q;
+      sfpi::dst_reg[0] = sfpi::as<sfpi::vFloat16b> (q);
       acc += q;
       sfpi::dst_reg++;
     }

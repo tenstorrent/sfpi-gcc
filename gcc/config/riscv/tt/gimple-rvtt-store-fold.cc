@@ -148,11 +148,28 @@ along with GCC; see the file COPYING3.  If not see
        (stochrnd-store-fold-mode-unlicensed);
      - float conversion mod1 exactly FP32_TO_FP16A or FP32_TO_FP16B
        (else the standing integer refusal);
-     - the store's Mod0 targets the MATCHING precision: FP16B->BF16,
-       FP16A->FP16, or the runtime-resolved SRCB store (the swept
-       rows; the row's ALU config owns the SRCB resolution and the
-       licensed booking's device-golden gate is the
-       authority) -- cross-precision static pairs
+     - the store's Mod0 targets the MATCHING precision STATICALLY:
+       FP16B->BF16 or FP16A->FP16, the admitted rows A and B of
+       tt/proofs/stochrnd-store-round/.  An SRCB store refuses.  Mod0
+       is not a rounding-mode field: it selects the Dst STORAGE
+       FORMAT the store writes, and 0 (SRCB) names no format at all --
+       it is an indirection into the row's ALU configuration
+       (ALU_ACC_CTRL_SFPU_Fp32_enabled / ALU_FORMAT_SPEC_REG*_SrcB),
+       which this pass cannot observe.  The proof's rows C and D
+       sweep the MOD0_FMT_FP32 resolution over 2^32: the store is
+       EXACT there, so the fold deletes the rounding instead of
+       substituting it (4,286,058,494 of 2^32 differ on the fp16a
+       row).  Measured on Blackhole, the folded arm of the
+       Float32/dest_acc=Yes fp16a cast was the identity on 4096/4096
+       elements.  Rewriting the store's Mod0 to FP16A to force the
+       conversion is NOT the repair: the fp16a store form writes a
+       16-bit datum (proof rows A/B are 16-bit Dst layout arms), so
+       at this row's 32-bit Dst contract it corrupts the datum
+       outright -- measured, 256 of 4096 elements wrong including
+       inputs already exactly on the fp16a lattice, with or without
+       the round (craq-sfpi
+       board/evidence/licensed-knob-boundary-20260930/).  SRCB and
+       cross-precision static pairs alike
        refuse (stochrnd-store-fold-format-mismatch);
      - the round's result has the store as its ONLY consumer
        (stochrnd-store-fold-multi-use);
@@ -1028,11 +1045,15 @@ fold_stochrnd_store (rvtt_cc_region_tree *ccr, gcall *rnd, gcall *store,
     return refuse ("stochrnd-store-fold-mode-unlicensed", store);
 
   long mod0 = rvtt_call_int_arg (store, 5);
-  /* Matching-precision pairing by the GENERATED table (the swept
-     stochrnd proof rows plus the runtime-resolved SRCB store per
-     conversion; tt/rvtt-storefold-verdicts.def, byte-checked against
+  /* Matching-precision pairing by the GENERATED table: the swept
+     stochrnd proof rows that a STATICALLY resolved store Mod0 keys
+     (tt/rvtt-storefold-verdicts.def, byte-checked against
      tt/proofs/stochrnd-store-round/RESULT.txt every build).
-     Cross-precision static pairs have no row.  */
+     Cross-precision static pairs have no row, and neither does the
+     runtime-resolved SRCB store: the proof sweeps it (rows C and D)
+     and refuses it, because an indirection is not one function --
+     its FP32 resolution performs no conversion, so the fold there
+     deletes the rounding rather than substituting the store's.  */
   bool pair_ok = false;
   for (const stochrnd_store_row &r : stochrnd_store_rows)
     if (r.conv == mod1 && r.sfmt == mod0)
