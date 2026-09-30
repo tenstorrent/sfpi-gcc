@@ -32033,6 +32033,14 @@ under a floating-point ordering test against @code{+0.0} into an
 unpredicated compare and bitwise AND, removing the CC save/restore
 pair.  Non-matching regions decline.
 
+@opindex mtt-tensix-optimize-int-abs
+@item -mtt-tensix-optimize-int-abs
+Fold a predicated region performing a conditional two's-complement
+negation under a sign test into the single integer @code{SFPABS}
+instruction.  The equivalence is backed by an exhaustive check over all
+32-bit inputs, recorded in the source tree; non-matching regions
+decline.
+
 @opindex mtt-tensix-optimize-native-compare
 @item -mtt-tensix-optimize-native-compare
 Lower strict-greater and less-or-equal floating-point vector comparison
