@@ -120,7 +120,7 @@ split (function *fn)
 	if (!insnd->has_iptr ())
 	  continue;
 
-#if 1 // FIXME ttinsn early fix
+#if 0 // FIXME ttinsn early fix
 	if (!insnd->has_var ())
 	  continue;
 #endif
