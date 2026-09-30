@@ -1,0 +1,61 @@
+Copyright (C) 2026 Tenstorrent Inc.
+
+This file is part of GCC.
+
+GCC is free software; you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free
+Software Foundation; either version 3, or (at your option) any later
+version.
+
+GCC is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or
+FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+for more details.
+
+You should have received a copy of the GNU General Public License
+along with GCC; see the file COPYING3.  If not see
+<http://www.gnu.org/licenses/>.
+
+sweep_ccmask_eqne.c — ccmask keep-mask equivalence, the EQ and NE
+float directions vs +0.0, exhaustive over 2^32 lane encodings each
+(the class named by the ccmask-compare-direction-unsupported
+refusal).
+
+Semantics from the reference simulator:
+  SFPSETCC  mod6 LREG_EQ0 / mod2 LREG_NE0; a raw-bit test (SFPI uses
+            0x80000000 as a lane predicate/sign sentinel), so EQ
+            enables the +0 encoding only and -0 = 0x80000000 stays
+            disabled
+  SFPGT     mod1==8 SET_DEST arm
+  SFPLE     mod1==8 SET_DEST arm
+  SFPOR, SFPAND, sign_mag32_total_order
+Compiler-side lowering: a float EQ/NE compare against zero is a single
+SETCC (EQ -> SETCC mod6, NE -> SETCC mod2).
+
+Build and run: cc -O2 sweep_ccmask_eqne.c -o sweep && ./sweep
+
+EQ (x==0)  mismatches=0  cut-stream=4cf31ed57bdddcda  hw-stream=4cf31ed57bdddcda  EQUAL
+NE (x!=0)  mismatches=0  cut-stream=adc84c787bdddcda  hw-stream=adc84c787bdddcda  EQUAL
+RESULT: EQUAL over 2^32 x 2 directions
+
+Stream commitments are position-salted FNV-1a 64 over the per-x
+expected keep-mask (cut) and computed keep-mask (hw); equality per
+direction plus mismatches=0 is the proof condition.
+
+Keep-mask compositions proven (two SET_DEST total-order compares plus
+one bitwise combine; the swapped-operand compare overwrites the
+region's own writable zero, as the LT/GE arms do):
+  EQ keep = SFPOR  (SFPGT (x, 0), SFPGT (0, x))   [raw != 0]
+  NE keep = SFPAND (SFPLE (x, 0), SFPLE (0, x))   [raw == 0]
+The core identity: sign_mag32_total_order is a bijection with
+sx(+0) == 0 and sx(-0) == -1, so sx != 0 is exactly raw != 0 -- the
+single-SETCC raw-bit enable sets are order-expressible even though no
+SINGLE order test expresses them.
+
+LICENSES: the EQ/NE arms of the rvtt_ccmask fold
+(-mtt-tensix-optimize-ccmask AND -mtt-tensix-optimize-cc-region-general,
+gimple-rvtt-ccmask.cc).  The equivalence is bit-exact, so the arms
+need no license token beyond the default-off
+-mtt-tensix-optimize-cc-region-general.  Those arms may fire only while
+this RESULT is EQUAL.  BH-only (SFPGT/SFPLE are BH; the pass gate is
+BH).

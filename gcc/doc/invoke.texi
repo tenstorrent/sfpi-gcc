@@ -1300,6 +1300,7 @@ See RS/6000 and PowerPC Options.
 -mtt-tensix-optimize-cc  -mno-tt-tensix-optimize-cc
 -mtt-tensix-optimize-dce  -mno-tt-tensix-optimize-dce
 -mtt-tensix-optimize-setexp-fold  -mno-tt-tensix-optimize-setexp-fold
+-mtt-tensix-optimize-ccmask
 -mtt-tensix-optimize-native-compare
 -mtt-tensix-optimize-cc-region-general
 -mtt-tensix-optimize-round-interleave
@@ -31946,6 +31947,13 @@ by default.
 Fold an exponent extract that feeds @code{SFPSETEXP} into the
 instruction's exponent-copy addressing mode.  Enabled by default.
 
+@opindex mtt-tensix-optimize-ccmask
+@item -mtt-tensix-optimize-ccmask
+Fold a predicated region whose only effect is zeroing selected lanes
+under a floating-point ordering test against @code{+0.0} into an
+unpredicated compare and bitwise AND, removing the CC save/restore
+pair.  Non-matching regions decline.
+
 @opindex mtt-tensix-optimize-native-compare
 @item -mtt-tensix-optimize-native-compare
 Reserved for lowering strict-greater and less-or-equal floating-point
@@ -31955,10 +31963,13 @@ no effect.  @emph{Blackhole only.}
 
 @opindex mtt-tensix-optimize-cc-region-general
 @item -mtt-tensix-optimize-cc-region-general
-Accept additional typed CC writers (the compare, exponent-extract,
-leading-zero and integer-add forms) as lane-narrowing in the predicated
-regions examined by the loop-invariant containment check.  Every other
-CC writer declines exactly as without the option.
+Generalize the recognizers of CC-consuming transformations.  The
+compiler builds a tree of the CC save/restore frames in each function;
+with this option, consumers whose recognizers otherwise demand one
+specific statement layout (the @option{-mtt-tensix-optimize-ccmask}
+fold and the loop-invariant containment check) accept any layout the
+frame tree proves equivalent.  Every unproven layout declines exactly
+as without the option.
 @end table
 @node Tensix Scheduling Options
 @subsubsection Tensix Scheduling Options

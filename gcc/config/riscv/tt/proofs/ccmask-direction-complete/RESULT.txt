@@ -1,0 +1,41 @@
+Copyright (C) 2026 Tenstorrent Inc.
+
+This file is part of GCC.
+
+GCC is free software; you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free
+Software Foundation; either version 3, or (at your option) any later
+version.
+
+GCC is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or
+FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+for more details.
+
+You should have received a copy of the GNU General Public License
+along with GCC; see the file COPYING3.  If not see
+<http://www.gnu.org/licenses/>.
+
+sweep_ccmask_dirs.c — ccmask keep-mask equivalence, all four float
+order directions vs +0.0, exhaustive over 2^32 lane encodings each.
+
+The cut is the SETCC/COMPC lowering of a float compare against +0.0;
+both it and the SFPGT/SFPLE mod1==8 SET_DEST keep-masks are modelled
+with the reference simulator's semantics of SFPSETCC, SFPCOMPC,
+SFPGT, SFPLE, SFPAND and sign_mag32_total_order.
+
+Build and run: cc -O2 sweep_ccmask_dirs.c -o sweep && ./sweep
+
+LE (x<=0)  mismatches=0  cut-stream=269ba7dc7bdddcda  hw-stream=269ba7dc7bdddcda  EQUAL
+GT (x>0)   mismatches=0  cut-stream=7b9f655a7bdddcda  hw-stream=7b9f655a7bdddcda  EQUAL
+LT (x<0)   mismatches=0  cut-stream=54a3e8b604222325  hw-stream=54a3e8b604222325  EQUAL
+GE (x>=0)  mismatches=0  cut-stream=7d40380004222325  hw-stream=7d40380004222325  EQUAL
+RESULT: EQUAL over 2^32 x 4 directions
+
+Stream commitments are position-salted FNV-1a 64 over the per-x
+expected keep-mask (cut) and computed keep-mask (hw); equality per
+direction plus mismatches=0 is the proof condition.
+
+LICENSES: the LT/GE (swapped-operand, writable-zero) arms of the
+rvtt_ccmask fold; the same harness re-verifies the LE/GT arms.  Those
+arms may fire only while this RESULT is EQUAL.

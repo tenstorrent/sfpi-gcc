@@ -67,3 +67,32 @@ streams with OpenSSL.)
   soundness record for the tree's loop-scoped in-frame
   vocabulary-external case
   (rvtt_cc_region_tree::loop_cc_ambient_preserving_p).
+- ccmask-direction-complete/ — the four float order directions vs +0.0
+  of the ccmask zeroing fold: SETCC/COMPC CC lowering vs the
+  SFPGT/SFPLE mod1=8 SET_DEST keep-masks (LE/GT direct-operand, LT/GE
+  swapped-operand writable-zero forms).  EQUAL (0 mismatches per
+  direction over 2^32; cut/hw stream commitments identical per
+  direction).  LICENSES the order-direction arms of the rvtt_ccmask
+  fold (gimple-rvtt-ccmask.cc).  BH-only (SFPGT/SFPLE do not exist
+  before Blackhole; the pass gate is BH).
+- ccmask-eqne-zero/ — the EQ/NE float directions vs +0.0 of the ccmask
+  zeroing fold: the single-SETCC raw-bit lowerings (mod6 LREG_EQ0 /
+  mod2 LREG_NE0) vs the two-compare SET_DEST compositions
+  EQ keep = SFPOR (SFPGT (x,0), SFPGT (0,x)),
+  NE keep = SFPAND (SFPLE (x,0), SFPLE (0,x)).  EQUAL (0 mismatches
+  per direction over 2^32; cut/hw stream commitments identical).
+  LICENSES the EQ/NE arms of the rvtt_ccmask fold under
+  -mtt-tensix-optimize-ccmask AND -mtt-tensix-optimize-cc-region-general
+  (gimple-rvtt-ccmask.cc).  BH-only.  The proof settles what the arms
+  compute only: they also pass a delivery-cost gate
+  (eqne_fold_priced_profitable_p), which refuses them
+  (ccmask-eqne-fold-unprofitable) while the composition delivers more
+  words than the CC skeleton it replaces.
+- native-compare-gtle/ — the GT and LE float compare-against-+0.0
+  arms: the SETCC web vs a single BH-native SFPGT/SFPLE SET_CC
+  (mod1=1).  EQUAL (0 mismatches per direction over 2^32).  No pass
+  relies on it: nothing emits that SET_CC form, and
+  -mtt-tensix-optimize-native-compare has no effect.  The live compare
+  lowering (gimple-rvtt-pred.cc, expand_cmp_using_gtle) takes
+  arbitrary operands, commutes LT/GE into GT/LE and covers SMAG and
+  integer types, which this proof does not.
