@@ -620,6 +620,9 @@ mtt-tensix-optimize-dce
 Target Var(riscv_tt_opt_dce) Init(1)
 Remove dead Tensix instructions.
 
+mtt-tensix-optimize-pressure-schedule
+Target Var(riscv_tt_opt_pressure_schedule) Init(0)
+Schedule straight-line SFPU regions to reduce vector register pressure.
 
 
 mtt-tensix-optimize-latency-schedule
@@ -769,6 +772,9 @@ mtt-tensix-optimize-lp-schedule
 Target Undocumented Var(riscv_tt_opt_lp_schedule) Init(-1)
 Removed; using this option is an error.
 
+mtt-tensix-pressure-schedule-use-milp
+Target Var(riscv_tt_pressure_schedule_use_milp) Init(0)
+Use the exact branch-and-bound solver when the pressure-scheduling list heuristic cannot satisfy capacity.
 
 mtt-tensix-optimize-replay
 Target Var(riscv_tt_opt_replay) Init(1)
