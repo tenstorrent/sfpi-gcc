@@ -32127,6 +32127,11 @@ enforces the architectural restriction on writes to registers
 @code{L4}--@code{L7} inside an indexed-destination window, reporting
 violations as compile-time errors.
 
+@opindex mtt-tensix-optimize-dst-iteration-fusion
+@item -mtt-tensix-optimize-dst-iteration-fusion
+Recognize adjacent Tensix Dst iterations that are provably legal to
+fuse, and fuse them.
+
 @opindex mtt-tensix-optimize-cc-region-general
 @item -mtt-tensix-optimize-cc-region-general
 Generalize the recognizers of the CC-consuming folds above.  The
