@@ -15,14 +15,14 @@ storesink_varied (void)
 {
   for (int ix = 0; ix < 32; ++ix)
     {
-      const sfpi::vFloat v = sfpi::dst_reg[0];
+      const sfpi::vFloat v = sfpi::dst_reg[0].mode<sfpi::DataLayout::F16b> ();
       sfpi::vFloat r = v;
       v_if (v >= 1.5f)
 	{
 	  r = 6.5f;
 	}
       v_endif;
-      sfpi::dst_reg[0] = r;
+      sfpi::dst_reg[0].mode<sfpi::DataLayout::F16b> () = r;
       sfpi::dst_reg++;
     }
 }

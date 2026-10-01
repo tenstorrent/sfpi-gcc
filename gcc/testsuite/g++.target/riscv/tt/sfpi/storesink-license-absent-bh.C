@@ -15,14 +15,14 @@ storesink_license_absent (float t)
 {
   for (int ix = 0; ix < 8; ++ix)
     {
-      const sfpi::vFloat v = sfpi::dst_reg[0];
+      const sfpi::vFloat v = sfpi::dst_reg[0].mode<sfpi::DataLayout::F16b> ();
       sfpi::vFloat r = v;
       v_if (v <= t)
 	{
 	  r = 0.0f;
 	}
       v_endif;
-      sfpi::dst_reg[0] = r;
+      sfpi::dst_reg[0].mode<sfpi::DataLayout::F16b> () = r;
       sfpi::dst_reg++;
     }
 }

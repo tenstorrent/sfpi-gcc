@@ -3,7 +3,7 @@
 // pair): every identifier renamed, hardshrink-flavored condition (abs
 // compare) -- the admission keys on the SHAPE (predicated value merge
 // feeding a post-region all-lanes store on a float pair), never on
-// names, so the licensed sink fires identically.
+// names, so the licensed sink fires identically on the statically BF16 pair.
 // { dg-final { scan-tree-dump-times "store-fold: licensed sink" 1 "rvtt_store_fold" } }
 // { dg-final { scan-tree-dump "store-fold: forwarded=0 sunk=0 sunk-licensed=1" "rvtt_store_fold" } }
 // { dg-final { scan-assembler-not "SFPMOV" } }
@@ -17,14 +17,14 @@ zq_wobble_kernel (float lambda_knee)
 {
   for (int trip_ctr = 0; trip_ctr < 8; ++trip_ctr)
     {
-      const sfpi::vFloat datum = sfpi::dst_reg[0];
+      const sfpi::vFloat datum = sfpi::dst_reg[0].mode<sfpi::DataLayout::F16b> ();
       sfpi::vFloat outv = datum;
       v_if (sfpi::abs (datum) <= lambda_knee)
 	{
 	  outv = 0.0f;
 	}
       v_endif;
-      sfpi::dst_reg[0] = outv;
+      sfpi::dst_reg[0].mode<sfpi::DataLayout::F16b> () = outv;
       sfpi::dst_reg++;
     }
 }
