@@ -9,7 +9,7 @@ void foo () {
 /*
 **_Z3foov:
 **	# READ L0
-**	SFPSTOCHRND	L0, L0, L0, 31, 12, 1
+**	SFPSTOCHRND	L0, L9, L0, 31, 12, 1
 **	# WRITE L0
 **	ret
 */
@@ -35,7 +35,7 @@ void baz () {
 /*
 **_Z3bazv:
 **	# READ L0
-**	SFPSTOCHRND	L0, L0, L0, 0, 1, 2
+**	SFPSTOCHRND	L0, L9, L0, 0, 9, 2
 **	# WRITE L0
 **	ret
 */
