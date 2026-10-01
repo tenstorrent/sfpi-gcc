@@ -32041,6 +32041,12 @@ instruction.  The equivalence is backed by an exhaustive check over all
 32-bit inputs, recorded in the source tree; non-matching regions
 decline.
 
+@opindex mtt-tensix-optimize-int-not
+@item -mtt-tensix-optimize-int-not
+Select the single @code{SFPNOT} instruction for the
+all-ones-minus-@var{x} spelling of one's complement, backed by an
+exhaustive equivalence check; other subtract shapes decline.
+
 @opindex mtt-tensix-optimize-native-compare
 @item -mtt-tensix-optimize-native-compare
 Lower strict-greater and less-or-equal floating-point vector comparison

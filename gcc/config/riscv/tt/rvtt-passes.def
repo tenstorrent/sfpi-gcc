@@ -34,6 +34,11 @@ INSERT_PASS_BEFORE (pass_all_optimizations, 1, pass_rvtt_ccmask);
    canonical structured forms are intact and before the invariant pass
    so the removed CC statement no longer bars the loop's hoists.  */
 INSERT_PASS_BEFORE (pass_all_optimizations, 1, pass_rvtt_int_abs);
+/* The one's-complement selection rewrites the all-ones-minus-x subtract
+   into the single SFPNOT, citing the exhaustive equivalence proof in
+   tt/proofs/int-not-allones-subtract/.  It runs before the invariant
+   pass so the dead all-ones immediate is deleted instead of hoisted.  */
+INSERT_PASS_BEFORE (pass_all_optimizations, 1, pass_rvtt_int_not);
 /* Place semantic SFPU constants outside counted loops while values are still
    SSA pseudos.  Doing this after allocation would extend hard-LREG lifetimes.  */
 INSERT_PASS_BEFORE (pass_all_optimizations, 1, pass_rvtt_invariant);
