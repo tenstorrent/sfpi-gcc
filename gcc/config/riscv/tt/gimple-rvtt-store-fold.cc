@@ -71,15 +71,14 @@ along with GCC; see the file COPYING3.  If not see
      - (INT32_SM, INT32_SM), Wormhole: NOT-EQUAL in the negative-zero
        class, which -mtt-tensix-optimize-store-sink does not cover; the
        sink always refuses.
-     - (SRCB, SRCB) is not swept.  Its row is derived as the most
-       refusing class of the swept float pairs, which assumes SFPLOAD
-       and SFPSTORE resolve MOD0_FMT_SRCB to the same concrete format.
-       The ISA does not guarantee that: on Blackhole SFPLOAD can take
-       the SrcB format from ThreadConfig.SFPU_DEST_FMT_Base, and
-       SFPSTORE has no such clause.  Of the six cross-resolution cells
+     - (SRCB, SRCB) is not swept and has no row.  SFPLOAD and SFPSTORE
+       need not resolve MOD0_FMT_SRCB to the same format: on Blackhole
+       SFPLOAD can take the SrcB format from
+       ThreadConfig.SFPU_DEST_FMT_Base, and SFPSTORE has no such
+       clause.  Of the six cross-resolution cells
        (sweep_store_sink_roundtrip.c --cross), four are width
-       mismatches and two are NOT-EQUAL on 65530 of 65536 patterns, so
-       the derived row is sound only when the two resolutions agree.
+       mismatches and two are NOT-EQUAL on 65530 of 65536 patterns,
+       outside the denormal-flush class.
      - Any other pair, including mixed pairs, and any pair whose row
        was proven only on the other target, refuses
        store-fold-sink-format-unproven.
@@ -690,8 +689,8 @@ fold_merge_store (rvtt_cc_region_tree *ccr, gcall *assign, gcall *store)
   long sfmt = rvtt_call_int_arg (store, 5);
   bool licensed = false;
   /* Format-pair admission by the generated verdict table (one row per
-     exhaustively swept Dst round trip plus the derived SRCB row;
-     tt/rvtt-storefold-verdicts.def, byte-checked against
+     exhaustively swept Dst round trip; tt/rvtt-storefold-verdicts.def,
+     byte-checked against
      tt/proofs/store-sink-roundtrip/RESULT.txt every build).  A pair
      without a row has no round-trip proof, and neither does a pair
      whose row was proven only on the other target: the (INT32,INT32)
@@ -718,11 +717,11 @@ fold_merge_store (rvtt_cc_region_tree *ccr, gcall *assign, gcall *store)
     case STOREFOLD_LICENSED:
       /* Float pairs canonicalize Dst (the store conversion flushes
 	 denormals; every round-trip mismatch is in the denormal class:
-	 the NOT-EQUAL float rows, and the SRCB row derived from them).
-	 The predicated-store form preserves those bits instead, a value
-	 change accepted only under -mtt-tensix-optimize-store-sink.
-	 Without it this is the standing named refusal and the code is
-	 unchanged (rvtt_refuse_licensed enforces both).  */
+	 the NOT-EQUAL static-format float rows).  The predicated-store
+	 form preserves those bits instead, a value change accepted only
+	 under -mtt-tensix-optimize-store-sink.  Without it this is the
+	 standing named refusal and the code is unchanged
+	 (rvtt_refuse_licensed enforces both).  */
       if (!rvtt_refuse_licensed (RVTT_REF_STORE_FOLD_SINK_FORMAT_CANONICALIZING,
 				 rvtt_store_sink_licensed_p (),
 				 /*proof_in_scope=*/true, dump_file,
