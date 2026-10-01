@@ -69,13 +69,13 @@ along with GCC; see the file COPYING3.  If not see
        loads are ranked by materialization cost and cut to what the
        loop's pressure profile can hold, because each hoist PINS ONE
        LREG across the whole loop out of an eight-register file;
-     - and, on a CC-carrying loop with an explicit unroll factor, an
-       outright refusal (cc-restore-unroll-pressure-unmodeled).  The
-       unroller multiplies the in-loop live ranges AFTER this pass and
-       the single-body SSA pressure walk models none of that overlap;
-       a miss there is not a lost optimization but the post-allocation
-       lreg-pressure-exceeded USER ERROR on a kernel that used to
-       compile.
+     - and, on a CC-carrying loop with an explicit unroll factor, or at
+	 -O3 a proven short constant trip count whose candidate set already
+	 exceeds the single-body pressure limit, an outright refusal
+	 (cc-restore-unroll-pressure-unmodeled).  The unroller can multiply
+	 live ranges AFTER this pass; retaining a pressure-limited subset
+	 leaves no proven headroom and can turn a compiling kernel into a
+	 post-allocation lreg-pressure-exceeded USER ERROR.
 
    Loops are visited innermost first and a load hoists STEPWISE: out of
    its own loop into the enclosing body, where the enclosing loop's
@@ -1933,16 +1933,8 @@ transform (function *fn)
 	    continue;
 	}
 
-      /* A CC-carrying loop under an explicit unroll request multiplies
-	 its in-loop live ranges by the unroll factor after this pass;
-	 the single-body SSA pressure walk models none of that overlap,
-	 and a miss is not a lost optimization but the post-allocation
-	 lreg-pressure-exceeded USER ERROR on a previously-compiling
-	 kernel (corpus witness: the pragma-unroll-8 snake-beta body).
-	 Such loops are the replay-record delivery domain where in-loop
-	 immediates are captured into the recorded window anyway;
-	 refuse hoisting by name.  Non-CC unrolled loops keep their
-	 established behavior.  */
+      /* An explicit unroll request multiplies live ranges after this pass;
+	 the single-body pressure proof does not model that overlap.  */
       if (cc.has_cc && loop->unroll > 1)
 	{
 	  rvtt_refuse (RVTT_REF_CC_RESTORE_UNROLL_PRESSURE_UNMODELED, dump_file,
@@ -1955,6 +1947,25 @@ transform (function *fn)
 	= select_pressure_legal_loads (loop, loads, cc.has_cc);
       if (selected.is_empty ())
 	continue;
+
+      /* At -O3 the generic complete unroller can make a short, exact-trip
+	 CC loop one straight-line region after this pass.  When even the
+	 single-body model rejects part of the candidate set, the accepted
+	 subset sits at the pressure cliff: a four-trip exp body with five
+	 accepted hoists and two rejected ones needs three spills after
+	 expansion.  The bounded trip proof identifies this risk without
+	 naming the kernel.  Loops whose entire candidate set fits keep
+	 their established hoists.  */
+      if (optimize >= 3 && cc.has_cc
+	  && selected.length () != loads.length ()
+	  && short_constant_replay_loop_p (loop, entry))
+	{
+	  rvtt_refuse (RVTT_REF_CC_RESTORE_UNROLL_PRESSURE_UNMODELED, dump_file,
+		       "Invariant SFPU immediate hoist refused:"
+		       " cc-restore-unroll-pressure-unmodeled"
+		       " (pressure-limited short constant trip count)\n");
+	  continue;
+	}
 
       /* Commit: all proofs hold and at least one load will move.  A
 	 shared entry edge is split only now, so every refusal above
