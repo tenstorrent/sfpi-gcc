@@ -32188,6 +32188,30 @@ parking, and an early-hoist deferral can be rescued when its
 keep-side is fully proven; unpriceable alternatives decline and keep
 the established decision.
 
+@opindex mtt-tensix-optimize-crosscall-hoist
+@item -mtt-tensix-optimize-crosscall-hoist
+Hoist a non-inlined callee's call-invariant immediate materializations
+into every proven caller's loop preheader, carrying the values across
+the calls in architecturally pinned vector registers.  Every unproven
+link declines.
+
+@opindex mtt-tensix-optimize-crosscall-config-prefix
+@item -mtt-tensix-optimize-crosscall-config-prefix
+Extend the cross-call hoist to a callee prefix pair consisting of an
+all-constant materialization whose single consumer is an
+@code{SFPCONFIG} write to a programmable constant register: the pair is
+re-materialized once in every proven caller's loop preheader and
+deleted from the callee.  Effective only with
+@option{-mtt-tensix-optimize-crosscall-hoist}.
+
+@opindex mtt-tensix-optimize-crosscall-addrmod
+@item -mtt-tensix-optimize-crosscall-addrmod
+Hoist the configuration program for a callee's Dst auto-increment
+address-modifier slots into the proven caller's loop entry, so the
+callee's auto-increment groups run at zero per-call configuration cost.
+Soundness rests on a whole-callee census showing nothing else writes
+the owned configuration slots.  Every unproven link declines.
+
 @node Tensix Register Allocation Options
 @subsubsection Tensix Register Allocation Options
 

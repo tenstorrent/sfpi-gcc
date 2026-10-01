@@ -740,8 +740,17 @@ mtt-tensix-optimize-lut-select-fp16
 Target Var(riscv_tt_opt_lut_select_fp16) Init(0)
 Extend LUT instruction selection with the FP16-coefficient six-entry SFPLUTFP32 table modes.
 
+mtt-tensix-optimize-crosscall-hoist
+Target Var(riscv_tt_opt_crosscall_hoist) Init(0)
+Hoist a callee's call-invariant pinned-register immediate materializations into proven callers' loop preheaders.
 
+mtt-tensix-optimize-crosscall-config-prefix
+Target Var(riscv_tt_opt_crosscall_config_prefix) Init(0)
+Extend the cross-call hoist to a callee's constant SFPCONFIG programming prefix.
 
+mtt-tensix-optimize-crosscall-addrmod
+Target Var(riscv_tt_opt_crosscall_addrmod) Init(0)
+Hoist a callee's owned address-modifier configuration program into proven callers' loop entries.
 
 
 
