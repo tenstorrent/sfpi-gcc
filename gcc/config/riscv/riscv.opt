@@ -761,6 +761,9 @@ mtt-tensix-optimize-native-compare
 Target Var(riscv_tt_opt_native_compare) Init(0)
 Lower eligible float vector comparison webs to the native Blackhole SFPGT/SFPLE instructions.
 
+mtt-tensix-optimize-int-abs
+Target Var(riscv_tt_opt_int_abs) Init(0)
+Fold a conditional-negate predicated SFPU region into the single integer SFPABS instruction.
 
 
 
