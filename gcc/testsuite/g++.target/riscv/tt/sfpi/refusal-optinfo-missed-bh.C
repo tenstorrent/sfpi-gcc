@@ -19,14 +19,14 @@ __attribute__((noinline)) void optinfo_float_shrink (float lam) // { dg-missed "
 {
   for (int ix = 0; ix < 8; ++ix)
     {
-      const sfpi::vFloat v = sfpi::dst_reg[0];
+      const sfpi::vFloat v = sfpi::dst_reg[0].mode<sfpi::DataLayout::F16b> ();
       sfpi::vFloat r = v;
       v_if (sfpi::abs(v) <= lam)
 	{
 	  r = 0.0f;
 	}
       v_endif;
-      sfpi::dst_reg[0] = r;
+      sfpi::dst_reg[0].mode<sfpi::DataLayout::F16b> () = r;
       sfpi::dst_reg++;
     }
 }

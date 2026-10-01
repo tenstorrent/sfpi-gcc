@@ -78,10 +78,8 @@ along with GCC; see the file COPYING3.  If not see
        stores only under the predicate has architecturally different
        Dst-canonicalization behavior than the all-lanes write-back its
        semantic twin compiles to.
-     - (SRCB, SRCB) IS NOT SWEPT.  `grep -i srcb' the RESULT and you
-       get nothing: the row is DERIVED, as the most-refusing class of
-       the diagonal float pairs, on the assumption that SFPLOAD and
-       SFPSTORE resolve MOD0_FMT_SRCB to the SAME concrete format.
+     - (SRCB, SRCB) IS NOT SWEPT and has no admission row.  SFPLOAD and
+       SFPSTORE need not resolve MOD0_FMT_SRCB to the SAME format.
        The ISA models do not grant that (SFPLOAD.md:67-82 takes SrcBFmt
        from ThreadConfig.SFPU_DEST_FMT_Base on Blackhole when
        SFPU_DEST_FMT_Enable is set; SFPSTORE.md:58-71 has no such
@@ -92,13 +90,10 @@ along with GCC; see the file COPYING3.  If not see
        (sweep_store_sink_roundtrip.c --cross): four are a WIDTH
        MISMATCH (FP32's 32-bit Dst datum against the 16-bit one) and
        the two same-width cells are NOT-EQUAL on 65530 of 65536 Dst
-       bit patterns, against 254 and 2046 on the diagonal.  The row's
-       LICENSED/DENORMAL_FLUSH class is therefore sound only on the
-       three cells it ranks.  An open item, recorded rather than
-       papered over: the honest repair is a same-resolution
-       precondition, which needs an ISA guarantee this pass cannot
-       currently cite, not a dropped row -- dropping it would cost a
-       real optimisation on 13 corpus ops.
+       bit patterns, against 254 and 2046 on the diagonal.  No
+       license can cover this with the diagonal denormal-flush proof;
+       the pair refuses store-fold-sink-format-unproven.  A future
+       same-resolution proof may restore the optimization.
 
    THE STORE-SINK LICENSE (-mtt-tensix-optimize-store-sink, owner
    ratification 2026-08-26): the float-pair refusal above is the
@@ -839,8 +834,8 @@ fold_merge_store (rvtt_cc_region_tree *ccr, gcall *assign, gcall *store)
   long sfmt = rvtt_call_int_arg (store, 5);
   bool licensed = false;
   /* Format-pair admission by the GENERATED verdict table (one row per
-     exhaustively swept Dst round trip plus the runtime-resolved SRCB
-     row; tt/rvtt-storefold-verdicts.def, byte-checked against
+     exhaustively swept Dst round trip; tt/rvtt-storefold-verdicts.def,
+     byte-checked against
      tt/proofs/store-sink-roundtrip/RESULT.txt every build).  A pair
      without a row has no round-trip proof on record -- and so does a
      pair whose row was proven on the OTHER target: the (INT32,INT32)
@@ -867,8 +862,8 @@ fold_merge_store (rvtt_cc_region_tree *ccr, gcall *assign, gcall *store)
     case STOREFOLD_LICENSED:
       /* Float pairs canonicalize Dst (the store conversion flushes
 	 denormals; every round-trip mismatch is in the denormal class:
-	 the NOT-EQUAL float rows, SRCB resolves at runtime to one of
-	 the swept float paths).  The predicated-store form preserves
+	 the NOT-EQUAL static-format float rows).  The predicated-store
+	 form preserves
 	 those bits -- admitted ONLY under the
 	 -mtt-tensix-optimize-store-sink license token (owner
 	 ratification 2026-08-26: the sunk form is the golden-closer

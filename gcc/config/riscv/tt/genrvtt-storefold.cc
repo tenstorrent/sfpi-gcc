@@ -50,10 +50,9 @@ along with GCC; see the file COPYING3.  If not see
 	 -> REFUSE: outside the ratified scope (the WH INT32_SM pair's
 	    negative-zero divergence), refuses with or without the
 	    license token.
-     - the SRCB store format resolves at RUNTIME to one of the swept
-       float paths (the row's ALU config owns the
-       resolution), so the emitted SRCB row carries the
-       MOST REFUSING class of the swept float pairs (FP16/BF16/FP32).
+     - SRCB is not a static format.  Its load and store can resolve
+       differently, so diagonal float-pair proofs do not license an
+       SRCB/SRCB sink row.  Such a pair has no row and refuses.
      - EVERY ROW CARRIES THE TARGET IT WAS PROVEN ON.  The sink pass
        admits BH or WH, but the RESULT's rows do not all cover both:
        a description ending "(BH)" or "(WH)" is that target only, and
@@ -63,9 +62,7 @@ along with GCC; see the file COPYING3.  If not see
        both labelled Dst32b (BH) -- were admitted on WH with no WH
        evidence, while the one WH-labelled row (INT32_SM) exists
        precisely because WH's integer Dst path differs from BH's.  The
-       derived SRCB row takes the INTERSECTION of the arches of the
-       pairs it ranks, because a derivation is no broader than its
-       narrowest input.  A pair with no row FOR THIS TARGET refuses
+       A pair with no row FOR THIS TARGET refuses
        store-fold-sink-format-unproven.
      - each stochrnd proof row pairs one SFPSTOCHRND float conversion
        with its matching-precision store Mod0 (that pairing IS the
@@ -82,9 +79,8 @@ along with GCC; see the file COPYING3.  If not see
        claim both at once.  Such rows are therefore RECORDED and
        REFUSED, never emitted as a pair: the pass then refuses them by
        name (stochrnd-store-fold-format-mismatch).  The sink policy
-       above may still derive its SRCB row because it ranks one round
-       trip's divergence within a fixed layout; this license needs a
-       converting store to exist at all.
+       The sink also refuses SRCB: load and store format resolution
+       need not agree, so the static diagonal proofs do not cover it.
 
    Mod0/Mod1 numeric encodings are transcribed to the symbolic
    capability constants (BlackholeA0 SFPSTORE.md/SFPLOAD.md and
@@ -547,27 +543,6 @@ arch_token (const std::string &desc)
   return "STOREFOLD_ARCH_SHARED";
 }
 
-/* Rank a token for intersection: the derived SRCB row is no broader
-   than the narrowest pair it ranks.  */
-
-static unsigned
-arch_mask (const char *tok)
-{
-  if (strcmp (tok, "STOREFOLD_ARCH_BH") == 0)
-    return 1u;
-  if (strcmp (tok, "STOREFOLD_ARCH_WH") == 0)
-    return 2u;
-  return 3u;
-}
-
-static const char *
-arch_of_mask (unsigned m)
-{
-  return m == 1u ? "STOREFOLD_ARCH_BH"
-    : m == 2u ? "STOREFOLD_ARCH_WH"
-    : m == 3u ? "STOREFOLD_ARCH_SHARED" : "STOREFOLD_ARCH_NONE";
-}
-
 /* True when MOD0 names a store format the hardware resolves
    statically.  0 (SRCB) is the one encoding that does not: it is an
    indirection into the row's ALU configuration, so it cannot key an
@@ -583,12 +558,10 @@ static_store_format_p (long mod0)
    ARGV[2] the stochrnd store RESULT, ARGV[3] the output .def path.
    Parse both inputs, cross-check every encoding and every verdict
    against its mismatch census and stream commitments (refusing on
-   anything unknown or inconsistent), derive the SRCB
-   runtime-resolution rows as the most refusing of the swept float
-   pairs, and write the table: one proof commitment per input, one
-   RVTT_STOREFOLD_SINK_PAIR per proven pair plus the derived SRCB row,
-   and one RVTT_STOCHRND_STORE_PAIR per licensed pairing plus its SRCB
-   twin.  Returns nonzero on any failure.  */
+   anything unknown or inconsistent), and write the table: one proof
+   commitment per input, one RVTT_STOREFOLD_SINK_PAIR per proven pair,
+   and one RVTT_STOCHRND_STORE_PAIR per licensed static-format pairing.
+   SRCB has no admission row.  Returns nonzero on any failure.  */
 
 int
 main (int argc, const char **argv)
@@ -690,49 +663,6 @@ main (int argc, const char **argv)
 	}
     }
 
-  /* The SRCB runtime-resolution class: most refusing over the swept
-     float pairs (FIRE < LICENSED < REFUSE).  */
-  auto rank = [] (const char *lic) -> int
-  {
-    return strcmp (lic, "FIRE") == 0 ? 0
-      : strcmp (lic, "LICENSED") == 0 ? 1 : 2;
-  };
-  int srcb_rank = -1;
-  unsigned srcb_arch = 3u;
-  bool srcb_not_equal = false;
-  bool srcb_mixed = false;
-  const char *srcb_class = "NONE";
-  unsigned floats_seen = 0;
-  for (const sink_pair &p : pairs)
-    if (p.lmod == 1 || p.lmod == 2 || p.lmod == 3)
-      {
-	floats_seen++;
-	const char *div = divergence_class (p.c);
-	const char *lic = license_class (p.verdict, div);
-	if (rank (lic) > srcb_rank)
-	  srcb_rank = rank (lic);
-	srcb_arch &= arch_mask (arch_token (p.desc));
-	if (p.verdict == "NOT-EQUAL")
-	  srcb_not_equal = true;
-	if (strcmp (srcb_class, "NONE") == 0)
-	  srcb_class = div;
-	else if (strcmp (srcb_class, div) != 0
-		 && strcmp (div, "NONE") != 0)
-	  srcb_mixed = true;
-      }
-  if (floats_seen != 3)
-    {
-      fprintf (stderr, "genrvtt-storefold: %s: expected the three swept"
-	       " float pairs (FP16/BF16/FP32), found %u -- the SRCB"
-	       " runtime-resolution row cannot be derived\n",
-	       argv[1], floats_seen);
-      return 1;
-    }
-  const char *srcb_lic = srcb_rank == 0 ? "FIRE"
-    : srcb_rank == 1 ? "LICENSED" : "REFUSE";
-  if (srcb_mixed)
-    srcb_class = "MIXED";
-
   FILE *out = fopen (argv[3], "w");
   if (!out)
     {
@@ -801,8 +731,8 @@ main (int argc, const char **argv)
 	   "     the target the RESULT proved the row on -- BH, WH, or\n"
 	   "     SHARED for the simulator arm both pinned oracles\n"
 	   "     compile.  A pair with no row FOR THIS TARGET refuses the\n"
-	   "     same way as a pair with no row at all; the derived SRCB\n"
-	   "     row takes the intersection of the arches it ranks.\n"
+	   "     same way as a pair with no row at all.  SRCB/SRCB has\n"
+	   "     no row: its load and store may resolve differently.\n"
 	   "   RVTT_STOCHRND_STORE_PAIR (conv_mod1, store_mod0, fused_sha,\n"
 	   "			       direct_sha)\n"
 	   "     One licensed matching-precision pairing for the stochrnd\n"
@@ -816,14 +746,8 @@ main (int argc, const char **argv)
 	   "     rows are recorded above and refused, never admitted, so\n"
 	   "     an SRCB store refuses stochrnd-store-fold-format-mismatch.\n"
 	   "\n"
-	   "   The SINK SRCB row carries no stream commitment of its own:\n"
-	   "   the SRCB store resolves at runtime to one of the swept float"
-	   " paths (the\n"
-	   "   row's ALU config owns the resolution)"
-	   " --\n"
-	   "   its class is derived as the most refusing of the swept"
-	   " float\n"
-	   "   pairs.  */\n"
+	   "   No SINK SRCB row is emitted: the swept diagonal float pairs\n"
+	   "   do not cover cross-resolution load/store pairs.  */\n"
 	   "\n",
 	   sink_in.cite.c_str (), sink_in.filehash.c_str (),
 	   rnd_in.cite.c_str (), rnd_in.filehash.c_str ());
@@ -849,14 +773,8 @@ main (int argc, const char **argv)
 	       div, lic, arch_token (p.desc),
 	       p.roundtrip_sha.c_str (), p.identity_sha.c_str ());
     }
-  fprintf (out, "/* SRCB, runtime-resolved to a swept float path;"
-	   " arch is the\n   intersection of the pairs this class is"
-	   " derived from.  */\n");
-  fprintf (out, "RVTT_STOREFOLD_SINK_PAIR (SFPMEM_MOD0_FMT_SRCB,"
-	   " SFPMEM_MOD0_FMT_SRCB, %s, %s, %s,\n\t\t\t  %s,\n"
-	   "\t\t\t  \"-\", \"-\")\n\n",
-	   srcb_not_equal ? "NOT_EQUAL" : "EQUAL", srcb_class, srcb_lic,
-	   arch_of_mask (srcb_arch));
+  fprintf (out, "/* SRCB/SRCB has no row: runtime load/store resolutions"
+	   " may differ.  */\n\n");
 
   for (const stochrnd_row &r : rows)
     {
