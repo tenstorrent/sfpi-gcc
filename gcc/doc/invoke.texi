@@ -32167,6 +32167,58 @@ metric strictly improves, keeping the original order byte-identically
 otherwise.
 
 @table @gcctabopt
+@opindex mtt-tensix-optimize-latency-schedule
+@item -mtt-tensix-optimize-latency-schedule
+Fill result-latency bubbles---cycles in which a result is not yet
+available to its consumer---with independent ready SFPU instructions.
+
+@opindex mtt-tensix-optimize-interlock-schedule
+@item -mtt-tensix-optimize-interlock-schedule
+Fill hardware-interlock stalls whose duration the compiler can prove
+with independent SFPU instructions.
+
+@opindex mtt-tensix-optimize-list-schedule
+@item -mtt-tensix-optimize-list-schedule
+List-schedule straight-line SFPU regions over the dependence graph
+against the modeled issue timeline, filling latency shadows and
+interleaving independent chains.  This scheduler runs after register
+allocation, where the eight LREGs and their anti- and output-dependence
+edges are themselves the pressure bound.
+
+@opindex mtt-tensix-optimize-cyclic-region-schedule
+@item -mtt-tensix-optimize-cyclic-region-schedule
+Reschedule the interior regions of a single-block SFPU loop whose body
+contains barrier words.  Each maximal run of schedulable instructions
+strictly between barrier words (which keep their positions) is
+re-scheduled, and the result commits only on a strict decrease of the
+whole loop's modeled steady-state initiation interval under a wrapped
+(cyclic) issue model.  Because no instruction crosses a barrier word or
+the loop back edge, per-iteration semantics are preserved by
+construction.  Regions touching the loop boundary, repeated region
+shapes, and rows containing calls or unanalyzable words decline.
+
+@opindex mtt-tensix-optimize-ims
+@item -mtt-tensix-optimize-ims
+Schedule single-block SFPU loops by iterative modulo scheduling.  The
+compiler computes the minimum initiation interval from resource and
+recurrence bounds, places the loop's instructions against a modulo
+reservation table with a budgeted eviction rule, and offers the
+resulting order as a candidate to the cyclic acceptance path above,
+committing only on a strict whole-loop II decrease.  Placements whose
+value lifetimes exceed the II would owe kernel copies
+(modulo-variable expansion); this option only prices that obligation
+and declines it (see @option{-mtt-tensix-optimize-mve-expand} for the
+realization).  Loops with unknown instruction latencies, exhausted
+placement budgets, or no provable II decrease decline.
+
+@opindex mtt-tensix-ims-budget
+@item -mtt-tensix-ims-budget=@var{n}
+Set the absolute placement budget for the modulo-scheduling eviction
+loop.  The default of 0 selects the built-in budget of eight placements
+per region word.  Exhausting the budget declines the loop, so
+tightening the budget can only cause more loops to keep their original
+schedule; it never affects the soundness of an accepted schedule.
+
 @opindex mtt-tensix-optimize-round-interleave
 @item -mtt-tensix-optimize-round-interleave
 Interleave two consecutive iterations of a counted SFPU round loop
@@ -32175,6 +32227,14 @@ and the doubled body is cyclically list-scheduled, renaming registers
 where the two copies would collide.  Dependent recurrences, register
 pressure beyond the eight LREGs, and loops owned by replay or MOP
 formation decline.
+
+@opindex mtt-tensix-optimize-capture-rotation
+@item -mtt-tensix-optimize-capture-rotation
+Rotate the instruction rows of a replayed capture so that a stall at
+the row boundary is overlapped with independent work from the other end
+of the row.  Only stalls whose duration the compiler can prove are
+considered.
+@end table
 
 @node Tensix Constant Placement Options
 @subsubsection Tensix Constant Placement Options
@@ -32577,6 +32637,76 @@ windows once the fold has made them word-uniform, and one post-fold
 allocation prices every candidate against the single replay buffer.
 The deferral loses no opportunity: every window capturable before the
 fold is capturable verbatim after it.
+
+@opindex mtt-tensix-optimize-window-pairing-stride
+@item -mtt-tensix-optimize-window-pairing-stride
+Generalize the window-pairing proof to rows whose Dst addresses advance
+with any issued word of the row, rebasing each access footprint by the
+stride phase of its carrying word.  Effective only where
+@option{-mtt-tensix-optimize-window-pairing} reaches the tuner.
+
+@opindex mtt-tensix-optimize-crossrow-pairing
+@item -mtt-tensix-optimize-crossrow-pairing
+Pair consecutive iterations of an eligible single-row Dst loop into one
+doubled row whose two iterations interleave, halving the loop-control
+overhead per row: the second copy's Dst accesses are rebased to the
+static offset the removed row advance would have supplied, the shared
+trailing row advance steps both rows at once, and the counter is halved
+under a proven even trip count.  The doubled row keeps the counted-loop
+replay capture shape.  Any unproven ingredient (entry CC state, operand
+disjointness, counter shape or parity, register pressure, modeled II)
+declines and keeps the single row.  @emph{Blackhole only.}
+
+@opindex mtt-tensix-optimize-crossrow-pairing-stall-words
+@item -mtt-tensix-optimize-crossrow-pairing-stall-words
+Admit instructions carrying the architectural next-slot acceptance
+stall (the @code{SFPSWAP} family) into cross-row pairing.  Such an
+instruction is priced at two issue slots in both baseline and candidate
+schedules and counts as one recorded word against the replay budget.
+Effective only where @option{-mtt-tensix-optimize-crossrow-pairing}
+admits the loop.  @emph{Blackhole only.}
+
+@opindex mtt-tensix-optimize-crossrow-pairing-seed
+@item -mtt-tensix-optimize-crossrow-pairing-seed
+Allow cross-row pairing to rename register webs whose defining
+instruction executes inside a predicated region, by seeding an
+all-lanes copy of the old register immediately after its last preceding
+definition so disabled lanes observe the identical preserved value.
+Each seed is charged as one issued word, and the seed set commits only
+on a strict modeled II improvement.  Effective only where
+@option{-mtt-tensix-optimize-crossrow-pairing} admits the loop.
+@emph{Blackhole only.}
+
+@opindex mtt-tensix-optimize-crossrow-shared-reload
+@item -mtt-tensix-optimize-crossrow-shared-reload
+When both halves of a paired row materialize the same register through
+word-for-word identical constant-only definition groups, delete the
+copy's definitions and re-sequence the merged row so every surviving
+consumer reads the first half's materializations in a provably correct
+order.  Admission requires the shared register dead into and out of the
+loop, purely constant definition groups, and no other register
+interaction between the reordered words; the result commits only when
+its modeled II does not regress.  Effective only where
+@option{-mtt-tensix-optimize-crossrow-pairing} admits the loop.
+@emph{Blackhole only.}
+
+@opindex mtt-tensix-optimize-mve-expand
+@item -mtt-tensix-optimize-mve-expand
+Realize the modulo-variable-expansion kernel unroll on counted,
+replay-formable kernels admitted by cross-row pairing: when the modulo
+placement of the single kernel proves an initiation interval whose
+value lifetimes require exactly two kernel copies, order the doubled
+row by that placement---each copy's words at their modulo issue slots,
+the second iteration offset by one II---realizing the overlap the flat
+order cannot.  Colliding register webs are renamed through the renaming
+engine, the expansion demand is priced against the register file, and
+an independent post-commit check re-verifies every rename, restoring
+the original bytes on any divergence.  The realized order commits only
+when its modeled II strictly beats both the paired candidate and the
+doubled sequential baseline.  Effective only where
+@option{-mtt-tensix-optimize-crossrow-pairing} admits the loop.
+@emph{Blackhole only.}
+@end table
 
 @node Tensix Macro Planner Options
 @subsubsection Tensix Macro Planner Options
