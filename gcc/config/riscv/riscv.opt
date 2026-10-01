@@ -806,6 +806,9 @@ mtt-tensix-optimize-crossloop-hoist
 Target Var(riscv_tt_opt_crossloop_hoist) Init(0)
 Hoist loop-invariant SFPU immediate materializations across enclosing loops proven free of interfering effects.
 
+mtt-tensix-optimize-repr-prop
+Target Var(riscv_tt_opt_repr_prop) Init(0)
+Cancel proven-involution SFPU representation-conversion pairs across value webs.
 
 mtt-tensix-optimize-reassoc
 Target Var(riscv_tt_opt_reassoc) Init(0)
