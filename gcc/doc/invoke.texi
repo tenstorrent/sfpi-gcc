@@ -32352,6 +32352,59 @@ These options control allocation and renaming of the eight SFPU vector
 registers.  All are disabled by default except as noted.
 
 @table @gcctabopt
+@opindex mtt-tensix-optimize-lreg-rename-chains
+@item -mtt-tensix-optimize-lreg-rename-chains
+After register allocation, move storage-colliding single-definition
+def-use webs of vector registers onto proven-free registers,
+following the formulation of GCC's own register renaming pass scoped
+to the Tensix vector file.  A rename is admitted only under an effect
+check for every instruction touched, a conservative rule declining
+spans containing CC events, and a lane-exact proof that the old value
+is dead; the committed result is re-verified structurally.  Delivered
+instruction words never change; only register fields move.  This pass
+also provides the renaming service that the schedulers above request
+renames through.
+
+@opindex mtt-tensix-optimize-lreg-rename
+@item -mtt-tensix-optimize-lreg-rename
+Historical spelling: requests exactly the same renaming engine as
+@option{-mtt-tensix-optimize-lreg-rename-chains}.  (The distinct
+single-shape renaming pass this option originally selected was retired;
+the spelling is kept for command-line compatibility.)
+
+@opindex mtt-tensix-optimize-rename-temporal
+@item -mtt-tensix-optimize-rename-temporal
+Extend the renaming engine in two ways.  First, admit temporally scoped
+rename targets: when no register is untouched across the whole block, a
+target is still admissible when it is untouched across the renamed span
+itself and its lifetimes outside the span provably cannot observe the
+renamed value.  Such a target is priced over a window extended through
+its first touch after the renamed span, and the rename is applied only
+when the timing model shows a strict issue-slot gain: a temporally
+scoped target borrows a register with a live downstream use, and a
+rename that buys nothing would only consume scheduling freedom the
+later fill and replay-formation passes need.  This bar applies both in
+the standalone renaming pass and to temporally scoped targets handed
+out through the rename service, except to a requester that replaces
+the whole row's schedule under its own strict acceptance and preserves
+the counted replay-capture shape (the kernel-unroll realization);
+under the present timing vocabulary no other temporal candidate clears
+the bar, so every one is declined by name.  Second, let the cyclic-interior
+scheduler request renames for storage collisions before candidate
+generation, undoing every rename exactly when the candidate schedule
+is not accepted.  Every unproven clause declines.
+
+@opindex mtt-tensix-optimize-rename-cc-region
+@item -mtt-tensix-optimize-rename-cc-region
+Relax the renaming engine's conservative no-CC-events-in-span rule
+using the CC-region frame tree: a span crossing CC activity is admitted
+when every event is proven confined to balanced in-span save/restore
+frames that only narrow the lane-enable state, or when the span's entry
+state is proven to be the all-lanes state and any required final state
+is restored exactly.  Every unproven case declines exactly as under the
+conservative rule.
+@end table
+
 @node Tensix Replay and Delivery Options
 @subsubsection Tensix Replay and Delivery Options
 

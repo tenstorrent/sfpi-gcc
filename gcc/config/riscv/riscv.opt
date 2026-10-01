@@ -822,9 +822,23 @@ mtt-tensix-optimize-reassoc-mad-restructure
 Target Var(riscv_tt_opt_reassoc_mad_restructure) Init(0)
 Allow fusing separate multiply and add instructions into one fused multiply-add; requires -fassociative-math to take effect.
 
+; Historical spelling: requests the same renaming engine as
+; -mtt-tensix-optimize-lreg-rename-chains.
+mtt-tensix-optimize-lreg-rename
+Target Var(riscv_tt_opt_lreg_rename) Init(0)
+Rename storage-colliding vector register webs (historical spelling of -mtt-tensix-optimize-lreg-rename-chains).
 
+mtt-tensix-optimize-lreg-rename-chains
+Target Var(riscv_tt_opt_lreg_rename_chains) Init(0)
+Rename storage-colliding vector register def-use webs onto proven-free registers after allocation.
 
+mtt-tensix-optimize-rename-temporal
+Target Var(riscv_tt_opt_rename_temporal) Init(0)
+Admit temporally-scoped rename targets and cyclic-interior rename requests in the vector register renaming engine.
 
+mtt-tensix-optimize-rename-cc-region
+Target Var(riscv_tt_opt_rename_cc_region) Init(0)
+Admit renames across proven-balanced CC regions in the vector register renaming engine.
 
 mtt-tensix-optimize-ccmask
 Target Var(riscv_tt_opt_ccmask) Init(0)
