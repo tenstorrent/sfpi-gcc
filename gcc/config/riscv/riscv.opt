@@ -728,8 +728,17 @@ Hoist loop-invariant Tensix immediate-vector materializations before register al
 
 
 
+mtt-tensix-optimize-lut-select
+Target Var(riscv_tt_opt_lut_select) Init(1)
+Select Tensix SFPU LUT instructions from encodable magnitude range-dispatch trees.
 
+mtt-tensix-optimize-lut-select-leaf-ext
+Target Var(riscv_tt_opt_lut_select_leaf_ext) Init(0)
+Extend LUT instruction selection with certified multiply-only and provable-constant leaf classes.
 
+mtt-tensix-optimize-lut-select-fp16
+Target Var(riscv_tt_opt_lut_select_fp16) Init(0)
+Extend LUT instruction selection with the FP16-coefficient six-entry SFPLUTFP32 table modes.
 
 
 
