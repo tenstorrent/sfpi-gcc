@@ -752,8 +752,17 @@ mtt-tensix-optimize-priced-placement
 Target Var(riscv_tt_opt_priced_placement) Init(0)
 Arbitrate the competing invariant-constant placement tiers through one priced authority.
 
+mtt-tensix-optimize-lreg-alloc
+Target Var(riscv_tt_opt_lreg_alloc) Init(0)
+Color the SFPU vector interference graph before register allocation, spilling selected value webs through free Dst scratch rows.
 
+mtt-tensix-optimize-lreg-coalesce
+Target Var(riscv_tt_opt_lreg_coalesce) Init(0)
+Apply conservative (Briggs/George) coalescing to the SFPU vector interference graph.
 
+mtt-tensix-dst-layout-32b
+Target Var(riscv_tt_dst_layout_32b) Init(0)
+Declare that every SFPU calculation body in this translation unit executes under a 32-bit-row Dst layout; a false declaration causes silent wrong output.
 
 mtt-tensix-optimize-transp-involution
 Target Var(riscv_tt_opt_transp_involution) Init(0)

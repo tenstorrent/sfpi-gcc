@@ -183,6 +183,7 @@ INSERT_PASS_BEFORE (pass_ira, 1, pass_rvtt_dst_ownership);
    ten-simultaneously-live instruction order can still become an
    eight-register-schedulable one.  */
 INSERT_PASS_BEFORE (pass_ira, 1, pass_rvtt_lp_schedule_prera);
+INSERT_PASS_BEFORE (pass_ira, 1, pass_rvtt_lp_alloc);
 INSERT_PASS_BEFORE (pass_postreload, 1, pass_rvtt_synth_opcode);
 /* The generic macro planner analyzes and forms macro regions after IRA
    has assigned LREGs, ahead of the hazard scheduler and replay
