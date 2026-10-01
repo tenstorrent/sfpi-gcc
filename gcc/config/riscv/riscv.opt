@@ -640,17 +640,29 @@ Remove dead Tensix instructions.
 
 
 
+mtt-tensix-optimize-const-residency
+Target Var(riscv_tt_opt_const_residency) Init(0)
+Allocate programmable constant registers to proven-constant SFPU values by priced selection.
+
+
+mtt-tensix-optimize-pressure-park
+Target Var(riscv_tt_opt_pressure_park) Init(0)
+Hoist qualifying constant materializations placed after a CC write when a whole-function pressure model proves it safe.
 
 
 
 
 
 
+mtt-tensix-optimize-park-ordering
+Target Var(riscv_tt_opt_park_ordering) Init(0)
+Defer qualifying in-loop constant placements from the early invariant hoist to the late constant-residency walk.
 
 
 
-
-
+mtt-tensix-optimize-priced-placement
+Target Var(riscv_tt_opt_priced_placement) Init(0)
+Arbitrate the competing invariant-constant placement tiers through one priced authority.
 
 
 
@@ -668,6 +680,9 @@ mtt-tensix-optimize-replay
 Target Var(riscv_tt_opt_replay) Init(1)
 Generate Tensix replay instructions.
 
+mtt-tensix-optimize-replay-hoist
+Target Var(riscv_tt_opt_replay_hoist) Init(0)
+Hoist fixed-encoding Tensix replay captures out of profitable loops.
 
 
 
@@ -677,19 +692,36 @@ Generate Tensix replay instructions.
 
 
 
+mtt-tensix-optimize-replay-loop-unroll
+Target Var(riscv_tt_opt_replay_loop_unroll) Init(0)
+Request generic unrolling of counted single-block SFPU row loops so replay formation can capture the repeated row.
+
+mtt-tensix-optimize-launch-flatten
+Target Var(riscv_tt_opt_launch_flatten) Init(0)
+Request complete unrolling of counted innermost delivery loops so the flattened word stream reaches replay formation.
 
 
 
-
+mtt-tensix-optimize-round-interleave
+Target Var(riscv_tt_opt_round_interleave) Init(0)
+Interleave two iterations of counted SFPU round loops whose iterations are provably independent.
 
 mtt-tensix-replay-hoist-min-benefit=
 Target Joined RejectNegative UInteger Var(riscv_tt_replay_hoist_min_benefit) Init(-1)
 Set the minimum modeled benefit, in hundredths of an issue slot, required to hoist a replay capture.
 
+; Internal diagnostic-test knob: manufactures a trip-oracle-divergence
+; diagnostic; the deciding oracle and generated code are unchanged.
+mtt-tensix-trips-oracle-skew=
+Target Undocumented Joined RejectNegative UInteger Var(riscv_tt_trips_oracle_skew) Init(0) IntegerRange(0,65535)
+Testing only: skew the classical trip-count verdict to manufacture a trip-oracle-divergence diagnostic.
 
 
 
 
+mtt-tensix-optimize-invariant-loadi
+Target Var(riscv_tt_opt_invariant_loadi) Init(0)
+Hoist loop-invariant Tensix immediate-vector materializations before register allocation.
 
 
 
@@ -715,6 +747,9 @@ Allow value-changing floating-point reassociation in the Tensix SFPU passes; req
 
 
 
+mtt-tensix-optimize-cc-region-general
+Target Var(riscv_tt_opt_cc_region_general) Init(0)
+Accept any statement layout the shared CC-region frame tree proves equivalent to the historically recognized shapes.
 
 mtt-tensix-optimize-native-compare
 Target Var(riscv_tt_opt_native_compare) Init(0)

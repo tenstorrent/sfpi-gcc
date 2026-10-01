@@ -20,6 +20,9 @@
 
 // Gimple passes
 INSERT_PASS_BEFORE (pass_all_optimizations, 1, pass_rvtt_check_early);
+/* Place semantic SFPU constants outside counted loops while values are still
+   SSA pseudos.  Doing this after allocation would extend hard-LREG lifetimes.  */
+INSERT_PASS_BEFORE (pass_all_optimizations, 1, pass_rvtt_invariant);
 INSERT_PASS_BEFORE (pass_all_optimizations, 1, pass_rvtt_immvar_expand);
 INSERT_PASS_BEFORE (pass_all_optimizations, 1, pass_rvtt_synth_split);
 
@@ -43,8 +46,32 @@ INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_attrib);
 
 
 
+/* Launch-flatten complete-unroll request: annotation only
+   (loop->unroll = the proven trip count on counted innermost DELIVERY
+   loops -- typed replay records/launches, fixed raw .ttinsn words, typed
+   SFPU builtins, own scalar control).  Placed immediately BEFORE the
+   GIMPLE complete unroller, unlike the pre-expansion requests below: the
+   pragma contract makes cunroll bypass its size estimate (which a typed
+   spelling inflates ~13x over the raw words it lowers to) and fold every
+   per-trip conditional at its proven value, so the flattened stream the
+   replay former and the delivery passes see is the one a hand `#pragma
+   GCC unroll' world has always given them.  */
+INSERT_PASS_BEFORE (pass_complete_unroll, 1, pass_rvtt_launch_flatten);
 
+/* Replay-window loop-unroll request: annotation only (loop->unroll on
+   qualifying counted SFPU row loops, consumed by the generic RTL
+   unroller so the always-on replay former can capture the row).  Runs
+   after every statement-editing pass so its typed census sees the
+   final pre-expansion statement stream (only the round-interleave
+   annotation pass below follows it).  */
+INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_replay_unroll);
 
+/* Round-chain interleave request: annotation only (unroll-by-two on
+   counted SFPU round loops whose iterations are proven independent by
+   dataflow; the cyclic extension of the post-RA list scheduler lifts
+   the self-loop deferral for the doubled body).  Runs after the
+   replay-loop-unroll request and never overrides its annotation.  */
+INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_round_interleave);
 
 // RTL passes
 INSERT_PASS_BEFORE (pass_lower_subreg, 1, pass_rvtt_unspec_prop_rtl);
