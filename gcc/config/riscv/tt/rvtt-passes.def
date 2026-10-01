@@ -103,6 +103,11 @@ INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_attrib);
    streams.  */
 INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_crosslane);
 
+/* Transpose-involution formation + Dst-park elision: late, after the
+   structured-CC lowering and scheduling shape are final, so the
+   operand-def windows and lane-state scan see the stream that will
+   expand.  */
+INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_transp_involution);
 
 
 /* Launch-flatten complete-unroll request: annotation only

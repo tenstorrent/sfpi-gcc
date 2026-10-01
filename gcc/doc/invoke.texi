@@ -32109,6 +32109,12 @@ constant there would cost a copy per store; this option routes such
 constants to the vector-register placement tier instead.  Effective
 only with @option{-mtt-tensix-optimize-const-residency}.
 
+@opindex mtt-tensix-optimize-transp-involution
+@item -mtt-tensix-optimize-transp-involution
+Fuse an @code{SFPTRANSP} with the full-bank loads that define its
+operands into a single bundle that provably preserves the companion
+register bank, and forward provably identical Dst values across it.
+
 @opindex mtt-tensix-optimize-crosslane
 @item -mtt-tensix-optimize-crosslane
 Recognize the canonical cross-lane instruction sequences
