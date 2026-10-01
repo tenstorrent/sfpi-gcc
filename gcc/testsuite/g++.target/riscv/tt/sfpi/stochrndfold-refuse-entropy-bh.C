@@ -1,0 +1,34 @@
+// { dg-options "-mcpu=tt-bh-tensix -O2 -I [SFPI]/include -fno-exceptions -fno-rtti -mtt-tensix-optimize-stochrnd-store-fold -fdump-tree-rvtt_store_fold" }
+// PRNG-stream belt: the function contains a stochastic-rounding
+// consumer, so deleting the deterministic candidate's hidden PRNG
+// advance would shift the stream the consumer samples -- the
+// otherwise-licensed candidate refuses.  (The stochastic site itself
+// refuses mode-unlicensed.)  Both stores are statically BF16-typed, so
+// the deterministic candidate clears the proven-pair check and this
+// belt is what refuses it.
+// { dg-final { scan-tree-dump "store-fold refused .stochrnd-store-fold-entropy-stream" "rvtt_store_fold" } }
+// { dg-final { scan-tree-dump "store-fold refused .stochrnd-store-fold-mode-unlicensed" "rvtt_store_fold" } }
+// { dg-final { scan-tree-dump "stochrnd-folded=0" "rvtt_store_fold" } }
+extern volatile unsigned long __instrn_buffer[];
+namespace ckernel {
+constexpr inline volatile unsigned long (&instrn_buffer)[] = ::__instrn_buffer;
+}
+#include <sfpi.h>
+__attribute__((noinline)) void
+stochrndfold_refuse_entropy ()
+{
+  for (int ix = 0; ix < 8; ++ix)
+    {
+      const sfpi::vFloat a = sfpi::dst_reg[0];
+      const sfpi::vFloat b = sfpi::dst_reg[32];
+      sfpi::vFloat r = a - b;
+      sfpi::vFloat16b c
+	= sfpi::convert<sfpi::vFloat16b>(r, sfpi::RoundMode::Nearest);
+      sfpi::dst_reg[0] = c;
+      sfpi::vFloat s = a + b;
+      sfpi::vFloat16b d
+	= sfpi::convert<sfpi::vFloat16b>(s, sfpi::RoundMode::NearestStochastic);
+      sfpi::dst_reg[32] = d;
+      sfpi::dst_reg++;
+    }
+}

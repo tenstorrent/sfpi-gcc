@@ -32056,6 +32056,17 @@ all 2^32 compared bit patterns recorded in the source tree.  Other
 comparison directions and operand shapes keep the generic lowering.
 @emph{Blackhole only.}
 
+@opindex mtt-tensix-optimize-store-fold
+@item -mtt-tensix-optimize-store-fold
+Fold lane-predicated value merges into the Dst stores that consume
+them: forward the merged source into a store executed under the same
+lane mask, and sink a store that follows a predicated region into the
+region as a predicated store where the format's Dst round trip is
+proven to be the identity.  Every unproven case declines.  This option
+never changes stored values; see
+@option{-mtt-tensix-optimize-store-sink} for the value-changing
+extension.
+
 @opindex mtt-tensix-optimize-cc-region-general
 @item -mtt-tensix-optimize-cc-region-general
 Generalize the recognizers of the CC-consuming folds above.  The
@@ -32261,6 +32272,34 @@ dependent latency hop.  The value change is double versus single
 rounding on the fused product, plus the signed-zero flush the
 immediate-multiply form performs and @code{SFPMAD} does not.  Requires
 @option{-fassociative-math}.
+
+@opindex mtt-tensix-optimize-store-sink
+@item -mtt-tensix-optimize-store-sink
+With @option{-mtt-tensix-optimize-store-fold} also given, sink an
+all-lanes store of a lane-predicated value merge into the predicated
+region as a predicated store even for the floating-point format pairs
+whose elided complement write-back would have canonicalized Dst.  The
+predicated store preserves the original Dst bits on untouched lanes,
+where the all-lanes write-back would have flushed denormal values on
+those lanes; the delivered values therefore change exactly on denormal
+pass-through lanes.  The option covers only the format pairs whose
+proven round-trip divergence is exclusively denormal flush; every other
+pair and shape declines regardless.
+
+@opindex mtt-tensix-optimize-stochrnd-store-fold
+@item -mtt-tensix-optimize-stochrnd-store-fold
+Delete an explicit deterministic nearest-rounding precision-reduction
+instruction (@code{SFPSTOCHRND} in a rounding mode and precision
+matching its single consumer, a format-converting Dst store) and let
+the store's own conversion path deliver the value, reproducing the
+common handwritten idiom of a bare converting store.  The delivered
+bits change by exactly the recorded divergence of the two conversion
+paths: the store truncates toward zero and preserves the signs of zero
+and denormal values, while the explicit instruction rounds to nearest
+and normalizes them.  Stochastic-mode rounding, integer conversions,
+multi-consumer roundings, and functions with other consumers of the
+random-number stream decline regardless of the option.
+@end table
 
 @node Tensix Diagnostic Options
 @subsubsection Tensix Diagnostic Options
