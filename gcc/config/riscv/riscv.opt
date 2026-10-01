@@ -749,6 +749,9 @@ Allow fusing separate multiply and add instructions into one fused multiply-add;
 
 
 
+mtt-tensix-optimize-ccmask
+Target Var(riscv_tt_opt_ccmask) Init(0)
+Fold a single-zero-assign predicated SFPU region into a value-mask compare and AND.
 
 mtt-tensix-optimize-cc-region-general
 Target Var(riscv_tt_opt_cc_region_general) Init(0)
