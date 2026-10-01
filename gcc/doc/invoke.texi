@@ -32020,6 +32020,12 @@ saves, restores, and enables.  Enabled by default.
 Remove Tensix instructions whose results are provably unused.  Enabled
 by default.
 
+@opindex mtt-tensix-optimize-setexp-fold
+@item -mtt-tensix-optimize-setexp-fold
+@itemx -mno-tt-tensix-optimize-setexp-fold
+Fold an exponent extract that feeds @code{SFPSETEXP} into the
+instruction's exponent-copy addressing mode.  Enabled by default.
+
 @opindex mtt-tensix-optimize-native-compare
 @item -mtt-tensix-optimize-native-compare
 Lower strict-greater and less-or-equal floating-point vector comparison
@@ -32225,6 +32231,15 @@ fusion.  The value change is limited to the different rounding of a
 re-associated evaluation order.  Requires @option{-fassociative-math}.
 Integer and bitwise chain rebalancing under this option alone is
 value-identical and needs no such opt-in.
+
+@opindex mtt-tensix-optimize-reassoc-mad-restructure
+@item -mtt-tensix-optimize-reassoc-mad-restructure
+Permit fusing a single-use multiply-and-add pair---two serial
+roundings---into one @code{SFPMAD}---a single rounding---removing one
+dependent latency hop.  The value change is double versus single
+rounding on the fused product, plus the signed-zero flush the
+immediate-multiply form performs and @code{SFPMAD} does not.  Requires
+@option{-fassociative-math}.
 
 @node Tensix Diagnostic Options
 @subsubsection Tensix Diagnostic Options

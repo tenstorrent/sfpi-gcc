@@ -11,6 +11,7 @@ void mul1 ()
 /*
 **_Z4mul1v:
 **	# READ L0
+**	SFPMUL	L0, L0, L10, 0
 **	# WRITE L0
 **	ret
 */
@@ -25,7 +26,7 @@ void mulneg1 ()
 /*
 **_Z7mulneg1v:
 **	# READ L0
-**	SFPMOV	L0, L0, 1
+**	SFPMUL	L0, L0, L11, 0
 **	# WRITE L0
 **	ret
 */
@@ -55,6 +56,7 @@ void add0 ()
 /*
 **_Z4add0v:
 **	# READ L0
+**	SFPADD	L0, L0, L9, 0
 **	# WRITE L0
 **	ret
 */
@@ -92,7 +94,7 @@ void negate2 ()
 }
 /*
 **_Z7negate2v:
-**	SFPMOV	L0, L11, 2
+**	SFPMUL	L0, L10, L11, 0
 **	# WRITE L0
 **	SFPMOV	L1, L9, 2
 **	# WRITE L1

@@ -2,6 +2,8 @@
 // { dg-final { check-function-bodies "**" "" } }
 
 void mad () {
+  // Without an explicit reassociation license, the matched immediate folds
+  // preserve two rounding points even when register pressure is low.
   auto a = __builtin_rvtt_sfpreadlreg (0);
   auto two = __builtin_rvtt_sfpxloadi (nullptr, 0x3fa00000, 0, 0, -32);
   auto three = __builtin_rvtt_sfpxloadi (nullptr, 0x3fb00000, 0, 0, -32);
@@ -13,9 +15,8 @@ void mad () {
 /*
 **_Z3madv:
 **	# READ L0
-**	SFPLOADI	L1, 16288, 0
-**	SFPLOADI	L2, 16304, 0
-**	SFPMAD	L0, L0, L1, L2, 0
+**	SFPMULI	L0, 16288, 0
+**	SFPADDI	L0, 16304, 0
 **	# WRITE L0
 **	ret
 */

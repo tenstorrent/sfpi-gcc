@@ -70,22 +70,8 @@ combine () {
   res = sfpassign_lv (lv2, negated_cst);
 }
 
-// a * 1 -> a
-combine () {
-  one|OU|SA = sfpreadlreg (CREG_IDX_1);
-  res = sfpmul_lv (lv, %a, one, 0);
-  {}
-  res = sfpassign_lv (lv, a);
-}
-
-// a * -1 -> -a
-combine () {
-  { return HAVE_CREG_NEG_1; }
-  neg|OU|SA = sfpreadlreg (CREG_IDX_NEG_1);
-  res = sfpmul_lv (lv, %a, neg, 0);
-  {}
-  res = sfpmov_lv (lv, a, SFPMOV_MOD1_COMPL);
-}
+// Do not elide floating-point arithmetic against 1 or -1.  SFPMUL
+// flushes denormals and canonicalizes NaNs; assignment and SFPMOV do not.
 combine () {
   { return HAVE_CREG_NEG_1; }
   neg|OU|SA = sfpreadlreg (CREG_IDX_NEG_1);
@@ -104,14 +90,8 @@ combine () {
   res = sfpassign_lv (lv, zero);
 }
 
-// a + 0 -> a
-combine () {
-  { return !flag_signed_zeros; }
-  zero|OU|SA = sfpreadlreg (CREG_IDX_0);
-  res = sfpadd_lv (lv, %a, zero, 0);
-  {}
-  res = sfpassign_lv (lv, a);
-}
+// Likewise, !flag_signed_zeros alone does not license eliding SFPADD:
+// denormal flushing and NaN canonicalization remain observable.
 
 // These are deferred because we (a) don't want to interrupt a muladd combiner,
 // and (b) we need information about all runtime sfploadi uses before
@@ -129,11 +109,21 @@ deferred_combine () MULI_ADDI {
   res = sfpmuli_lv (0, lv, a, val, 0, 0, 0);
 }
 
+// Do these in preference to mul,add->mad, as the register pressure is
+// immediately reduced.  EXCEPTION (licensed): a
+// product dying into an add serializes two MAD-subunit roundings where
+// the contract mad rule below delivers one; under BOTH license keys
+// (-fassociative-math + -mtt-tensix-optimize-reassoc-mad-restructure)
+// the fold is vetoed for exactly those pairs and the mad rule fuses
+// them instead (madr_suppress_*_fold_p, gimple-rvtt-combine.cc).
 // a * fp16b(scalar)
 deferred_combine () MULI_ADDI {
   cst|SA|OU = sfploadi (ptr, val, var, id, SFPLOADI_MOD0_FLOATB);
   res = sfpmul_lv (lv, %a, cst, 0);
-  {}
+  {
+    if (madr_suppress_mul_fold_p (res_call))
+      return false;
+  }
   res = sfpmuli_lv (ptr, lv, a, val, var, id, 0);
 }
 
@@ -153,7 +143,10 @@ deferred_combine () MULI_ADDI {
 deferred_combine () MULI_ADDI {
   cst|SA|OU = sfploadi (ptr, val, var, id, SFPLOADI_MOD0_FLOATB);
   res = sfpadd_lv (lv, %a, cst, 0);
-  {}
+  {
+    if (madr_suppress_add_fold_p (a, res_call))
+      return false;
+  }
   res = sfpaddi_lv (ptr, lv, a, val, var, id, 0);
 }
 
@@ -221,7 +214,12 @@ combine (BH_QSR) {
 combine () {
   p = sfpmul_lv (lv1, a, b, mul_mod);
   r = sfpadd_lv (lv2, %p, c, add_mod);
-  { return moot_muli_ok (p_call) && moot_addi_ok (r_call); }
+  // A matched immediate fold owns the pair regardless of the current
+  // pressure estimate.  Letting this rule moot it at low pressure changes
+  // round(round(a*b)+c) into round(a*b+c), contrary to the preference and
+  // license wall above.  The explicit licensed path vetoes the fold before
+  // this rule is considered, so protecting a surviving deferral is exact.
+  { return moot_muli_ok (p_call, true) && moot_addi_ok (r_call, true); }
   {
     // For WH mul_mod and add_mod will be zero
     unsigned iadd_mod = TREE_INT_CST_LOW (add_mod);
@@ -252,6 +250,58 @@ combine (BH_QSR) {
 			 ^ SFPMAD_MOD1_BH_COMPL_A);
   }
   r = sfpmad_lv (lv3, a, b, c, mod);
+}
+
+// a * b + c, MULTI-USE mul -- THE LICENSED MAD FUSION (lane EJ).
+// The default rule above is the sfpi single-use contract: the mul dies
+// into the mad, every consumer sees one rounding.  When the mul has
+// OTHER uses, fusing the add makes the add's consumers see the singly-
+// rounded product while the mul's surviving consumers keep the doubly-
+// rounded one -- a value divergence that only the reassociation
+// license admits (owner ratification 2026-08-21): it fires ONLY under
+// -fassociative-math AND -mtt-tensix-optimize-reassoc (REASSOC_FP =
+// rvtt_reassoc_fp_licensed_p), keeps the mul for its other uses, and
+// prints a named "reassoc:" dump line.  Single-use pairs defer to the
+// default rule so the licensed flags never change the default path.
+combine (REASSOC_FP) {
+  p|OU = sfpmul_lv (lv1, a, b, mul_mod);
+  r = sfpadd_lv (lv2, %p, c, add_mod);
+  {
+    // Defer single-use pairs to the default fuse rule byte-identically.
+    gcall *allowed[1] = { r_call };
+    if (!has_other_use (p, allowed, 1))
+      return false;
+    // Pressure budget: the kept mul adds one live range the default
+    // (mul-dies) fusion would not; refuse when the block cannot prove
+    // headroom (a licensed transform must never make a compilable
+    // kernel uncompilable -- the corpus lreg-pressure finding).
+    if (rvtt_pressure_bb_peak (gimple_bb (r_call)) + 1
+	> rvtt_pressure_capacity ())
+      {
+	if (dump_file)
+	  fprintf (dump_file,
+		   "reassoc: refusing mad-fuse "
+		   "(reassoc-pressure-budget-exceeded: kept multi-use mul "
+		   "adds a live range beyond the 8-LREG budget)\n");
+	return false;
+      }
+  }
+  {
+    if (dump_file)
+      fprintf (dump_file,
+	       "reassoc: licensed mad-fuse of multi-use mul (kept for its "
+	       "other uses) (flag_associative_math && "
+	       "-mtt-tensix-optimize-reassoc)\n");
+    // For WH mul_mod and add_mod will be zero
+    unsigned iadd_mod = TREE_INT_CST_LOW (add_mod);
+    if (r_commuted && iadd_mod)
+      iadd_mod = (iadd_mod & SFPMAD_MOD1_BH_COMPL_A ? SFPMAD_MOD1_BH_COMPL_C : 0)
+	| (iadd_mod & SFPMAD_MOD1_BH_COMPL_C ? SFPMAD_MOD1_BH_COMPL_A : 0);
+
+    mod = build_int_cst (TREE_TYPE (add_mod),
+			 iadd_mod ^ TREE_INT_CST_LOW (mul_mod));
+  }
+  r = sfpmad_lv (lv2, a, b, c, mod);
 }
 
 // -a + b (WH)
@@ -438,6 +488,22 @@ combine (QSR) {
 			       ? SFPIADD_MOD1_CC_LT0 : SFPIADD_MOD1_CC_GTE0)));
   }
   sum = sfpiadd_i_lv (ptr, lv1, val, imm, var, id, mod);
+}
+
+// setexp (man, exexp (z, Biased)) -> setexp-copy (man, z)
+// SFPEXEXP NODEBIAS yields z's raw exponent field ((z >> 23) & 255) and sets
+// no CC; SFPSETEXP mod1=LREG consumes exp & 0xFF while mod1=LREG_CPY consumes
+// (exp >> 23) & 0xFF of the float encoding -- a bit-identical composition for
+// every input, so consume z directly and let a single-use exexp die.  The
+// combiner's same-BB/same-CC-region discipline keeps the lane masks of both
+// instructions identical, which the equivalence requires.
+// Gated: -mtt-tensix-optimize-setexp-fold (compiler-default ON, promoted
+// after hardware validation; -mno-tt-tensix-optimize-setexp-fold disables).
+combine (SETEXP_FOLD) {
+  exp|OU = sfpexexp_lv (exp_lv, z, SFPEXEXP_MOD1_NODEBIAS);
+  res = sfpsetexp_v_lv (lv, man, exp, SFPSETEXP_MOD1_LREG);
+  {}
+  res = sfpsetexp_v_lv (lv, man, z, SFPSETEXP_MOD1_LREG_CPY);
 }
 
 // exexp, Xiadd_i -> exexp

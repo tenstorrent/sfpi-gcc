@@ -741,6 +741,9 @@ Target Var(riscv_tt_opt_reassoc) Init(0)
 Allow value-changing floating-point reassociation in the Tensix SFPU passes; requires -fassociative-math to take effect.
 
 
+mtt-tensix-optimize-reassoc-mad-restructure
+Target Var(riscv_tt_opt_reassoc_mad_restructure) Init(0)
+Allow fusing separate multiply and add instructions into one fused multiply-add; requires -fassociative-math to take effect.
 
 
 
@@ -761,6 +764,9 @@ Lower eligible float vector comparison webs to the native Blackhole SFPGT/SFPLE 
 
 
 
+mtt-tensix-optimize-setexp-fold
+Target Var(riscv_tt_opt_setexp_fold) Init(1)
+Fold a biased Tensix SFPU exponent extract feeding SFPSETEXP into the exponent-copy addressing mode.
 
 ; Retired option retained so stale build flags produce a clear error.
 mtt-tensix-analyze-loadmacro
