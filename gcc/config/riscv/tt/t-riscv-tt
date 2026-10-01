@@ -101,6 +101,8 @@ RVTT_OBJS := rvtt.o \
 	rtl-rvtt-fix-raw.o \
 	rtl-rvtt-hll.o \
 	rtl-rvtt-lreg-rename.o \
+	rtl-rvtt-macro-planner.o \
+	rtl-rvtt-macro-planner-cost.o \
 	rtl-rvtt-mop-form.o \
 	rtl-rvtt-mop-outward.o \
 	rtl-rvtt-replay.o \

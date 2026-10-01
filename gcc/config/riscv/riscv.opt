@@ -650,7 +650,13 @@ mtt-tensix-optimize-capture-rotation
 Target Var(riscv_tt_opt_capture_rotation) Init(0)
 Rotate replayed capture rows to fill known interlock stalls across the row boundary.
 
+mtt-tensix-optimize-drain-schedule
+Target Var(riscv_tt_opt_drain_schedule) Init(0)
+Elide provably unnecessary drain NOPs at macro run boundaries.
 
+mtt-tensix-optimize-window-pairing
+Target Var(riscv_tt_opt_window_pairing) Init(0)
+Reduce inter-row drain spacing to the minimum the pending-event model proves safe.
 
 mtt-tensix-optimize-window-pairing-stride
 Target Var(riscv_tt_opt_window_pairing_stride) Init(0)
@@ -682,6 +688,9 @@ mtt-tensix-mve-expand-sabotage
 Target Undocumented Var(riscv_tt_mve_expand_sabotage) Init(0)
 Testing only: mis-rotate one committed modulo-variable-expansion rename to exercise the post-commit verification.
 
+mtt-tensix-optimize-init-hoist
+Target Var(riscv_tt_opt_init_hoist) Init(0)
+Hoist a callee's loop-invariant initialization prefix into the calling loop's preheader.
 
 mtt-tensix-optimize-prgm-const
 Target Var(riscv_tt_opt_prgm_const) Init(0)
@@ -985,8 +994,17 @@ mtt-tensix-emit-loadmacro
 Target Undocumented Var(riscv_tt_emit_loadmacro) Init(0)
 Removed; using this option is an error.
 
+mtt-tensix-macro-planner
+Target Var(riscv_tt_macro_planner) Init(0)
+Plan, prove, and materialize SFPLOADMACRO schedules from typed effects and target capability tables.
 
+mtt-tensix-macro-planner-analyze
+Target Var(riscv_tt_macro_planner_analyze) Init(0)
+Report macro-planner regions and their recorded decline reasons without changing code.
 
+mtt-tensix-macro-planner-verify
+Target Var(riscv_tt_macro_planner_verify) Init(0)
+Differentially verify synthesized macro-planner descriptors against the region's explicit facts.
 
 ; Internal red/green test knob: corrupts only the verifier-local copy,
 ; pinning that a verification mismatch refuses formation.
@@ -1006,6 +1024,9 @@ mtt-tensix-macro-ims
 Target Var(riscv_tt_macro_ims) Init(0)
 Retry refused macro-calendar proposals with reduced hosted sets and arbitrate formation against the replay alternative.
 
+mtt-tensix-macro-ims-carrier
+Target Var(riscv_tt_macro_ims_carrier) Init(0)
+Form extra-value-carrier variants of proven macro calendars, committing only variants that re-prove at a smaller initiation interval.
 
 mtt-tensix-dump-effects
 Target Var(riscv_tt_dump_effects) Init(0)
