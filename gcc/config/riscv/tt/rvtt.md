@@ -1101,7 +1101,7 @@
 	: TARGET_XTT_TENSIX_QSR	? TT_OP_QSR_SFPIADD (0, 0, 0, INTVAL (operands[7]))
         : (gcc_unreachable (), 0);
       opc = GEN_INT (op);
-      enc = GEN_INT (rvtt_synth (UINTVAL (operands[6])).dst_shift (4).src_shift (8));
+      enc = GEN_INT (rvtt_synth (UINTVAL (operands[6])).src_shift (8).dst_shift (4));
       imm = operands[5];
     }
 
@@ -1331,7 +1331,7 @@
         : TARGET_XTT_TENSIX_QSR ? TT_OP_QSR_SFPSET<rvtt_set_insn> (0, 0, 0, INTVAL (operands[7]))
         : (gcc_unreachable (), 0);
       opc = GEN_INT (op);
-      enc = GEN_INT (rvtt_synth (UINTVAL (operands[6])).src_shift (4).dst_shift (8));
+      enc = GEN_INT (rvtt_synth (UINTVAL (operands[6])).src_shift (8).dst_shift (4));
       imm = operands[5];
     }
 
@@ -1344,7 +1344,7 @@
 (define_insn "rvtt_sfpset<rvtt_set_name>_i_lv_int"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr,xr,xr,xr")
         (unspec_volatile:XTT32SI [
-          (match_operand:SI    1 "mem_or_0_operand" "J,J,n,m")
+          (match_operand:SI    1 "mem_or_0_operand" "J,J,m,m")
           (match_operand:SI    2 "const_int_operand" "J,J,n,n") ;; opcode
           (match_operand:SI    3 "const_int_operand" "J,J,n,n") ;; id, src & dst shifts
           (match_operand:SI    4 "reg_or_const_int_operand" "n,n,r,r") ;; imm or insn
@@ -1724,7 +1724,7 @@
         : TARGET_XTT_TENSIX_QSR ? TT_OP_QSR_SFPDIVP2 (0, 0, 0, INTVAL (operands[7]))
         : (gcc_unreachable (), 0);
       opc = GEN_INT (op);
-      enc = GEN_INT (rvtt_synth (UINTVAL (operands[6])).src_shift (4).dst_shift (8));
+      enc = GEN_INT (rvtt_synth (UINTVAL (operands[6])).src_shift (8).dst_shift (4));
       imm = operands[5];
     }
 
@@ -1811,7 +1811,7 @@
 	             0, 0, 0, 0, INTVAL (operands[7]) | SFPSTOCHRND_MOD1_IMM8)
         : (gcc_unreachable (), 0);
       opc = GEN_INT (op);
-      enc = GEN_INT (rvtt_synth (UINTVAL (operands[6])).src_shift (4).dst_shift (8));
+      enc = GEN_INT (rvtt_synth (UINTVAL (operands[6])).src_shift (8).dst_shift (4));
       imm = operands[5];
     }
 
@@ -2377,7 +2377,7 @@
 	  (match_dup 8)
 	  ] UNSPECV_SFPSHFT2_SUBVEC_COPY4))]
   "TARGET_XTT_TENSIX"
-  "SFPSHFT2\t%x0 %x0, 0, %8"
+  "SFPSHFT2\t%x0, %x0, 0, %8"
   [(set_attr "type" "tensix")
    (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_BH | XTT_DYNAMIC_BUG_QSR)"))])
 
