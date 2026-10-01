@@ -32356,6 +32356,14 @@ Set the minimum modeled benefit, in hundredths of an issue slot,
 required to hoist a replay capture; overrides the built-in cost-table
 default.
 
+@opindex mtt-tensix-optimize-replay-record-hoist
+@item -mtt-tensix-optimize-replay-record-hoist
+Hoist the record phase of a replay capture window that is provably
+iteration-invariant to the loop's dedicated preheader, leaving one
+playback launch per former record site.  Admission keeps every
+structural, invariance, and latency proof; profitability is priced with
+the removed per-iteration record delivery counted as real issue cost.
+
 @opindex mtt-tensix-optimize-replay-loop-unroll
 @item -mtt-tensix-optimize-replay-loop-unroll
 Request generic loop unrolling for counted single-block SFPU row loops
@@ -32372,6 +32380,20 @@ loop-control instructions leave the timed issue path and the flattened
 word stream reaches replay formation.  The trip count must be proven,
 the flattened size is bounded per loop and per function, and the body
 must contain at least one Tensix vector operation.
+
+@opindex mtt-tensix-optimize-dst-autoincr
+@item -mtt-tensix-optimize-dst-autoincr
+Replace constant-stride per-row advances of the Dst row counter with a
+compiler-owned address-modifier auto-increment configuration, removing
+the explicit counter-advance words from the loop body.
+
+@opindex mtt-tensix-optimize-dst-autoincr-load-carrier
+@item -mtt-tensix-optimize-dst-autoincr-load-carrier
+Count raw single-constant inline-assembly instruction words whose
+effects the compiler has audited as occupying replay slots in the Dst
+auto-increment analysis, unlocking the fold in functions whose replay
+recordings contain such words.  The raw words themselves are never
+rewritten.
 
 @node Tensix Macro Planner Options
 @subsubsection Tensix Macro Planner Options

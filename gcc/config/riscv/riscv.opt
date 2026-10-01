@@ -714,6 +714,9 @@ Target Var(riscv_tt_opt_replay_hoist) Init(0)
 Hoist fixed-encoding Tensix replay captures out of profitable loops.
 
 
+mtt-tensix-optimize-replay-record-hoist
+Target Var(riscv_tt_opt_replay_record_hoist) Init(0)
+Hoist the record phase of an iteration-invariant re-recorded replay capture to the loop's preheader.
 
 
 
@@ -752,6 +755,13 @@ mtt-tensix-optimize-invariant-loadi
 Target Var(riscv_tt_opt_invariant_loadi) Init(0)
 Hoist loop-invariant Tensix immediate-vector materializations before register allocation.
 
+mtt-tensix-optimize-dst-autoincr
+Target Var(riscv_tt_opt_dst_autoincr) Init(0)
+Replace constant-stride per-row Dst counter increments with owned address-modifier auto-increment.
+
+mtt-tensix-optimize-dst-autoincr-load-carrier
+Target Var(riscv_tt_opt_dst_autoincr_load_carrier) Init(0)
+Count audited raw single-constant instruction words as replay-slot-occupying so load-carrier rows can form.
 
 
 
