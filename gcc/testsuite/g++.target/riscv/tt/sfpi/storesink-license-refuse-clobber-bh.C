@@ -16,15 +16,15 @@ storesink_clobber (float t)
 {
   for (int ix = 0; ix < 8; ++ix)
     {
-      const sfpi::vFloat v = sfpi::dst_reg[0];
-      sfpi::dst_reg[32] = v + 9.0f;
+      const sfpi::vFloat v = sfpi::dst_reg[0].mode<sfpi::DataLayout::F16b> ();
+      sfpi::dst_reg[32].mode<sfpi::DataLayout::F16b> () = v + 9.0f;
       sfpi::vFloat r = v;
       v_if (v <= t)
 	{
 	  r = 0.0f;
 	}
       v_endif;
-      sfpi::dst_reg[0] = r;
+      sfpi::dst_reg[0].mode<sfpi::DataLayout::F16b> () = r;
       sfpi::dst_reg++;
     }
 }
