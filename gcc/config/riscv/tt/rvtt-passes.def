@@ -162,3 +162,11 @@ INSERT_PASS_AFTER (pass_postreload, 1, pass_rvtt_replay);
 // free_bb_for_insn resulting in problems w/ df_analyze, so call before that
 INSERT_PASS_BEFORE (pass_free_cfg, 1, pass_rvtt_hll);
 INSERT_PASS_BEFORE (pass_free_cfg, 1, pass_rvtt_fix_raw);
+/* The ENABLE_DEST_INDEX write-restriction window enforcement must see
+   the FINAL
+   stream -- after allocation (allocator-inserted moves ARE the caught
+   violation class), the hazard scheduler, and replay/MOP formation --
+   so it runs last among the Tensix RTL passes, right before free_cfg.
+   Later lines land closer to the anchor, so this line runs after the
+   two above.  */
+INSERT_PASS_BEFORE (pass_free_cfg, 1, pass_rvtt_crosslane_window);
