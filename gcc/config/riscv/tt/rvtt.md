@@ -781,6 +781,27 @@
   [(set_attr "type" "tensix")
    (set_attr "xtt_replay" "safe")])
 
+;; Field-operand owned SETC16 (macro-planner design 4.3): the pass hands
+;; only the architectural fields; the emitted word is packed by the
+;; capability tables at output time.  (The pre-encoded-word form
+;; rvtt_owned_setc16_int was deleted with the quarantined pass.)
+(define_insn "rvtt_owned_setc16"
+  [(unspec_volatile:SI [
+     (match_operand:SI 0 "const_int_operand" "n") ;; config register
+     (match_operand:SI 1 "const_int_operand" "n") ;; 16-bit value
+     ] UNSPECV_OWNED_SETC16)]
+  "TARGET_XTT_TENSIX_WH || TARGET_XTT_TENSIX_BH"
+  {
+    return rvtt_output_owned_setc16 (operands);
+  }
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "barrier")
+   (set_attr "xtt_subunit" "cfg")
+   (set_attr "xtt_lreg_read_ops" "1")
+   (set_attr "xtt_lreg_write_ops" "1")
+   (set_attr "xtt_cc_effect" "none")
+   (set_attr "xtt_config_effect" "none")
+   (set_attr "xtt_rwc_effect" "none")])
 
 (define_expand "rvtt_sfploadsrcs"
   [(set (match_operand:XTT32SI 0 "register_operand")
