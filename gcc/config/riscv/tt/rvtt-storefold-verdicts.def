@@ -47,8 +47,8 @@
      the target the RESULT proved the row on -- BH, WH, or
      SHARED for the simulator arm both pinned oracles
      compile.  A pair with no row FOR THIS TARGET refuses the
-     same way as a pair with no row at all; the derived SRCB
-     row takes the intersection of the arches it ranks.
+     same way as a pair with no row at all.  SRCB/SRCB has
+     no row: its load and store may resolve differently.
    RVTT_STOCHRND_STORE_PAIR (conv_mod1, store_mod0, fused_sha,
 			       direct_sha)
      One licensed matching-precision pairing for the stochrnd
@@ -61,11 +61,8 @@
      rows are recorded above and refused, never admitted, so
      an SRCB store refuses stochrnd-store-fold-format-mismatch.
 
-   The SINK SRCB row carries no stream commitment of its own:
-   the SRCB store resolves at runtime to one of the swept float paths (the
-   row's ALU config owns the resolution) --
-   its class is derived as the most refusing of the swept float
-   pairs.  */
+   No SINK SRCB row is emitted: the swept diagonal float pairs
+   do not cover cross-resolution load/store pairs.  */
 
 RVTT_STOREFOLD_PROOF ("store-sink-roundtrip/RESULT.txt", "dec619dca89dad89981fa554efe8697efdfd1a0284ce3e7c29eeba267f155226")
 RVTT_STOREFOLD_PROOF ("stochrnd-store-round/RESULT.txt", "df91c89e95380197cbb6b122b95fe9096a428390114792450bd7921bc82fcedf")
@@ -95,11 +92,7 @@ RVTT_STOREFOLD_SINK_PAIR (SFPMEM_MOD0_FMT_INT32_SM, SFPMEM_MOD0_FMT_INT32_SM, NO
 			  STOREFOLD_ARCH_WH,
 			  "87578e3c7f5c5d2d6b3b7dbb0fdb8ee7bde96584c5c28502f2719af865ab4021",
 			  "1e2ba2146ddd69bcb06ede6c03578e7060de163d7a0b54cc4367eec762db3df9")
-/* SRCB, runtime-resolved to a swept float path; arch is the
-   intersection of the pairs this class is derived from.  */
-RVTT_STOREFOLD_SINK_PAIR (SFPMEM_MOD0_FMT_SRCB, SFPMEM_MOD0_FMT_SRCB, NOT_EQUAL, DENORMAL_FLUSH, LICENSED,
-			  STOREFOLD_ARCH_BH,
-			  "-", "-")
+/* SRCB/SRCB has no row: runtime load/store resolutions may differ.  */
 
 /* row A: fp32->fp16b nearest vs the bare mod0=2 store.  */
 RVTT_STOCHRND_STORE_PAIR (SFPSTOCHRND_MOD1_FP32_TO_FP16B, SFPMEM_MOD0_FMT_BF16,

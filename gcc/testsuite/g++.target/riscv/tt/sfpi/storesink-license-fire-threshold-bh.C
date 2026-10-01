@@ -1,6 +1,6 @@
 // { dg-options "-mcpu=tt-bh-tensix -O2 -I [SFPI]/include -fno-exceptions -fno-rtti -mtt-tensix-optimize-store-fold -mtt-tensix-optimize-store-sink -fdump-tree-rvtt_store_fold" }
 // The LICENSED S2 sink (owner-ratified) on the
-// threshold-class float shape: with BOTH -mtt-tensix-optimize-store-fold
+// threshold-class, statically BF16 float shape: with BOTH -mtt-tensix-optimize-store-fold
 // and the -mtt-tensix-optimize-store-sink license token, the post-region
 // all-lanes store of the predicated value merge sinks into the region as
 // a predicated store -- the merge word disappears and the enabled-
@@ -21,14 +21,14 @@ storesink_threshold (float t)
 {
   for (int ix = 0; ix < 8; ++ix)
     {
-      const sfpi::vFloat v = sfpi::dst_reg[0];
+      const sfpi::vFloat v = sfpi::dst_reg[0].mode<sfpi::DataLayout::F16b> ();
       sfpi::vFloat r = v;
       v_if (v <= t)
 	{
 	  r = 0.0f;
 	}
       v_endif;
-      sfpi::dst_reg[0] = r;
+      sfpi::dst_reg[0].mode<sfpi::DataLayout::F16b> () = r;
       sfpi::dst_reg++;
     }
 }
