@@ -752,6 +752,9 @@ mtt-tensix-optimize-crosscall-addrmod
 Target Var(riscv_tt_opt_crosscall_addrmod) Init(0)
 Hoist a callee's owned address-modifier configuration program into proven callers' loop entries.
 
+mtt-tensix-optimize-crossloop-hoist
+Target Var(riscv_tt_opt_crossloop_hoist) Init(0)
+Hoist loop-invariant SFPU immediate materializations across enclosing loops proven free of interfering effects.
 
 
 mtt-tensix-optimize-reassoc
