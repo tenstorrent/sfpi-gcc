@@ -32167,6 +32167,16 @@ metric strictly improves, keeping the original order byte-identically
 otherwise.
 
 @table @gcctabopt
+@opindex mtt-tensix-optimize-pressure-schedule
+@item -mtt-tensix-optimize-pressure-schedule
+Schedule straight-line SFPU regions to reduce vector register pressure,
+using a list scheduler whose primary key is modeled pressure.
+
+@opindex mtt-tensix-pressure-schedule-use-milp
+@item -mtt-tensix-pressure-schedule-use-milp
+Use the built-in exact branch-and-bound solver for Tensix pressure
+scheduling when the list schedule cannot satisfy the register capacity.
+
 @opindex mtt-tensix-optimize-latency-schedule
 @item -mtt-tensix-optimize-latency-schedule
 Fill result-latency bubbles---cycles in which a result is not yet
