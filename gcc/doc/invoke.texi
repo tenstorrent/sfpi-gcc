@@ -32020,6 +32020,14 @@ saves, restores, and enables.  Enabled by default.
 Remove Tensix instructions whose results are provably unused.  Enabled
 by default.
 
+@opindex mtt-tensix-optimize-dst-ownership
+@item -mtt-tensix-optimize-dst-ownership
+@itemx -mno-tt-tensix-optimize-dst-ownership
+Track ownership of Dst rows and the row counter before register
+allocation, and fold Dst reloads that provably reload a value still
+resident in a vector register into direct register references.  Enabled
+by default.
+
 @opindex mtt-tensix-optimize-lut-select
 @item -mtt-tensix-optimize-lut-select
 @itemx -mno-tt-tensix-optimize-lut-select
