@@ -767,7 +767,13 @@ mtt-tensix-optimize-launch-flatten
 Target Var(riscv_tt_opt_launch_flatten) Init(0)
 Request complete unrolling of counted innermost delivery loops so the flattened word stream reaches replay formation.
 
+mtt-tensix-optimize-delivery-shape
+Target Var(riscv_tt_opt_delivery_shape) Init(0)
+Choose each counted SFPU row loop's unroll factor and delivery tier by exact optimization over the issue-cost model.
 
+mtt-tensix-delivery-shape-min-benefit=
+Target Joined RejectNegative UInteger Var(riscv_tt_delivery_shape_min_benefit) Init(-1)
+Set the minimum modeled benefit, in hundredths of an issue slot per loop entry, required for a non-rolled delivery shape.
 
 mtt-tensix-optimize-round-interleave
 Target Var(riscv_tt_opt_round_interleave) Init(0)

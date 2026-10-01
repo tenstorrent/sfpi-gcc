@@ -84,6 +84,7 @@ RVTT_OBJS := rvtt.o \
 	gimple-rvtt-crosslane.o \
 	rtl-rvtt-crosslane-window.o \
 	gimple-rvtt-replay-unroll.o \
+	gimple-rvtt-delivery-shape.o \
 	rvtt-lut-tables.o \
 	gimple-rvtt-noval.o \
 	gimple-rvtt-pred.o \

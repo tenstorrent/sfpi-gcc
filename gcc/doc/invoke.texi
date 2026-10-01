@@ -32528,6 +32528,21 @@ word stream reaches replay formation.  The trip count must be proven,
 the flattened size is bounded per loop and per function, and the body
 must contain at least one Tensix vector operation.
 
+@opindex mtt-tensix-optimize-delivery-shape
+@item -mtt-tensix-optimize-delivery-shape
+Choose the delivery shape---unroll factor and delivery tier---of each
+proven-trip counted single-block SFPU row loop by exact optimization
+over the issue-cost model, requesting the winning shape through the
+same annotation the unroll-request pass uses.  Every uncalibrated model
+term declines, and a declined or rolled selection leaves the function
+byte-identical.
+
+@opindex mtt-tensix-delivery-shape-min-benefit
+@item -mtt-tensix-delivery-shape-min-benefit=@var{n}
+Set the minimum modeled benefit, in hundredths of an issue slot per
+loop entry, required for the delivery-shape solver to request a
+non-rolled shape; overrides the built-in cost-table default.
+
 @opindex mtt-tensix-optimize-mop-form
 @item -mtt-tensix-optimize-mop-form
 Re-roll runs and counted loops of identical replay playback launches
