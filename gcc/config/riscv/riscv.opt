@@ -704,6 +704,9 @@ mtt-tensix-optimize-crosslane
 Target Var(riscv_tt_opt_crosslane) Init(0)
 Optimize recognized cross-lane instruction sequences through their proven permutation algebra.
 
+mtt-tensix-optimize-replay-exec-record
+Target Var(riscv_tt_opt_replay_exec_record) Init(0)
+Execute a hoisted Tensix replay capture while recording and drop the first now-redundant playback launch.
 
 mtt-tensix-optimize-dst-iteration-fusion
 Target Var(riscv_tt_opt_dst_iteration_fusion) Init(0)
@@ -722,16 +725,39 @@ mtt-tensix-optimize-replay-hoist
 Target Var(riscv_tt_opt_replay_hoist) Init(0)
 Hoist fixed-encoding Tensix replay captures out of profitable loops.
 
+mtt-tensix-replay-hoist-completion-guard
+Target Var(riscv_tt_replay_hoist_completion_guard) Init(0)
+Use a drain-inclusive completion contract when pricing hoisted Tensix replay records.
 
 mtt-tensix-optimize-replay-record-hoist
 Target Var(riscv_tt_opt_replay_record_hoist) Init(0)
 Hoist the record phase of an iteration-invariant re-recorded replay capture to the loop's preheader.
 
+mtt-tensix-optimize-record-hoist-peel
+Target Var(riscv_tt_opt_record_hoist_peel) Init(0)
+Hoist a Dst-storing replay capture by peeling the loop's first iteration into the preheader.
 
+mtt-tensix-optimize-record-hoist-lift
+Target Var(riscv_tt_opt_record_hoist_lift) Init(0)
+Move a hoisted replay record outward across enclosing loops to the outermost provably safe preheader.
 
+mtt-tensix-optimize-counted-capture-peel
+Target Var(riscv_tt_opt_counted_capture_peel) Init(0)
+Extend the first-iteration peel to counted-loop replay captures whose plain hoist is unprofitable.
 
+mtt-tensix-optimize-replay-window-sizing
+Target Var(riscv_tt_opt_replay_window_sizing) Init(0)
+Prefer wider replay windows when the capture is hoisted and the per-iteration cost is launches alone.
 
+; Internal measurement knob: reporting-only shadow of the window
+; discovery; it never changes which windows are formed.
+mtt-tensix-replay-shadow-discovery
+Target Undocumented Var(riscv_tt_replay_shadow_discovery) Init(0)
+Measurement only: run the suffix-automaton window discovery as a reporting shadow beside the standard discovery.
 
+mtt-tensix-optimize-counted-row-formation
+Target Var(riscv_tt_opt_counted_row) Init(0)
+Canonicalize parameterized repeated SFPU rows so replay formation can record one parameterized row program.
 
 mtt-tensix-optimize-replay-loop-unroll
 Target Var(riscv_tt_opt_replay_loop_unroll) Init(0)
@@ -783,7 +809,15 @@ mtt-tensix-optimize-dst-autoincr-load-carrier
 Target Var(riscv_tt_opt_dst_autoincr_load_carrier) Init(0)
 Count audited raw single-constant instruction words as replay-slot-occupying so load-carrier rows can form.
 
+mtt-tensix-optimize-post-autoincr-window
+Target Var(riscv_tt_opt_post_autoincr_window) Init(0)
+Defer replay window formation until after Dst auto-increment folding so word-uniform bodies can be captured.
 
+; Internal measurement override: alternate candidate-selection key for
+; building hardware A/B comparisons; soundness proofs unchanged.
+mtt-tensix-post-autoincr-window-prefer-longest
+Target Undocumented Var(riscv_tt_post_autoincr_window_prefer_longest) Init(0)
+Measurement only: select post-auto-increment window candidates by maximal payload length first.
 
 mtt-tensix-optimize-dst-ownership
 Target Var(riscv_tt_opt_dst_ownership) Init(1)
