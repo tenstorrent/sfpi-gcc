@@ -639,26 +639,55 @@ Remove dead Tensix instructions.
 
 
 
+mtt-tensix-optimize-prgm-const
+Target Var(riscv_tt_opt_prgm_const) Init(0)
+Allocate programmable constant registers to loop-invariant SFPU immediates.
 
 mtt-tensix-optimize-const-residency
 Target Var(riscv_tt_opt_const_residency) Init(0)
 Allocate programmable constant registers to proven-constant SFPU values by priced selection.
 
+mtt-tensix-optimize-const-remat
+Target Var(riscv_tt_opt_const_remat) Init(0)
+Rematerialize proven-constant SFPU values at their uses when vector register pressure exceeds the register file.
 
 mtt-tensix-optimize-pressure-park
 Target Var(riscv_tt_opt_pressure_park) Init(0)
 Hoist qualifying constant materializations placed after a CC write when a whole-function pressure model proves it safe.
 
+mtt-tensix-optimize-crossloop-cc-peel
+Target Var(riscv_tt_opt_crossloop_cc_peel) Init(0)
+Program parked constants once at the outermost proven loop entry instead of once per enclosing-loop iteration.
 
+mtt-tensix-optimize-opaque-replay-record
+Target Var(riscv_tt_opt_opaque_replay_record) Init(0)
+Analyze raw replay record regions for the constant-register freedom proof instead of treating the whole translation unit as opaque.
 
+mtt-tensix-optimize-hoisted-prgm-reuse
+Target Var(riscv_tt_opt_hoisted_prgm_reuse) Init(0)
+Let invariant constants already hoisted out of a loop claim programmable constant registers.
 
+mtt-tensix-optimize-loop-prgm-reclaim
+Target Var(riscv_tt_opt_loop_prgm_reclaim) Init(0)
+Reprogram provably unread programmable constant registers with new values at loop entry.
 
+mtt-tensix-optimize-madpair-vocabulary
+Target Var(riscv_tt_opt_madpair_vocabulary) Init(0)
+Recognize additional multiply-add operand spellings when collecting constant-residency candidates.
 
 mtt-tensix-optimize-park-ordering
 Target Var(riscv_tt_opt_park_ordering) Init(0)
 Defer qualifying in-loop constant placements from the early invariant hoist to the late constant-residency walk.
 
+mtt-tensix-optimize-residency-merge-rename
+Target Var(riscv_tt_opt_residency_merge_rename) Init(0)
+Rename in-loop constant CC merges so the constant can be parked outside the loop.
 
+; Internal measurement override: admits renames the priced verdict
+; refuses so a floor certificate can be re-measured on hardware.
+mtt-tensix-merge-rename-allow-neutral
+Target Undocumented Var(riscv_tt_merge_rename_allow_neutral) Init(0)
+Measurement only: admit delivery-word-neutral merge renames that the priced verdict refuses.
 
 mtt-tensix-optimize-priced-placement
 Target Var(riscv_tt_opt_priced_placement) Init(0)
@@ -802,6 +831,9 @@ mtt-tensix-optimize-stochrnd-store-fold
 Target Var(riscv_tt_opt_stochrnd_store_fold) Init(0)
 Allow folding an explicit nearest-rounding precision reduction into its consuming converting store; changes delivered bits on the proven divergence classes.
 
+mtt-tensix-optimize-store-source-tier
+Target Var(riscv_tt_opt_store_source_tier) Init(0)
+Keep store-consumed constants in ordinary vector registers instead of programmable constant registers.
 
 mtt-tensix-optimize-setexp-fold
 Target Var(riscv_tt_opt_setexp_fold) Init(1)
