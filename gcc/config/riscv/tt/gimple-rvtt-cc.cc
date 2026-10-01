@@ -1,5 +1,5 @@
 /* Pass to optimize SFPU condition codes
-   Copyright (C) 2022-2025 Tenstorrent Inc.
+   Copyright (C) 2022-2026 Tenstorrent Inc.
    Originated by Paul Keller (pkeller@tenstorrent.com).
 
 This file is part of GCC.
@@ -17,6 +17,40 @@ for more details.
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
+
+/* The SFPU's lane-enable (condition-code) state is managed as a stack:
+   PUSHC saves the current lane mask on entry to a predicated (v_if)
+   region, the comparison ops narrow it, COMPC complements it for the
+   else-arm, and POPC restores the saved mask on exit.  ENCC simply
+   re-enables all lanes.  The SFPI front end emits fully general
+   PUSHC/POPC pairs; this pass removes the pairs that the stack
+   discipline makes redundant:
+
+   1. The outermost pair of a kernel: at depth zero there is no outer
+      mask worth saving, so the PUSHC is deleted and the matching POPC
+      becomes an ENCC (enable all lanes).
+
+   2. Tail pops: when a POPC is immediately followed (no intervening
+      SFPU ops or calls) by the enclosing region's POPC, and the inner
+      region used no COMPC, the inner PUSHC/POPC pair collapses into
+      the outer one.  All three statements must sit in one basic block
+      -- across blocks, different paths may disagree about intervening
+      instructions.
+
+   The walk is a depth-first traversal of the CFG from the entry block
+   carrying the open-PUSHC stack; each block is processed once (the
+   region-nesting depth at a block is path-invariant -- the liveness
+   pass asserts this).  PUSHC-with-replace-mod pops before it pushes
+   and is treated accordingly.  A malformed region structure (POPC or
+   COMPC outside any region, replace at depth zero) is a hard error.
+
+   Runs under -mtt-tensix-optimize-cc (default on).  The RTL-level CC
+   region machinery (tt/rvtt-cc-region.*) later rebuilds the region
+   tree from the surviving markers; this pass must stay conservative
+   precisely so that that reconstruction is exact.  */
+
+#define INCLUDE_TUPLE
+#define INCLUDE_VECTOR
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
@@ -62,16 +96,13 @@ along with GCC; see the file COPYING3.  If not see
 #include "opts.h"
 #include "asan.h"
 #include "profile.h"
-#include <vector>
-#include <tuple>
 #include "rvtt.h"
 
-#define DUMP(...) //fprintf(stderr, __VA_ARGS__)
 
-using namespace std;
+/* Return integer constant argument ARG of STMT, or -1 if absent.  */
 
 static long int
-get_int_arg(gcall *stmt, unsigned int arg)
+get_int_arg (gcall *stmt, unsigned int arg)
 {
   tree decl = gimple_call_arg(stmt, arg);
   if (decl)
@@ -82,11 +113,14 @@ get_int_arg(gcall *stmt, unsigned int arg)
   return -1;
 }
 
-//////////////////////////////////////////////////////////////////////////////
-// bool in tuple tracks whether or not a COMPC was seen at this stack depth
+/* Scan the statements of BB, maintaining STACK, one entry per open
+   PUSHC: <saw-COMPC, was-replace-push, iterator at the PUSHC>.
+   Performs the outermost-pair and tail-pop removals described in the
+   file comment.  */
+
 static void
-process_block_stmts(basic_block bb,
-		    vector<tuple<bool, bool, gimple_stmt_iterator>> &stack)
+process_block_stmts (basic_block bb,
+		    std::vector<std::tuple<bool, bool, gimple_stmt_iterator>> &stack)
 {
   constexpr int tuple_prior_removable = 0;
   constexpr int tuple_prior_replace = 1;
@@ -109,7 +143,8 @@ process_block_stmts(basic_block bb,
 		bool is_replace = (get_int_arg(stmt, insnd->mod_arg ()) == SFPPUSHCC_MOD1_REPLACE);
 
 		prior_removable = false;
-		DUMP("PUSHC(%s): stack size %d\n", is_replace ? "replace" : "push", stack.size());
+		if (dump_file)
+		  fprintf (dump_file, "PUSHC(%s): stack size %zu\n", is_replace ? "replace" : "push", stack.size());
 
 		if (stack.size() == 0)
 		  {
@@ -117,7 +152,8 @@ process_block_stmts(basic_block bb,
 		      error("malformed program, pushc replace at outer level\n");
 		    }
 
-		    DUMP("  removing outermost pushc\n");
+		    if (dump_file)
+		      fprintf (dump_file, "  removing outermost pushc\n");
 
 		    // Remove outermost pushc
 		    gimple *g = gsi_stmt (gsi);
@@ -125,7 +161,7 @@ process_block_stmts(basic_block bb,
 		    gsi_remove(&gsi, true);
 		    release_defs(g);
 
-		    stack.push_back(make_tuple(false, false, gsi));
+		    stack.push_back(std::make_tuple(false, false, gsi));
 		    // Avoid the gsi_next at the end since we removed the inst
 		    continue;
 		  }
@@ -136,7 +172,7 @@ process_block_stmts(basic_block bb,
 			stack.pop_back();
 		      }
 		    prior_is_replace = is_replace;
-		    stack.push_back(make_tuple(false, is_replace, gsi));
+		    stack.push_back(std::make_tuple(false, is_replace, gsi));
 		  }
 		break;
 	      }
@@ -150,12 +186,13 @@ process_block_stmts(basic_block bb,
 		error("malformed program, sfpcompc outside of pushc/popc - exiting!");
 
 	      prior_removable = false;
-	      stack.back() = make_tuple(true, get<tuple_prior_replace>(stack.back()), get<tuple_gsi>(stack.back()));
+	      stack.back() = std::make_tuple(true, std::get<tuple_prior_replace>(stack.back()), std::get<tuple_gsi>(stack.back()));
 	      break;
 
 	    case rvtt_insn_data::sfppopc:
 	      {
-		DUMP("POPC: stack size %d\n", stack.size());
+		if (dump_file)
+		  fprintf (dump_file, "POPC: stack size %zu\n", stack.size());
 
 		if (stack.size() == 0)
 		  error("malformed program, popc without matching pushc - exiting!");
@@ -167,7 +204,8 @@ process_block_stmts(basic_block bb,
 		    prior_popc.bb == gsi.bb)
 		  {
 
-		    DUMP("  removing inner PUSHC\n");
+		    if (dump_file)
+		      fprintf (dump_file, "  removing inner PUSHC\n");
 		    gimple *g = gsi_stmt (prior_pushc);
 		    unlink_stmt_vdef(g);
 		    gsi_remove(&prior_pushc, true);
@@ -175,7 +213,8 @@ process_block_stmts(basic_block bb,
 
 		    if (!prior_is_replace)
 		      {
-			DUMP("  removing inner POPC\n");
+			if (dump_file)
+			  fprintf (dump_file, "  removing inner POPC\n");
 			gimple *g = gsi_stmt (prior_popc);
 			unlink_stmt_vdef(g);
 			gsi_remove(&prior_popc, true);
@@ -184,15 +223,16 @@ process_block_stmts(basic_block bb,
 		  }
 
 		// Not removable if we saw a compc
-		prior_removable = !get<tuple_prior_removable>(stack.back()); 
-		prior_is_replace = get<tuple_prior_replace>(stack.back());
-		prior_pushc = get<tuple_gsi>(stack.back());
+		prior_removable = !std::get<tuple_prior_removable>(stack.back());
+		prior_is_replace = std::get<tuple_prior_replace>(stack.back());
+		prior_pushc = std::get<tuple_gsi>(stack.back());
 		prior_popc = gsi;
 
 		stack.pop_back();
 		if (stack.size() == 0)
 		  {
-		    DUMP("  replacing outermost popc with encc\n");
+		    if (dump_file)
+		      fprintf (dump_file, "  replacing outermost popc with encc\n");
 
 		    // Replace outermost popc with encc
 		    const rvtt_insn_data *new_insnd =
@@ -215,7 +255,9 @@ process_block_stmts(basic_block bb,
 	      break;
 
 	    default:
-		DUMP("Intervening %s\n", insnd->name);
+	    default_:
+		if (dump_file)
+		  fprintf (dump_file, "Intervening %s\n", insnd->name);
 		// Could be smarter about the non-__builtin_riscv_sfp
 		// calls, but bail if anything else comes in to be safe
 		// "Other" instructions
@@ -225,7 +267,8 @@ process_block_stmts(basic_block bb,
 	}
       else if (is_a<gcall *> (*gsi))
 	{
-	  DUMP("Intervening fn call\n");
+	  if (dump_file)
+	    fprintf (dump_file, "Intervening fn call\n");
 	  prior_removable = false;
 	}
 
@@ -233,10 +276,14 @@ process_block_stmts(basic_block bb,
     }
 }
 
+/* Depth-first CFG walk from BB; BD marks visited blocks, STACK is
+   passed by value so sibling successors each see the state at the end
+   of their common predecessor.  */
+
 static void
-process_block(basic_block bb,
-	      vector<bool>& bd,
-	      vector<tuple<bool, bool, gimple_stmt_iterator>> stack)
+process_block (basic_block bb,
+	       std::vector<bool> &bd,
+	       std::vector<std::tuple<bool, bool, gimple_stmt_iterator>> stack)
 {
   edge_iterator ei;
   edge e;
@@ -245,7 +292,8 @@ process_block(basic_block bb,
   // same.  The liveness pass asserts this.  If this is ever found to not be
   // true, we'll have to bail on optimizing the CC for that BB.
 
-  DUMP("Process block %d\n", bb->index);
+  if (dump_file)
+    fprintf (dump_file, "Process block %d\n", bb->index);
   if (!bd[bb->index])
     {
       // Haven't visited this BB before
@@ -263,16 +311,15 @@ process_block(basic_block bb,
     }
 }
 
-// This pass optimizes 2 things:
-// 1) The outermost pushc/popc: remove pushc, turn popc into encc
-// 2) Tail popc: if 2 popcs occur without intervening instructions and the
-//    inner pushc/popc did not have a compc in between, the inner pushc/popc
-//    can be removed.  Tricky because you have to track the prior popc.
-//    The inner push/pop and the outer pop must all be in the same BB
-static void transform (function *fn)
+/* Pass body: walk FN from its entry block.  always_inline wrappers are
+   skipped -- only instantiated bodies carry complete region
+   structures.  */
+
+static void
+transform (function *fn)
 {
-  vector<tuple<bool, bool, gimple_stmt_iterator>> stack;
-  vector<bool> bd;
+  std::vector<std::tuple<bool, bool, gimple_stmt_iterator>> stack;
+  std::vector<bool> bd;
 
   if (lookup_attribute ("always_inline", DECL_ATTRIBUTES (fn->decl)) != NULL)
     {
@@ -280,7 +327,8 @@ static void transform (function *fn)
       return;
     }
 
-  DUMP("CC pass on: %s\n", function_name(fn));
+  if (dump_file)
+    fprintf (dump_file, "CC pass on: %s\n", function_name(fn));
 
   stack.reserve(16);
   bd.resize(n_basic_blocks_for_fn(fn));
@@ -296,7 +344,7 @@ const pass_data pass_data_rvtt_cc =
 {
   GIMPLE_PASS, /* type */
   "rvtt_cc", /* name */
-  OPTGROUP_NONE, /* optinfo_flags */
+  OPTGROUP_OTHER, /* optinfo_flags */
   TV_NONE, /* tv_id */
   PROP_ssa, /* properties_required */
   0, /* properties_provided */

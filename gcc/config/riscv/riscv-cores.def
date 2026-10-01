@@ -123,5 +123,6 @@ RISCV_CORE("tt-qsr64-rocc",   "rv64imab_zbc_zicsr_zifencei_zihpm_xttcache_xttroc
 // #35991 disable vector 'v' extension, tt-sim doesn't grok them, it's not on all compute cores anyway
 RISCV_CORE("tt-qsr32",          "rv32im_zaamo_xttzbkb","ilp32", "rvtt-qsr32")
 RISCV_CORE("tt-qsr32-tensix",   "rv32im_zaamo_xttzbkb_xtttensixqsr", "ilp32", "rvtt-qsr32")
+RISCV_CORE("tt-qsr32-tensixbh", "rv32im_zaamo_xtttensixbh", "ilp32", "rvtt-qsr32")
 
 #undef RISCV_CORE

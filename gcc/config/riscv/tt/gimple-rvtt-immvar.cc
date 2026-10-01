@@ -1,4 +1,4 @@
-/* Passes to deal with immediate operand generation and optimization
+/* Passes to expand variable SFPU immediate operands and optimize immediate loads
    Copyright (C) 2026 Tenstorrent Inc.
    Originated Nathan Sidwell (nsidwell@tenstorrent.com, nathan@acm.org).
 
@@ -18,6 +18,37 @@ You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
+/* Three passes managing SFPU immediate operands as their constancy
+   evolves through the GIMPLE pipeline:
+
+   - rvtt_immvar_expand (early): an intrinsic whose immediate operand
+     is variable, or constant but too wide for the instruction's
+     immediate field, is rewritten -- the value is materialized into a
+     vector register (one or two SFPLOADI halves, or the extended-form
+     SFPXLOADI split) and the intrinsic is replaced by its
+     vector-operand variant.  Comparisons against a variable scalar
+     become vector comparisons the same way.
+
+   - rvtt_immload_shorten (late): constant propagation has by now fixed
+     many previously-variable immediates.  First the now-dead synthesis
+     bookkeeping operands are cleared; then SFPLOADI/SFPLOADI_LV(upper)
+     pairs are shrunk: known constants become reads of the hardware
+     constant registers (0.0, +/-1.0, 0.8373), 32-bit patterns that fit
+     a 16-bit form (fp16a/fp16b/u16/i16) collapse to one load, values
+     near a hardware constant become constant-register reads plus a
+     small IADD_I (or, on Blackhole/Quasar, a SHFT_I), and an
+     unsimplifiable pair with no other uses recombines into one
+     SFPXLOADI for the late expansion to assemble in a single result
+     register.  Care is taken never to fold a load that initializes a
+     constant register into a read of that same register.
+
+   - rvtt_immload_combine (late): an operation with a scalar-immediate
+     variant whose vector operand comes from a SFPLOADI of a fitting
+     constant (or a read of constant-zero) absorbs the constant into
+     the scalar form, deleting the load when it has no other uses.  */
+
+
+#define INCLUDE_VECTOR
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
@@ -36,6 +67,10 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree-into-ssa.h"
 #include "diagnostic-core.h"
 #include "rvtt.h"
+
+/* Emit, before GSI, one SFPLOADI (or SFPLOADI_LV when LV is the live
+   input) of VAL with mod MOD into RES (fresh if null).  ADDR is the
+   synthesized-word operand to carry over.  Returns the result.  */
 
 static tree
 emit_sfploadi (gimple_stmt_iterator &gsi, location_t loc, unsigned mod,
@@ -61,9 +96,70 @@ emit_sfploadi (gimple_stmt_iterator &gsi, location_t loc, unsigned mod,
   return res;
 }
 
-// For now do the best we can just here.  Later we'll want a combining pass to
-// handle the cases we get here, AND those that become constant.  BITS < 0 is
-// unsigned, BITS >=0 is position of sign bit.
+/* Build -- without inserting -- the SFPLOADI sequence that materialises
+   the 32-bit constant VALUE, appending each call to SEQ in emission
+   order and returning the SSA name holding the result.
+
+   main made "lowered before expand" an invariant for sfpxloadi: rvtt.md
+   expands it to a bare FAIL, on the understanding that
+   pass_rvtt_immvar_expand has already rewritten every one.  The
+   crosscall, init-hoist and PRGM passes all run immediately before
+   pass_expand, long after that, so they cannot emit the structured form
+   and must build the lowered one themselves.  They all load a known
+   32-bit word, which is the constant arm of emit_loadimm below.  */
+
+tree
+rvtt_build_loadimm32 (uint32_t value, vec<gcall *> *seq)
+{
+  const auto *lo_d = rvtt_get_insn_data (rvtt_insn_data::sfploadi);
+  const auto *hi_d = lo_d + 1;		/* sfploadi_lv */
+
+  auto emit = [seq] (const rvtt_insn_data *insnd, unsigned mod, tree lv,
+		     uint32_t val) -> tree
+    {
+      tree res = make_ssa_name (TREE_TYPE (TREE_TYPE (insnd->decl)));
+      auto *stmt = gimple_build_call (insnd->decl, insnd->num_args ());
+      gimple_call_set_arg (stmt, 0, null_pointer_node);
+      if (lv)
+	gimple_call_set_arg (stmt, 1, lv);
+      gimple_call_set_arg (stmt, insnd->imm_arg (),
+			   build_int_cst (unsigned_type_node, val));
+      gimple_call_set_arg (stmt, insnd->var_arg (), integer_zero_node);
+      gimple_call_set_arg (stmt, insnd->id_arg (), integer_zero_node);
+      gimple_call_set_arg (stmt, insnd->mod_arg (),
+			   build_int_cst (unsigned_type_node, mod));
+      gimple_call_set_lhs (stmt, res);
+      seq->safe_push (stmt);
+      return res;
+    };
+
+  unsigned mod = SFPLOADI_MOD0_USHORT;
+  bool needs_both = false;
+  uint32_t lower = value;
+
+  if (!(value & 0xffff))
+    { lower = value >> 16; mod = SFPLOADI_MOD0_FLOATB; }
+  else if (!(value >> 16))
+    mod = SFPLOADI_MOD0_USHORT;
+  else if ((value >> 15) == 0x1ffff)
+    mod = SFPLOADI_MOD0_SHORT;
+  else
+    { lower = value & 0xffff; needs_both = true; }
+
+  tree res = emit (lo_d, mod, nullptr, lower);
+  if (needs_both)
+    res = emit (hi_d, SFPLOADI_MOD0_UPPER, res, value >> 16);
+  return res;
+}
+
+/* Emit, before GSI, a load of VAL into a vector register.  BITS < 0
+   means treat VAL as unsigned of -BITS bits, BITS >= 0 gives the sign
+   bit position.  A value needing more than 16 bits is loaded in two
+   halves (USHORT lower + UPPER); constants take the single-instruction
+   short forms when they fit.  The constant cases are deliberately kept
+   simple here -- rvtt_immload_shorten revisits them once constant
+   propagation has finished.  Returns the loaded value (RES if
+   given).  */
 
 static tree
 emit_loadimm (gimple_stmt_iterator &gsi, location_t loc, int bits,
@@ -142,6 +238,11 @@ emit_loadimm (gimple_stmt_iterator &gsi, location_t loc, int bits,
   return res;
 }
 
+/* Emit, before GSI, the vector-variant NEW_INSND replacement of CALL
+   (an INSND intrinsic): vector operand IMM (in the first or second
+   source slot per IMM_FIRST), remaining source copied over, mod MOD.
+   Returns true; the caller deletes CALL.  */
+
 static bool
 emit_replacement (gimple_stmt_iterator &gsi, const rvtt_insn_data *insnd, gcall *call,
 		  const rvtt_insn_data *new_insnd, tree imm, tree mod)
@@ -160,6 +261,10 @@ emit_replacement (gimple_stmt_iterator &gsi, const rvtt_insn_data *insnd, gcall 
   // Caller will delete CALL
   return true;
 }
+
+/* The rvtt_immvar_expand per-statement worker: if CALL's immediate is
+   variable or out of range, materialize it and switch CALL to the
+   vector form.  Returns true if CALL is to be deleted.  */
 
 static bool
 immvar_expand (gimple_stmt_iterator &gsi, const rvtt_insn_data *insnd, gcall *call)
@@ -212,6 +317,11 @@ immvar_expand (gimple_stmt_iterator &gsi, const rvtt_insn_data *insnd, gcall *ca
   return false;
 }
 
+/* rvtt_immload_shorten, phase (a): if CALL's formerly-variable
+   immediate is now constant, clear the stale synthesis operands; also
+   collect plain SFPLOADIs into LOADS for phase (b).  Returns true if
+   CALL changed.  */
+
 static bool
 immvar_gather (const rvtt_insn_data *insnd,
 	       gcall *call, std::vector<gcall *> &loads)
@@ -253,6 +363,12 @@ immvar_gather (const rvtt_insn_data *insnd,
 
   return changed;
 }
+
+/* Replace the load CALL: with a constant-register read of register OP
+   when VAL is null, else with a single SFPLOADI of VAL with mod OP --
+   or, when EXTRA_CALL is given (a prepared IADD_I/SHFT_I whose operand
+   slots this fills in), with a register read feeding EXTRA_CALL.
+   EARLIER is only for dump output.  */
 
 static void
 replace_loadi (gcall *call, gcall *earlier, int op, tree val,
@@ -298,10 +414,11 @@ replace_loadi (gcall *call, gcall *earlier, int op, tree val,
   gsi_remove (&gsi, true);
 }
 
-// CALL is an sfploadi call, can we simplify it (and the possibly-following
-// sfploadi_lv?
-// For the two-loadi case, the first one is SFPLOADI_MOD0_USHORT and the second
-// is SFPLOADI_MOD0_UPPER.
+/* rvtt_immload_shorten, phase (b): CALL is an SFPLOADI; try to shrink
+   it together with any SFPLOADI_LV(UPPER) uses completing a 32-bit
+   value (lower half USHORT, upper half UPPER).  See the file comment
+   for the forms tried.  UPPERS is scratch.  Returns true if anything
+   changed.  */
 
 static bool
 immvar_simplify (gcall *call, std::vector<gcall *> seconds)
@@ -542,9 +659,13 @@ immvar_simplify (gcall *call, std::vector<gcall *> seconds)
   return changed;
 }
 
-// CALL has a SCALAR variant, if its last op is from a LOADI and the value
-// being loaded fits in the immediate slot, make it so.
-// Also consider commuting sfpiadd_v's operands (and maybe negating)
+/* rvtt_immload_combine worker: CALL (a CALL_INSND intrinsic) has
+   scalar-immediate variant SCALAR_INSND.  If its vector operand is
+   defined by an SFPLOADI of a constant that fits the scalar immediate
+   field (or a constant-zero register read), emit the scalar form in
+   its place.  A subtract-encoded IADD negates the immediate rather
+   than the operand.  Returns the (possibly now dead) defining load if
+   the replacement was made, for the caller to clean up.  */
 
 static gcall *
 immload_combine (gimple_stmt_iterator gsi, const rvtt_insn_data *call_insnd,
@@ -660,7 +781,7 @@ const pass_data pass_data_rvtt_immvar_expand =
 {
   GIMPLE_PASS, /* type */
   "rvtt_immvar_expand", /* name */
-  OPTGROUP_NONE, /* optinfo_flags */
+  OPTGROUP_OTHER, /* optinfo_flags */
   TV_NONE, /* tv_id */
   PROP_ssa, /* properties_required */
   0, /* properties_provided */
@@ -718,7 +839,7 @@ const pass_data pass_data_rvtt_immload_shorten =
 {
   GIMPLE_PASS, /* type */
   "rvtt_immload_shorten", /* name */
-  OPTGROUP_NONE, /* optinfo_flags */
+  OPTGROUP_OTHER, /* optinfo_flags */
   TV_NONE, /* tv_id */
   PROP_ssa, /* properties_required */
   0, /* properties_provided */
@@ -776,7 +897,7 @@ const pass_data pass_data_rvtt_immload_combine =
 {
   GIMPLE_PASS, /* type */
   "rvtt_immload_combine", /* name */
-  OPTGROUP_NONE, /* optinfo_flags */
+  OPTGROUP_OTHER, /* optinfo_flags */
   TV_NONE, /* tv_id */
   PROP_ssa, /* properties_required */
   0, /* properties_provided */
@@ -813,7 +934,7 @@ public:
 		{
 		  unlink_stmt_vdef (*gsi);
 		  gsi_remove (&gsi, true);
-		  // We run independet of DCE, so remove the defining insn if
+		  // We run independent of DCE, so remove the defining insn if
 		  // it has no other uses.
 		  if (has_zero_uses (gimple_call_lhs (def_call)))
 		    {

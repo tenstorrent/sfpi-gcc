@@ -259,6 +259,15 @@ fi
 AC_ARG_WITH(zstd,
 [AS_HELP_STRING([--with-zstd], [Support zstd compressed debug sections (default=auto)])])
 
+# Optional host-side MILP solver used by the explicitly enabled Tensix
+# pressure scheduler.  The GCC subconfigure performs the actual header and
+# link checks; declaring the option here avoids an unrecognized top-level
+# configure argument and ensures it is forwarded to host tools.
+AC_ARG_WITH([lp-solve],
+[AS_HELP_STRING([--with-lp-solve@<:@=no|auto|yes|PATH@:>@],
+		[build the optional Tensix scheduler lp_solve adapter (default=no)])],
+[], [with_lp_solve=no])
+
 # some tools are so dependent upon X11 that if we're not building with X, 
 # it's not even worth trying to configure, much less build, that tool.
 

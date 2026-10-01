@@ -30,6 +30,9 @@ void one () {
 void two () {
   vFloat a = l_reg[LRegs::LReg0];
 
+  // These are ordinary multiply-plus-add expressions, not fused-FMA API
+  // calls.  Keep their two-rounding MULI/ADDI lowering; it avoids two
+  // constant loads without changing the source expression's semantics.
   a = a * -vFloat (2.0f) + -vFloat (2.0f);
   l_reg[LRegs::LReg0] = a;
 
@@ -45,16 +48,14 @@ void two () {
 /*
 **_Z3twov:
 **	# READ L0
-**	SFPLOADI	L1, 16384, 0
-**	SFPLOADI	L2, 16384, 0
-**	SFPMAD	L0, L1, L0, L2, 3
+**	SFPMULI	L0, 49152, 0
+**	SFPADDI	L0, 49152, 0
 **	# WRITE L0
 **	SFPMULI	L0, 49152, 0
 **	SFPADDI	L0, 49152, 0
 **	# WRITE L0
-**	SFPLOADI	L1, 16384, 0
-**	SFPLOADI	L2, 16384, 0
-**	SFPMAD	L0, L1, L0, L2, 3
+**	SFPMULI	L0, 49152, 0
+**	SFPADDI	L0, 49152, 0
 **	# WRITE L0
 **	ret
 */

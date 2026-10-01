@@ -210,6 +210,15 @@ extern int fprintf_unlocked (FILE *, const char *, ...);
 #ifdef INCLUDE_SET
 # include <set>
 #endif
+#ifdef INCLUDE_UNORDERED_MAP
+# include <unordered_map>
+#endif
+#ifdef INCLUDE_UNORDERED_SET
+# include <unordered_set>
+#endif
+#ifdef INCLUDE_TUPLE
+# include <tuple>
+#endif
 #ifdef INCLUDE_STRING
 # include <string>
 #endif

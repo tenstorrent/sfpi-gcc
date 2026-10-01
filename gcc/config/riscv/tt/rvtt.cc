@@ -1,5 +1,5 @@
 /* TT helper routines
-   Copyright (C) 2022-2025 Tenstorrent Inc.
+   Copyright (C) 2022-2026 Tenstorrent Inc.
    Originated by Paul Keller (pkeller@tenstorrent.com).
    Rewritten by Nathan Sidwell (nsidwell@tenstorrent.com, nathan@acm.org).
 
@@ -41,6 +41,8 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree-ssa-propagate.h"
 #include "tree-ssa.h"
 #include "rvtt-protos.h"
+#include "rvtt-refuse.h"
+#include "rvtt-effects.h"
 #include "rvtt.h"
 #include "diagnostic-core.h"
 #include "print-rtl.h"
@@ -56,6 +58,14 @@ static rvtt_insn_data sfpu_insn_data[] = {
 };
 
 static unsigned riscv_builtin_rvtt_first;
+
+/* Finalize the SFPU insn table once riscv_init_builtins has recorded
+   every RVTT builtin decl (via rvtt_record_builtin): apply the
+   RVTT_OVR rows of rvtt-insn.def whose architecture predicate (BH,
+   QSR, or both) holds, overriding the base flags and operand
+   descriptors, then compute each recorded insn's derived operand
+   layout (rvtt_insn_data::init).  No-op unless the Tensix extension
+   is enabled.  */
 
 void
 rvtt_init_builtins ()
@@ -75,11 +85,12 @@ rvtt_init_builtins ()
     rvtt_insn_data::ops_t ops;
   } overrides[] = {
 #define RVTT_OVR(id, av, sfx, fmt, fl, ops)		\
-    { tensix##av, rvtt_insn_data::id, rvtt_insn_data::flags_t (fl), rvtt_insn_data::ops_t ops },
+    { tensix##av, rvtt_insn_data::id,			\
+      rvtt_insn_data::flags_t (fl), rvtt_insn_data::ops_t ops },
 #include "rvtt-insn.def"
   };
 
-  // Process overrides
+  /* Process overrides */
   for (auto const &ovr : overrides)
     if (ovr.avail ())
       sfpu_insn_data[ovr.index].override (ovr.flags, ovr.ops);
@@ -89,10 +100,19 @@ rvtt_init_builtins ()
       insn.init ();
 }
 
+/* Compute this insn's derived operand layout by walking the argument
+   types of its recorded builtin decl: a leading pointer argument sets
+   HAS_VAR (the instruction-buffer operand), the live and source
+   vector arguments are skipped (recording src_pos), and each ops[]
+   descriptor is then bound to its integer argument's index, latching
+   HAS_MOD and mod_pos at the MOD/XMOD operand.  Sets arg_num to the
+   total argument count and asserts the decl's signature matches the
+   rvtt-insn.def operand list.  */
+
 void
 rvtt_insn_data::init ()
 {
-  // Compute derived fields;
+  /* Compute derived fields; */
   int argno = 0, ix = 0;
   tree arg_types = TYPE_ARG_TYPES (TREE_TYPE (decl));
 
@@ -129,7 +149,7 @@ rvtt_insn_data::init ()
 
   if (has_var ())
     {
-      // imm, var & id operands
+      /* imm, var & id operands */
       ops.set_argno (ix, argno);
       arg_types = TREE_CHAIN (arg_types);
 
@@ -166,6 +186,15 @@ rvtt_insn_data::init ()
   arg_num = argno;
 }
 
+/* Callback from the RISC-V builtin registration loop: record DECL,
+   the builtin numbered IX with name NAME, in the SFPU insn table.
+   The first "__builtin_rvtt_" builtin encountered latches the base
+   index all later ones are offset from (it is synth_opcode, the one
+   const RVTT function, so it is also marked TREE_READONLY here).
+   Returns true exactly for that first builtin, telling the caller to
+   apply the Tensix icode/prototype overrides to its own descriptor
+   table.  */
+
 bool
 rvtt_record_builtin (unsigned ix, char const *name, tree decl)
 {
@@ -173,7 +202,8 @@ rvtt_record_builtin (unsigned ix, char const *name, tree decl)
     return false;
 
   if (ix < 300)
-    // Save a bunch of strcmps on the grounds there are at least this many others.
+    /* Save a bunch of strcmps on the grounds there are at least this
+       many others.  */
     return false;
 
   unsigned ecf_flags = ECF_NOTHROW | ECF_NOVOPS;
@@ -199,11 +229,19 @@ rvtt_record_builtin (unsigned ix, char const *name, tree decl)
   return !ix;
 }
 
+/* Return the insn descriptor for ID.  Every insn_id has an entry,
+   whether or not its builtin is available on the current target.  */
+
 const rvtt_insn_data *
 rvtt_get_insn_data (rvtt_insn_data::insn_id id)
 {
   return &sfpu_insn_data[id];
 }
+
+/* Return the insn descriptor for CALL when it calls an RVTT SFPU
+   builtin, null otherwise.  Recognition is by the machine-dependent
+   builtin function code falling in the index range latched by
+   rvtt_record_builtin.  */
 
 const rvtt_insn_data *
 rvtt_get_insn_data (gcall const *call)
@@ -226,6 +264,23 @@ rvtt_get_insn_data (gcall const *call)
   return &sfpu_insn_data[ix];
 }
 
+/* The reassociation license key (owner ratification 2026-08-21).
+   Value-changing FP reassociation fires ONLY when the user passed BOTH
+   -fassociative-math (GCC's explicit opt-in: reassociation "may change
+   the computation result", invoke.texi) and our default-off
+   -mtt-tensix-optimize-reassoc.  Either flag absent = every FP
+   reassociation site fails closed with a named refusal and codegen is
+   byte-identical.  */
+
+bool
+rvtt_reassoc_fp_licensed_p (void)
+{
+  return riscv_tt_opt_reassoc > 0 && flag_associative_math;
+}
+
+/* As above, for an arbitrary statement: return the insn descriptor
+   when STMT is a call to an RVTT SFPU builtin, null otherwise.  */
+
 const rvtt_insn_data *
 rvtt_get_insn_data (gimple const *stmt)
 {
@@ -233,6 +288,12 @@ rvtt_get_insn_data (gimple const *stmt)
     return nullptr;
   return rvtt_get_insn_data (as_a <gcall const *> (stmt));
 }
+
+/* Return true if STMT, a call to this insn's builtin, writes the SFPU
+   condition codes: the insn must have a nonzero cc_mask, and, when it
+   takes a mod operand, the mode selected by the low four bits of
+   STMT's mod argument must be one of the CC-writing modes recorded in
+   cc_mask.  */
 
 bool
 rvtt_insn_data::sets_cc (gcall *stmt) const
@@ -249,8 +310,22 @@ rvtt_insn_data::sets_cc (gcall *stmt) const
   return false;
 }
 
+/* Set by rtl-rvtt-spill-diag.cc when it has reported (and deleted)
+   allocated SFPU memory moves in this compilation.  */
+bool rvtt_spill_diag_reported;
+
 void rvtt_mov_error (const rtx_insn *insn)
 {
+  /* The named user diagnosis of allocated SFPU memory moves lives in
+     rtl-rvtt-spill-diag.cc (lreg-pressure-exceeded), which runs
+     directly after allocation.  Only when THAT diagnosis has fired may
+     the backstop stand down (a stray placeholder in the discarded
+     assembly of a failed compilation is harmless).  An SFPU memory
+     move on any other stream -- including one where unrelated user
+     errors were reported -- remains what it always was: a compiler
+     bug.  */
+  if (rvtt_spill_diag_reported && seen_error ())
+    return;
   if (INSN_HAS_LOCATION (insn))
     input_location = INSN_LOCATION (insn);
 
@@ -289,44 +364,58 @@ void rvtt_mov_error (const rtx_insn *insn)
   free (buffer);
 }
 
-// If a stmt's single use args aren't tracked back to their
-// defs and deleted prior to deleting the stmt, errors occur w/
-// flag_checking=1
-// There has to be an internal version of this...
-void rvtt_prep_stmt_for_deletion(gimple *stmt)
+/* If a stmt's single use args aren't tracked back to their
+   defs and deleted prior to deleting the stmt, errors occur w/
+   flag_checking=1
+   There has to be an internal version of this...  */
+void rvtt_prep_stmt_for_deletion (gimple *stmt)
 {
+  /* Any SSA definition removed by an RVTT lowering may still be named by
+     GIMPLE_DEBUG_BIND statements when compiling with -g.  Debug uses are not
+     semantic uses and must not keep an otherwise-deleted definition alive.  */
+  reset_debug_uses (stmt);
+
   for (unsigned int i = 0; i < gimple_call_num_args (stmt); i++)
     {
-      tree arg = gimple_call_arg(stmt, i);
+      tree arg = gimple_call_arg (stmt, i);
 
-      if (TREE_CODE(arg) == SSA_NAME && num_imm_uses (arg) == 1)
+      /* An earlier deletion in the same sweep may already have released
+	 this name -- a chained materialization (SFPLOADI + SFPLOADI_LV
+	 for one 32-bit constant) reaches here twice, and the second
+	 visit finds a freed operand whose def statement is null.  */
+      if (TREE_CODE (arg) == SSA_NAME
+	  && !SSA_NAME_IN_FREE_LIST (arg)
+	  && num_imm_uses (arg) == 1)
 	{
 	  gimple *def_g = SSA_NAME_DEF_STMT (arg);
+	  if (!def_g)
+	    continue;
 
 	  if (def_g->code == GIMPLE_PHI)
 	    {
-	      // XXXX handle phi
-	      // this seems to work fine and SSA checks are ok w/ doing nothing
+	      /* XXXX handle phi
+	         this seems to work fine and SSA checks are ok w/ doing
+	         nothing */
 	    }
 	  else if (def_g->code == GIMPLE_CALL)
 	    {
 	      tree lhs_name = gimple_call_lhs (def_g);
-	      gimple_call_set_lhs(def_g, NULL_TREE);
-	      release_ssa_name(lhs_name);
+	      gimple_call_set_lhs (def_g, NULL_TREE);
+	      release_ssa_name (lhs_name);
 	      update_stmt (def_g);
 	    }
 	  else if (def_g->code == GIMPLE_ASSIGN)
 	    {
-	      unlink_stmt_vdef(def_g);
-	      gimple_stmt_iterator gsi = gsi_for_stmt(def_g);
-	      gsi_remove(&gsi, true);
-	      release_defs(def_g);
+	      unlink_stmt_vdef (def_g);
+	      gimple_stmt_iterator gsi = gsi_for_stmt (def_g);
+	      gsi_remove (&gsi, true);
+	      release_defs (def_g);
 	    }
 	}
     }
 }
 
-// Generate the assembly for an sfpsynt_insn{,_dst} insn.
+/* Generate the assembly for an sfpsynt_insn{,_dst} insn.  */
 
 const char *
 rvtt_synth::pattern (unsigned is_synthed, const char *tmpl,
@@ -335,7 +424,7 @@ rvtt_synth::pattern (unsigned is_synthed, const char *tmpl,
   if (!is_synthed || tmpl[0] == '#')
     return tmpl;
 
-  operands += is_set; // Whee!
+  operands += is_set; /* Whee!  */
 
   auto enc = rvtt_synth (INTVAL (operands[rvtt_synth::IX_encode]));
   uint32_t reg_mask = 0;
@@ -379,10 +468,10 @@ rvtt_synth::pattern (unsigned is_synthed, const char *tmpl,
   unsigned pos = 0;
   if (uint32_t reg_change = (opcode & reg_mask) ^ reg_ops)
     {
-      // The register assignments here are different from those of the
-      // first synth encountered.  We must adjust the incomming
-      // pattern.
-      // Swap, so the templ prints the temp reg
+      /* The register assignments here are different from those of the
+         first synth encountered.  We must adjust the incomming
+         pattern.
+         Swap, so the templ prints the temp reg */
       std::swap (operands[rvtt_synth::IX_insn], operands[tmp_ix - is_set]);
       opcode ^= reg_change;
       operands[rvtt_synth::IX_opcode] = gen_rtx_CONST_INT (SImode, reg_change);
@@ -425,6 +514,26 @@ rvtt_arg_info::rvtt_arg_info (tree arg, bool only_zeroness)
     }
   else if (only_zeroness)
     return;
+  else if (insnd->id == rvtt_insn_data::sfpxloadi)
+    {
+      /* SFPXLOADI's canonical full-width forms carry the scalar bit image
+	 verbatim.  Other widths can truncate or sign-extend in emit_loadimm;
+	 do not claim those as the original scalar constant here.  The address
+	 and synthesis operands must also be canonical constants, just as for
+	 the SFPLOADI case below.  */
+      if (!rvtt_canonical_buffer_arg_p (gimple_call_arg (call, 0))
+	  || TREE_CODE (gimple_call_arg (call, 1)) != INTEGER_CST
+	  || !integer_zerop (gimple_call_arg (call, 2))
+	  || !integer_zerop (gimple_call_arg (call, 3))
+	  || TREE_CODE (gimple_call_arg (call, 4)) != INTEGER_CST)
+	return;
+
+      HOST_WIDE_INT bits = tree_to_shwi (gimple_call_arg (call, 4));
+      if (bits != 31 && bits != -32)
+	return;
+
+      cst = (uint32_t) TREE_INT_CST_LOW (gimple_call_arg (call, 1));
+    }
   else if (insnd->id == rvtt_insn_data::sfploadi)
     {
       if (!integer_zerop (gimple_call_arg (call, 0)))
@@ -455,12 +564,19 @@ rvtt_arg_info::rvtt_arg_info (tree arg, bool only_zeroness)
   def = call;
 }
 
+/* Return an UNSPEC_SFPCSTLREG rtx in MODE denoting the SFPU constant
+   register numbered SFPU_REGNO (a CREG_IDX_* value), for use where a
+   hardware constant register stands in for a vector operand.  */
+
 rtx
 rvtt_gen_rtx_creg (machine_mode mode, unsigned sfpu_regno)
 {
-  return gen_rtx_UNSPEC (mode,
-			 gen_rtvec (1, GEN_INT (sfpu_regno)), UNSPEC_SFPCSTLREG);
+  return gen_rtx_UNSPEC (mode, gen_rtvec (1, GEN_INT (sfpu_regno)),
+			 UNSPEC_SFPCSTLREG);
 }
+
+/* Return the UNSPEC_SFPNOVAL placeholder in MODE, standing for an
+   absent live-value (or other optional vector) operand.  */
 
 rtx
 rvtt_gen_rtx_noval (machine_mode mode)
@@ -468,6 +584,12 @@ rvtt_gen_rtx_noval (machine_mode mode)
   return gen_rtx_UNSPEC (mode,
 			 gen_rtvec (1, const0_rtx), UNSPEC_SFPNOVAL);
 }
+
+/* Fold the live-value operand *LV of an _lv insn into its source.
+   When *LV is the no-value placeholder there is nothing to preserve.
+   Otherwise emit an sfpassign_lv merging *LV and *SRC into a fresh
+   pseudo, make that pseudo the new *SRC, and mark *LV with the
+   UNSPEC_SFPOMIT placeholder.  */
 
 bool
 rvtt_merge_lv_src (rtx *lv, rtx *src, rtx *commute)
@@ -486,6 +608,10 @@ rvtt_merge_lv_src (rtx *lv, rtx *src, rtx *commute)
 			gen_rtvec (1, const0_rtx), UNSPEC_SFPOMIT);
   return commuted;
 }
+
+/* Replace every use of the SSA name ORIG with REPLACEMENT, updating
+   (and, with dumping enabled, logging) each affected statement.
+   No-op when ORIG is null.  */
 
 void
 rvtt_substitute_value (tree orig, tree replacement)
@@ -511,113 +637,114 @@ rvtt_substitute_value (tree orig, tree replacement)
 
 static bool rvtt_has_attrib_p(const char *attrib, rtx pat)
 {
-  if (GET_CODE(pat) == ZERO_EXTEND ||
-      GET_CODE(pat) == SIGN_EXTEND)
+  if (GET_CODE (pat) == ZERO_EXTEND ||
+      GET_CODE (pat) == SIGN_EXTEND)
     {
-      pat = XEXP(pat, 0);
+      pat = XEXP (pat, 0);
     }
 
-  if (GET_CODE(pat) == MEM &&
-      MEM_EXPR(pat) != NULL_TREE)
+  if (GET_CODE (pat) == MEM &&
+      MEM_EXPR (pat) != NULL_TREE)
     {
-      tree exp = MEM_EXPR(pat);
-      if (TREE_CODE(exp) == PARM_DECL ||
-	  TREE_CODE(exp) == VAR_DECL)
+      tree exp = MEM_EXPR (pat);
+      if (TREE_CODE (exp) == PARM_DECL ||
+	  TREE_CODE (exp) == VAR_DECL)
 	{
-	  // Top level PARM/VAR DECL's are address calculation
-	  // (fingers crossed...)
+	  /* Top level PARM/VAR DECL's are address calculation
+	     (fingers crossed...) */
 	  return false;
 	}
 
-      while (TREE_CODE(exp) != MEM_REF &&
-	     TREE_CODE(exp) != TARGET_MEM_REF &&
-	     TREE_CODE(exp) != PARM_DECL &&
-	     TREE_CODE(exp) != VAR_DECL)
+      while (TREE_CODE (exp) != MEM_REF &&
+	     TREE_CODE (exp) != TARGET_MEM_REF &&
+	     TREE_CODE (exp) != PARM_DECL &&
+	     TREE_CODE (exp) != VAR_DECL)
 	{
-	  if (TREE_CODE(exp) == ARRAY_REF ||
-	      TREE_CODE(exp) == COMPONENT_REF ||
-	      TREE_CODE(exp) == BIT_FIELD_REF ||
-	      TREE_CODE(exp) == VIEW_CONVERT_EXPR ||
-	      TREE_CODE(exp) == REALPART_EXPR ||
-	      TREE_CODE(exp) == IMAGPART_EXPR)
+	  if (TREE_CODE (exp) == ARRAY_REF ||
+	      TREE_CODE (exp) == COMPONENT_REF ||
+	      TREE_CODE (exp) == BIT_FIELD_REF ||
+	      TREE_CODE (exp) == VIEW_CONVERT_EXPR ||
+	      TREE_CODE (exp) == REALPART_EXPR ||
+	      TREE_CODE (exp) == IMAGPART_EXPR)
 	    {
-	      exp = TREE_OPERAND(exp, 0);
+	      exp = TREE_OPERAND (exp, 0);
 	    }
-	  else if (TREE_CODE(exp) == STRING_CST ||
-		   TREE_CODE(exp) == VECTOR_CST ||
-		   TREE_CODE(exp) == RESULT_DECL)
+	  else if (TREE_CODE (exp) == STRING_CST ||
+		   TREE_CODE (exp) == VECTOR_CST ||
+		   TREE_CODE (exp) == RESULT_DECL)
 	    {
-	      // CST won't be in L1
+	      /* CST won't be in L1 */
 	      return false;
 	    }
 	  else
 	    {
-	      debug_rtx(pat);
-	      debug_tree(MEM_EXPR(pat));
-	      gcc_unreachable();
+	      debug_rtx (pat);
+	      debug_tree (MEM_EXPR (pat));
+	      gcc_unreachable ();
 	    }
 	}
-      gcc_assert(TREE_CODE(exp) == MEM_REF ||
-		 TREE_CODE(exp) == TARGET_MEM_REF ||
-		 TREE_CODE(exp) == PARM_DECL ||
-		 TREE_CODE(exp) == VAR_DECL);
+      gcc_assert (TREE_CODE (exp) == MEM_REF ||
+		 TREE_CODE (exp) == TARGET_MEM_REF ||
+		 TREE_CODE (exp) == PARM_DECL ||
+		 TREE_CODE (exp) == VAR_DECL);
 
-      tree decl = (TREE_CODE(exp) == PARM_DECL ||
-		   TREE_CODE(exp) == VAR_DECL) ? exp : TREE_OPERAND(exp, 0);
+      tree decl = (TREE_CODE (exp) == PARM_DECL ||
+		   TREE_CODE (exp) == VAR_DECL) ? exp : TREE_OPERAND (exp, 0);
       if (decl != NULL_TREE &&
-	  lookup_attribute(attrib, TYPE_ATTRIBUTES(TREE_TYPE(decl))))
+	  lookup_attribute (attrib, TYPE_ATTRIBUTES (TREE_TYPE (decl))))
 	return true;
     }
 
   return false;
 }
 
-bool rvtt_store_has_restrict_p(const rtx pat)
+bool rvtt_store_has_restrict_p (const rtx pat)
 {
-  if (GET_CODE(pat) == SET)
+  if (GET_CODE (pat) == SET)
     {
-      rtx dst = SET_DEST(pat);
+      rtx dst = SET_DEST (pat);
 
-      if (GET_CODE(dst) == MEM &&
-	  MEM_EXPR(dst) != NULL_TREE)
+      if (GET_CODE (dst) == MEM &&
+	  MEM_EXPR (dst) != NULL_TREE)
 	{
-	  tree exp = MEM_EXPR(dst);
-	  while (TREE_CODE(exp) != MEM_REF &&
-		 TREE_CODE(exp) != TARGET_MEM_REF &&
-		 TREE_CODE(exp) != PARM_DECL &&
-		 TREE_CODE(exp) != VAR_DECL)
+	  tree exp = MEM_EXPR (dst);
+	  while (TREE_CODE (exp) != MEM_REF &&
+		 TREE_CODE (exp) != TARGET_MEM_REF &&
+		 TREE_CODE (exp) != PARM_DECL &&
+		 TREE_CODE (exp) != VAR_DECL)
 	    {
-	      if (TREE_CODE(exp) == ARRAY_REF ||
-		  TREE_CODE(exp) == COMPONENT_REF ||
-		  TREE_CODE(exp) == BIT_FIELD_REF ||
-		  TREE_CODE(exp) == VIEW_CONVERT_EXPR ||
-		  TREE_CODE(exp) == REALPART_EXPR ||
-		  TREE_CODE(exp) == IMAGPART_EXPR)
+	      if (TREE_CODE (exp) == ARRAY_REF ||
+		  TREE_CODE (exp) == COMPONENT_REF ||
+		  TREE_CODE (exp) == BIT_FIELD_REF ||
+		  TREE_CODE (exp) == VIEW_CONVERT_EXPR ||
+		  TREE_CODE (exp) == REALPART_EXPR ||
+		  TREE_CODE (exp) == IMAGPART_EXPR)
 		{
-		  exp = TREE_OPERAND(exp, 0);
+		  exp = TREE_OPERAND (exp, 0);
 		}
-	      else if (TREE_CODE(exp) == STRING_CST ||
-		       TREE_CODE(exp) == VECTOR_CST ||
-		       TREE_CODE(exp) == RESULT_DECL)
+	      else if (TREE_CODE (exp) == STRING_CST ||
+		       TREE_CODE (exp) == VECTOR_CST ||
+		       TREE_CODE (exp) == RESULT_DECL)
 		{
 		  return false;
 		}
 	      else
 		{
-		  debug_rtx(pat);
-		  debug_tree(MEM_EXPR(dst));
-		  gcc_unreachable();
+		  debug_rtx (pat);
+		  debug_tree (MEM_EXPR (dst));
+		  gcc_unreachable ();
 		}
 	    }
-	  gcc_assert(TREE_CODE(exp) == MEM_REF ||
-		     TREE_CODE(exp) == TARGET_MEM_REF ||
-		     TREE_CODE(exp) == PARM_DECL ||
-		     TREE_CODE(exp) == VAR_DECL);
+	  gcc_assert (TREE_CODE (exp) == MEM_REF ||
+		     TREE_CODE (exp) == TARGET_MEM_REF ||
+		     TREE_CODE (exp) == PARM_DECL ||
+		     TREE_CODE (exp) == VAR_DECL);
 
-	  tree decl = (TREE_CODE(exp) == PARM_DECL ||
-		       TREE_CODE(exp) == VAR_DECL) ? exp : TREE_OPERAND(exp, 0);
+	  tree decl = (TREE_CODE (exp) == PARM_DECL ||
+		       TREE_CODE (exp) == VAR_DECL)
+		      ? exp : TREE_OPERAND (exp, 0);
 	  if (decl != NULL_TREE &&
-	      TYPE_RESTRICT(TREE_TYPE(decl)))
+	      TYPE_RESTRICT (TREE_TYPE (decl)))
 	    {
 	      return true;
 	    }
@@ -627,46 +754,46 @@ bool rvtt_store_has_restrict_p(const rtx pat)
   return false;
 }
 
-bool rvtt_l1_load_p(const rtx pat)
+bool rvtt_l1_load_p (const rtx pat)
 {
-  if (GET_CODE(pat) == SET)
+  if (GET_CODE (pat) == SET)
     {
-      return rvtt_has_attrib_p("rvtt_l1_ptr", SET_SRC(pat));
+      return rvtt_has_attrib_p ("rvtt_l1_ptr", SET_SRC (pat));
     }
 
   return false;
 }
 
-bool rvtt_reg_load_p(const rtx pat)
+bool rvtt_reg_load_p (const rtx pat)
 {
-  if (GET_CODE(pat) == SET)
+  if (GET_CODE (pat) == SET)
     {
-      return rvtt_has_attrib_p("rvtt_reg_ptr", SET_SRC(pat));
+      return rvtt_has_attrib_p ("rvtt_reg_ptr", SET_SRC (pat));
     }
 
   return false;
 }
 
-bool rvtt_hll_p(const rtx pat)
+bool rvtt_hll_p (const rtx pat)
 {
-  return rvtt_l1_load_p(pat) || rvtt_reg_load_p(pat);
+  return rvtt_l1_load_p (pat) || rvtt_reg_load_p (pat);
 }
 
 bool rvtt_l1_store_p(const rtx pat)
 {
-  if (GET_CODE(pat) == SET)
+  if (GET_CODE (pat) == SET)
     {
-      return rvtt_has_attrib_p("rvtt_l1_ptr", SET_DEST(pat));
+      return rvtt_has_attrib_p ("rvtt_l1_ptr", SET_DEST (pat));
     }
 
   return false;
 }
 
-bool rvtt_reg_store_p(const rtx pat)
+bool rvtt_reg_store_p (const rtx pat)
 {
-  if (GET_CODE(pat) == SET)
+  if (GET_CODE (pat) == SET)
     {
-      return rvtt_has_attrib_p("rvtt_reg_ptr", SET_DEST(pat));
+      return rvtt_has_attrib_p ("rvtt_reg_ptr", SET_DEST (pat));
     }
 
   return false;
