@@ -814,6 +814,9 @@ mtt-tensix-optimize-reassoc
 Target Var(riscv_tt_opt_reassoc) Init(0)
 Allow value-changing floating-point reassociation in the Tensix SFPU passes; requires -fassociative-math to take effect.
 
+mtt-tensix-optimize-reassoc-loop-carried
+Target Var(riscv_tt_opt_reassoc_loop_carried) Init(0)
+Allow splitting loop-carried floating-point accumulations into parallel partial sums; requires -fassociative-math to take effect.
 
 mtt-tensix-optimize-reassoc-mad-restructure
 Target Var(riscv_tt_opt_reassoc_mad_restructure) Init(0)

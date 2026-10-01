@@ -32468,6 +32468,15 @@ re-associated evaluation order.  Requires @option{-fassociative-math}.
 Integer and bitwise chain rebalancing under this option alone is
 value-identical and needs no such opt-in.
 
+@opindex mtt-tensix-optimize-reassoc-loop-carried
+@item -mtt-tensix-optimize-reassoc-loop-carried
+Permit splitting a loop-carried floating-point accumulation chain into
+several round-robin partial accumulators initialized to @code{+0.0} and
+reduced by a balanced tree after the loop, cutting the recurrence bound
+by the number of partials.  The value change is re-association order
+only, including the treatment of signed zero in the identity element.
+Requires @option{-fassociative-math}.
+
 @opindex mtt-tensix-optimize-reassoc-mad-restructure
 @item -mtt-tensix-optimize-reassoc-mad-restructure
 Permit fusing a single-use multiply-and-add pair---two serial
