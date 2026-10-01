@@ -757,8 +757,19 @@ mtt-tensix-trips-oracle-skew=
 Target Undocumented Joined RejectNegative UInteger Var(riscv_tt_trips_oracle_skew) Init(0) IntegerRange(0,65535)
 Testing only: skew the classical trip-count verdict to manufacture a trip-oracle-divergence diagnostic.
 
+mtt-tensix-optimize-mop-form
+Target Var(riscv_tt_opt_mop_form) Init(0)
+Re-roll runs and counted loops of identical Tensix replay playback launches into a hardware MOP loop.
 
+mtt-tensix-mop-form-min-benefit=
+Target Joined RejectNegative UInteger Var(riscv_tt_mop_form_min_benefit) Init(-1)
+Set the minimum modeled benefit, in hundredths of an issue slot, required to form a MOP loop.
 
+; Internal measurement override: bypasses only the profitability verdict
+; so hardware A/B comparisons of refused shapes can be built.
+mtt-tensix-mop-form-force
+Target Undocumented Var(riscv_tt_mop_form_force) Init(0)
+Measurement only: bypass the MOP formation profitability refusal; every structural and soundness proof still applies.
 
 mtt-tensix-optimize-invariant-loadi
 Target Var(riscv_tt_opt_invariant_loadi) Init(0)

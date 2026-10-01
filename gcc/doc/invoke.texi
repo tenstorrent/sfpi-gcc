@@ -32466,6 +32466,17 @@ word stream reaches replay formation.  The trip count must be proven,
 the flattened size is bounded per loop and per function, and the body
 must contain at least one Tensix vector operation.
 
+@opindex mtt-tensix-optimize-mop-form
+@item -mtt-tensix-optimize-mop-form
+Re-roll runs and counted loops of identical replay playback launches
+into a hardware MOP loop, replacing @var{n} launch words with a
+constant-size MOP program.
+
+@opindex mtt-tensix-mop-form-min-benefit
+@item -mtt-tensix-mop-form-min-benefit=@var{n}
+Set the minimum modeled benefit, in hundredths of an issue slot,
+required to form a MOP loop; overrides the built-in cost-table default.
+
 @opindex mtt-tensix-optimize-dst-autoincr
 @item -mtt-tensix-optimize-dst-autoincr
 Replace constant-stride per-row advances of the Dst row counter with a
