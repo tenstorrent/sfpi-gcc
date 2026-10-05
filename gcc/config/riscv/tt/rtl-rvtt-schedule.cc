@@ -210,7 +210,8 @@ handle_qsr_load_latency (std::vector<basic_block> &visited, basic_block bb, rtx_
     {
       if (GET_CODE (probe) == INSN
 	  && recog_memoized (probe) >= 0
-	  &&get_attr_type (probe) == TYPE_TENSIX)
+	  && get_attr_type (probe) == TYPE_TENSIX
+	  && get_attr_length (probe))
 	{
 	  if (INSN_CODE (probe) != CODE_FOR_rvtt_sfpstore_int)
 	    // Met not-a-store, there is no hazard
