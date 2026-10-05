@@ -58,6 +58,8 @@ find_store (gimple_stmt_iterator gsi,
 
 	    case rvtt_insn_data::sfpload:
 	    case rvtt_insn_data::sfploadsrcs:
+	    case rvtt_insn_data::sfpload_lv:
+	    case rvtt_insn_data::sfploadsrcs_lv:
 	      if (first)
 		{
 		  // It's the original load, don't stop.
