@@ -1387,6 +1387,20 @@ residency_collect_loop_class (function *fn,
 			continue;
 		      if (blocked)
 			{
+			  /* Keep this pair-atomic refusal authoritative for
+			     every later residency class.  In particular, the
+			     broad hoisted-reuse walk below must not reclaim one
+			     of these fold-vulnerable loads after MAD-pair refused
+			     it: doing so removes the immediate fold and can expose
+			     the mul+add pair to the MAD combine, changing floating
+			     rounding despite this pass being an exact storage
+			     transform.  TAKEN is also the cross-class exclusion
+			     set, so exclude every vulnerable member of the refused
+			     pair (including the shared member that caused the
+			     refusal).  */
+			  for (unsigned ox = 0; ox != nops; ++ox)
+			    if (ops[ox].vulnerable)
+			      taken.add (ops[ox].load);
 			  rvtt_refuse (RVTT_REF_MADPAIR_SHARED_CONSTANT,
 				       dump_file,
 				       "const-residency: madpair loop bb %d "
