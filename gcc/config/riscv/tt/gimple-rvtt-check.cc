@@ -112,7 +112,7 @@ check_int_args (bool is_early, const rvtt_insn_data *insnd, gcall *call)
 	  continue;
 	}
 
-      val = TREE_INT_CST_LOW (op);
+      val = int32_t (TREE_INT_CST_LOW (op));
 
       if (!info.is_xmod ())
 	{
