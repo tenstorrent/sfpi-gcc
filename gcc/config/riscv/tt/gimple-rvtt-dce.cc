@@ -101,19 +101,23 @@ gather_var_defs (std::unordered_set<gcall *> &insns, std::vector<gcall *> &workl
 }
 
 static void
-remove_phi_uses (tree var)
+remove_phi_uses (std::unordered_set<gphi *> &phis, tree var)
 {
   gimple *stmt;
   imm_use_iterator iter;
   FOR_EACH_IMM_USE_STMT (stmt, iter, var)
     if (auto *phi = dyn_cast <gphi *> (stmt))
       {
+	if (!phis.insert (phi).second)
+	  continue;
+
 	if (dump_file)
 	  print_gimple_stmt (dump_file, phi, 0);
 	tree res = gimple_phi_result (phi);
+	remove_phi_uses (phis, res);
+
 	auto gsi = gsi_for_stmt (phi);
 	remove_phi_node (&gsi, true);
-	remove_phi_uses (res);
       }
 }
 
@@ -179,7 +183,10 @@ public:
     for (auto *call : insns)
       {
 	if (tree var = gimple_call_lhs (call))
-	  remove_phi_uses (var);
+	  {
+	    remove_phi_uses (phis, var);
+	    phis.clear ();
+	  }
 
 	if (dump_file)
 	  print_gimple_stmt (dump_file, call, 0);
