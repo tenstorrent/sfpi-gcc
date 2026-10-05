@@ -78,7 +78,10 @@ void fn (int i)
   __builtin_rvtt_sfpadd (cst, cst, 1); // { dg-error "is invalid mod1 value" }
 
   // FIXME: when passes better
-  //  __builtin_rvtt_sfpxloadi (nullptr, 0, 0, 0, i); // { dg- error "not a constant" }
+  //  __builtin_rvtt_sfpxloadi (nullptr, 0, 0, 0, i); // { dg- error "not a
+  //  constant" }
+
+  __builtin_rvtt_sfpload (nullptr, -4, 0, 0, 0, 0);
 }
 
 void test_ttreplay_below_bias ()
