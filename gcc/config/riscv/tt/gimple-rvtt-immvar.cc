@@ -150,10 +150,17 @@ emit_replacement (gimple_stmt_iterator &gsi, const rvtt_insn_data *insnd, gcall 
 	      || (1u << TREE_INT_CST_LOW (mod)) & new_insnd->mod_info ().mod ());
   gimple *stmt = gimple_build_call (new_insnd->decl, new_insnd->num_args ());
   gimple_set_location (stmt, gimple_location (call));
-  gimple_call_set_arg (stmt, new_insnd->src_arg (),
-		       gimple_call_arg (call, insnd->src_arg ()));
-  gimple_call_set_arg (stmt, new_insnd->src_arg () + 1, imm);
+  gcc_checking_assert (new_insnd->num_srcs () == insnd->num_srcs () + 1);
+
+  gimple_call_set_arg (stmt, new_insnd->src_arg () + insnd->num_srcs (), imm);
   gimple_call_set_arg (stmt, new_insnd->mod_arg (), mod);
+  for (unsigned ix = insnd->num_srcs (); ix--; )
+    gimple_call_set_arg (stmt, new_insnd->src_arg () + ix,
+			 gimple_call_arg (call, insnd->src_arg () + ix));
+  for (unsigned ix = new_insnd->mod_arg () + 1, jx = insnd->id_arg () + 1,
+	 limit = new_insnd->num_args (); ix != limit; ix++, jx++)
+    gimple_call_set_arg (stmt, ix, gimple_call_arg (call, jx));
+
   gimple_call_set_lhs (stmt, gimple_call_lhs (call));
   gsi_insert_before (&gsi, stmt, GSI_SAME_STMT);
 
