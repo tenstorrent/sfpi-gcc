@@ -1804,11 +1804,11 @@
       mem = gen_rtx_MEM (SImode, operands[1]);
       int op
         = TARGET_XTT_TENSIX_WH  ? TT_OP_WH_SFP_STOCH_RND (INTVAL (operands[8]),
-	             0, CREG_IDX_0, 0, 0, INTVAL (operands[7]) | SFPSTOCHRND_MOD1_IMM8)
+	             0, 0, 0, 0, INTVAL (operands[7]) | SFPSTOCHRND_MOD1_IMM8)
         : TARGET_XTT_TENSIX_BH  ? TT_OP_BH_SFP_STOCH_RND (INTVAL (operands[8]),
-	             0, CREG_IDX_0, 0, 0, INTVAL (operands[7]) | SFPSTOCHRND_MOD1_IMM8)
+	             0, 0, 0, 0, INTVAL (operands[7]) | SFPSTOCHRND_MOD1_IMM8)
         : TARGET_XTT_TENSIX_QSR ? TT_OP_QSR_SFP_STOCH_RND (INTVAL (operands[8]),
-	             0, CREG_IDX_0, 0, 0, INTVAL (operands[7]) | SFPSTOCHRND_MOD1_IMM8)
+	             0, 0, 0, 0, INTVAL (operands[7]) | SFPSTOCHRND_MOD1_IMM8)
         : (gcc_unreachable (), 0);
       opc = GEN_INT (op);
       enc = GEN_INT (rvtt_synth (UINTVAL (operands[6])).src_shift (8).dst_shift (4));
@@ -1838,8 +1838,8 @@
   {
     return rvtt_synth::pattern (which_alternative >> 1,
       which_alternative & 1
-      ? "SFPSTOCHRND\t%x0, L9, %x5, %4, %7, %8\t# LV:%x6"
-      : "SFPSTOCHRND\t%x0, L9, %x5, %4, %7, %8",
+      ? "SFPSTOCHRND\t%x0, L0, %x5, %4, %7, %8\t# LV:%x6"
+      : "SFPSTOCHRND\t%x0, L0, %x5, %4, %7, %8",
       operands, true, 9);
   }
   [(set_attr "type" "tensix")])
