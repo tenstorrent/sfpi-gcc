@@ -1790,7 +1790,10 @@
 	  ] UNSPECV_SFPSTOCHRND))]
   "TARGET_XTT_TENSIX"
 {
-  operands[7] = GEN_INT (INTVAL (operands[7]) | SFPSTOCHRND_MOD1_IMM8);
+  unsigned mod1 = INTVAL (operands[7]);
+  if (mod1 == SFPSTOCHRND_MOD1_INT32_TO_UINT8
+      || mod1 == SFPSTOCHRND_MOD1_INT32_TO_INT8)
+    operands[7] = GEN_INT (mod1 | SFPSTOCHRND_MOD1_IMM8);
 
   auto mem = const0_rtx;
   auto opc = const0_rtx;
@@ -1801,11 +1804,11 @@
       mem = gen_rtx_MEM (SImode, operands[1]);
       int op
         = TARGET_XTT_TENSIX_WH  ? TT_OP_WH_SFP_STOCH_RND (INTVAL (operands[8]),
-	             0, CREG_IDX_0, 0, 0, INTVAL (operands[7]))
+	             0, CREG_IDX_0, 0, 0, INTVAL (operands[7]) | SFPSTOCHRND_MOD1_IMM8)
         : TARGET_XTT_TENSIX_BH  ? TT_OP_BH_SFP_STOCH_RND (INTVAL (operands[8]),
-	             0, CREG_IDX_0, 0, 0, INTVAL (operands[7]))
+	             0, CREG_IDX_0, 0, 0, INTVAL (operands[7]) | SFPSTOCHRND_MOD1_IMM8)
         : TARGET_XTT_TENSIX_QSR ? TT_OP_QSR_SFP_STOCH_RND (INTVAL (operands[8]),
-	             0, CREG_IDX_0, 0, 0, INTVAL (operands[7]))
+	             0, CREG_IDX_0, 0, 0, INTVAL (operands[7]) | SFPSTOCHRND_MOD1_IMM8)
         : (gcc_unreachable (), 0);
       opc = GEN_INT (op);
       enc = GEN_INT (rvtt_synth (UINTVAL (operands[6])).src_shift (8).dst_shift (4));

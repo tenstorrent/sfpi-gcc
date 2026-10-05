@@ -35,7 +35,7 @@ void baz () {
 /*
 **_Z3bazv:
 **	# READ L0
-**	SFPSTOCHRND	L0, L9, L0, 0, 9, 2
+**	SFPSTOCHRND	L0, L9, L0, 0, 1, 2
 **	# WRITE L0
 **	ret
 */
