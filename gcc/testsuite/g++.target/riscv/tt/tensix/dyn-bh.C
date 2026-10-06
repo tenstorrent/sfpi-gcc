@@ -112,24 +112,24 @@ void divp2 (unsigned i) {
 
 void stochrnd (unsigned i) {
   auto a = __builtin_rvtt_sfpreadlreg (2);
-  auto b = __builtin_rvtt_sfpstochrnd_i (nullptr, a, 0, 0, 0, 0, 0);
+  auto b = __builtin_rvtt_sfpstochrnd_descale_i (nullptr, a, 0, 0, 0, 4, 0);
   __builtin_rvtt_sfpwritelreg (b, 6);
   a = __builtin_rvtt_sfpreadlreg (2);
-  b = __builtin_rvtt_sfpstochrnd_i (iptr, a, i, 0, 0, 0, 0);
+  b = __builtin_rvtt_sfpstochrnd_descale_i (iptr, a, i, 0, 0, 4, 0);
   __builtin_rvtt_sfpwritelreg (b, 6);
 }
 /*
 **_Z8stochrndj:
 **	# READ L2
-**	SFPSTOCHRND	L6, L0, L2, 0, 0, 0
+**	SFPSTOCHRND	L6, L0, L2, 0, 12, 0
 **	# WRITE L6
 **	# READ L2
 **	andi	a0,a0,31
-**	li	a5, 2382365288	# 1:8e000268
+**	li	a5, 2382365292	# 1:8e00026c
 **	slli	a0,a0,16
 **	add	a0,a0,a5
 **	lui	a5,%hi\(iptr\)
-**	sw	a0, %lo\(iptr\)\(a5\)	# 1:SFPSTOCHRND	L6, L0, L2, a0, 0, 0
+**	sw	a0, %lo\(iptr\)\(a5\)	# 1:SFPSTOCHRND	L6, L0, L2, a0, 12, 0
 **	# WRITE L6
 **	ret
 */

@@ -3,7 +3,7 @@
 
 void foo () {
     auto a = __builtin_rvtt_sfpreadlreg (0);
-    auto r = __builtin_rvtt_sfpstochrnd_i (nullptr, a, 0x1f, 0, 0, 4, 1);
+    auto r = __builtin_rvtt_sfpstochrnd_descale_i (nullptr, a, 0x1f, 0, 0, 4, 1);
     __builtin_rvtt_sfpwritelreg (r, 0);
 }
 /*
@@ -16,7 +16,7 @@ void foo () {
 void bar () {
     auto a = __builtin_rvtt_sfpreadlreg (0);
     auto b = __builtin_rvtt_sfpreadlreg (1);
-    auto r = __builtin_rvtt_sfpstochrnd_v (b, a, 5, 1);
+    auto r = __builtin_rvtt_sfpstochrnd_descale_v (b, a, 5, 1);
     __builtin_rvtt_sfpwritelreg (r, 0);
 }
 /*
