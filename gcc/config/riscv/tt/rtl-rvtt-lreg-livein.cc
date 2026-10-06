@@ -47,14 +47,25 @@
 	mask; a read or write metadata builtin for LREG N clears bit N,
 	because from that point the value has visible RTL.
 
-     2. Per block, every interval open at entry or opened by a raw
-	write is materialized as a fresh XTT32SImode pseudo defined by
-	a SENTINEL: a zero-length fixed-register read of that LREG
-	(gen_rvtt_sfpreadlreg<N>).  The interval is closed with a plain
-	USE of the pseudo at the consuming builtin, at the releasing or
-	rewriting raw access, or at block end.  A zero-length
-	fixed-register def/use pair is exactly what IRA understands as
-	"this hard register is occupied here".
+   The sfprawlreg_effect metadata builtin names the read and write effects of
+   the immediately preceding opaque instruction.  The sfprawlreg_access
+   builtin names explicit ownership boundaries with release and write masks.
+   Callers must supply these annotations; this pass does not decode arbitrary
+   inline assembly.  A forward dataflow
+   fixed point carries eight-bit ownership masks across CFG edges, taking
+   the union of predecessor masks at joins.  A backward liveness fixed point
+   carries effect reads to their reaching typed/raw definition or function
+   entry, so inputs are protected across the entire producer-to-consumer gap.
+   Effect writes are definitions in that backward problem, so dead raw outputs
+   do not consume scarce LREGs to function exit.  An access marker releases
+   the named reservations and opens explicitly owned/live-out writes.  A typed
+   sfpreadlreg<N> or sfpwritelreg<N> ends the raw reservation for that register.
+
+   Per block, every demanded interval is materialized as a fixed-register
+   SENTINEL: a zero-length read of that LREG.  A plain USE closes it at the
+   consuming builtin, ownership boundary, rewrite, or block end.  This fixed
+   def/use interval is what prevents IRA from allocating the architectural
+   register to an unrelated value.
 
      3. Joins get a FRESH LOCAL TOKEN rather than a shared pseudo:
 	every block materializes its own pseudo for a value it
@@ -234,6 +245,39 @@ raw_access_p (rtx_insn *insn, unsigned *release_mask, unsigned *write_mask)
   return true;
 }
 
+/* Return true when INSN is the rvtt_sfprawlreg_effect marker.  *READ_MASK
+   names inputs of the immediately preceding opaque instruction and
+   *WRITE_MASK names its outputs.  Reads are backward uses and writes are
+   backward definitions.  Explicit raw ownership/live-out values use
+   sfprawlreg_access instead.  */
+
+static bool
+raw_effect_p (rtx_insn *insn, unsigned *read_mask, unsigned *write_mask)
+{
+  if (recog_memoized (insn) != CODE_FOR_rvtt_sfprawlreg_effect)
+    return false;
+
+  rtx pat = PATTERN (insn);
+  gcc_assert (GET_CODE (pat) == UNSPEC_VOLATILE
+	      && XINT (pat, 1) == UNSPECV_SFPRAWLREG_EFFECT);
+  rtx read = XVECEXP (pat, 0, 0);
+  rtx write = XVECEXP (pat, 0, 1);
+  *read_mask = CONST_INT_P (read) ? UINTVAL (read) & 0xff : 0xff;
+  *write_mask = CONST_INT_P (write) ? UINTVAL (write) & 0xff : 0xff;
+
+  /* Header-side decoders can be fed an instruction word containing a runtime
+     address.  Its exact LREG fields are then not a front-end constant.  Make
+     that case conservatively affect every LREG, and replace the operands now
+     so no runtime mask computation survives this mandatory metadata pass.  */
+  if (!CONST_INT_P (read) || !CONST_INT_P (write))
+    {
+      XVECEXP (pat, 0, 0) = GEN_INT (*read_mask);
+      XVECEXP (pat, 0, 1) = GEN_INT (*write_mask);
+      INSN_CODE (insn) = -1;
+    }
+  return true;
+}
+
 /* RTL for a sentinel read of hard LREG REGNO defining VALUE, which is the
    same hard register.  Using a pseudo here is insufficient: IRA may allocate
    it to another LREG and leave reload to satisfy the fixed output constraint,
@@ -274,6 +318,18 @@ emit_sentinel_before (unsigned regno, rtx value, rtx_insn *before)
   return emit_insn_before (make_sentinel (regno, value), before);
 }
 
+/* Make an opaque raw instruction's architectural write visible at its effect
+   marker.  Unlike a sentinel interval, this point clobber is required even
+   when the raw result is dead: IRA must not allocate an unrelated value that
+   is live across the instruction to the overwritten LREG.  */
+
+static void
+emit_clobber_before (unsigned regno, rtx_insn *before)
+{
+  rtx reg = gen_rtx_REG (XTT32SImode, SFPU_REG_FIRST + regno);
+  emit_insn_before (gen_rtx_CLOBBER (VOIDmode, reg), before);
+}
+
 /* Terminate a sentinel interval: emit a USE of VALUE just before
    BEFORE, so the reserved LREG stays live up to that point.  A null
    VALUE (no interval open) is a no-op.  */
@@ -305,9 +361,11 @@ end_sentinel_at_block_end (rtx value, basic_block bb)
 
 /* Dataflow transfer over BB: LIVE is the block-entry bitmask of LREGs
    holding a raw (RTL-invisible) value, bit N for LREG N.  A raw-access
-   marker clears its release mask and sets its write mask; a read or
-   write metadata builtin for LREG N clears bit N (from that point the
-   value has visible RTL).  Returns the block-exit mask.  */
+   access marker clears its release mask and sets its write mask.  Effect
+   reads and writes are handled solely by the backward demand problem below,
+   so a dead per-instruction output does not become a function-wide ownership
+   interval.  A read or write metadata builtin for LREG N clears bit N
+   (from that point the value has visible RTL).  Returns the block-exit mask.  */
 
 static unsigned
 transfer_block (basic_block bb, unsigned live)
@@ -328,6 +386,100 @@ transfer_block (basic_block bb, unsigned live)
           if (regno >= 0)
             live &= ~(1u << regno);
         }
+    }
+  return live;
+}
+
+/* Backward demand transfer.  Effect reads are uses and effect writes are
+   definitions.  A typed LREG read is likewise a use of the architectural
+   value; a typed write defines it.  Access releases and writes are explicit
+   boundaries and therefore stop a later demand from flowing farther back.  */
+
+static unsigned
+transfer_demand_block (basic_block bb, unsigned live)
+{
+  for (rtx_insn *insn = BB_END (bb);; insn = PREV_INSN (insn))
+    {
+      if (NONDEBUG_INSN_P (insn))
+	{
+	  unsigned first, writes;
+	  if (raw_effect_p (insn, &first, &writes))
+	    live = (live & ~writes) | first;
+	  else if (raw_access_p (insn, &first, &writes))
+	    live &= ~(first | writes);
+	  else
+	    {
+	      int regno = read_lregno (insn);
+	      if (regno >= 0)
+		live |= 1u << regno;
+	      else if ((regno = write_lregno (insn)) >= 0)
+		live &= ~(1u << regno);
+	    }
+	}
+      if (insn == BB_HEAD (bb))
+	break;
+    }
+  return live;
+}
+
+/* Backward demand originating only in raw-effect reads.  Unlike the combined
+   problem above, this may justify a function-entry reservation without a
+   reaching raw definition in the function.  Typed reads and writes are
+   boundaries: crossing back into raw code requires a new typed write.  */
+
+static unsigned
+transfer_effect_demand_block (basic_block bb, unsigned live)
+{
+  for (rtx_insn *insn = BB_END (bb);; insn = PREV_INSN (insn))
+    {
+      if (NONDEBUG_INSN_P (insn))
+	{
+	  unsigned first, writes;
+	  if (raw_effect_p (insn, &first, &writes))
+	    live = (live & ~writes) | first;
+	  else if (raw_access_p (insn, &first, &writes))
+	    live &= ~(first | writes);
+	  else
+	    {
+	      int regno = read_lregno (insn);
+	      if (regno < 0)
+		regno = write_lregno (insn);
+	      if (regno >= 0)
+		live &= ~(1u << regno);
+	    }
+	}
+      if (insn == BB_HEAD (bb))
+	break;
+    }
+  return live;
+}
+
+/* Forward provenance: bit N means the current architectural value in LREG N
+   was defined by raw code.  This is deliberately not liveness; it gates
+   typed-read demand so an ordinary sfpreadlreg at function entry does not
+   manufacture a reservation.  */
+
+static unsigned
+transfer_provenance_block (basic_block bb, unsigned live)
+{
+  rtx_insn *insn;
+  FOR_BB_INSNS (bb, insn)
+    {
+      if (!NONDEBUG_INSN_P (insn))
+	continue;
+      unsigned first, writes;
+      if (raw_effect_p (insn, &first, &writes))
+	live |= writes;
+      else if (raw_access_p (insn, &first, &writes))
+	live = (live & ~first) | writes;
+      else
+	{
+	  int regno = read_lregno (insn);
+	  if (regno < 0)
+	    regno = write_lregno (insn);
+	  if (regno >= 0)
+	    live &= ~(1u << regno);
+	}
     }
   return live;
 }
@@ -371,6 +523,179 @@ make_raw_lregs_live (function *fn)
     }
   while (changed);
 
+  /* Track whether a raw definition reaches each point.  Typed-read demand is
+     admitted only where this provenance exists; raw-effect demand has its own
+     entry-capable backward problem below.  */
+  auto_vec<unsigned> provenance_in (n_bbs), provenance_out (n_bbs);
+  provenance_in.safe_grow_cleared (n_bbs);
+  provenance_out.safe_grow_cleared (n_bbs);
+  do
+    {
+      changed = false;
+      basic_block bb;
+      FOR_EACH_BB_FN (bb, fn)
+	{
+	  unsigned next_in = 0;
+	  edge e;
+	  edge_iterator ei;
+	  FOR_EACH_EDGE (e, ei, bb->preds)
+	    next_in |= provenance_out[e->src->index];
+	  unsigned next_out = transfer_provenance_block (bb, next_in);
+	  if (next_in != provenance_in[bb->index]
+	      || next_out != provenance_out[bb->index])
+	    {
+	      provenance_in[bb->index] = next_in;
+	      provenance_out[bb->index] = next_out;
+	      changed = true;
+	    }
+	}
+    }
+  while (changed);
+
+  /* Solve the complementary backward problem.  A per-instruction effect is
+     useful only if its input stays reserved all the way from the reaching
+     definition (including a typed sfpwritelreg) or function entry.  */
+  auto_vec<unsigned> demand_in (n_bbs), demand_out (n_bbs);
+  demand_in.safe_grow_cleared (n_bbs);
+  demand_out.safe_grow_cleared (n_bbs);
+  do
+    {
+      changed = false;
+      basic_block bb;
+      FOR_EACH_BB_FN (bb, fn)
+	{
+	  unsigned next_out = 0;
+	  edge e;
+	  edge_iterator ei;
+	  FOR_EACH_EDGE (e, ei, bb->succs)
+	    next_out |= demand_in[e->dest->index];
+	  unsigned next_in = transfer_demand_block (bb, next_out);
+	  if (next_in != demand_in[bb->index]
+	      || next_out != demand_out[bb->index])
+	    {
+	      demand_in[bb->index] = next_in;
+	      demand_out[bb->index] = next_out;
+	      changed = true;
+	    }
+	}
+    }
+  while (changed);
+
+  auto_vec<unsigned> effect_in (n_bbs), effect_out (n_bbs);
+  effect_in.safe_grow_cleared (n_bbs);
+  effect_out.safe_grow_cleared (n_bbs);
+  do
+    {
+      changed = false;
+      basic_block bb;
+      FOR_EACH_BB_FN (bb, fn)
+	{
+	  unsigned next_out = 0;
+	  edge e;
+	  edge_iterator ei;
+	  FOR_EACH_EDGE (e, ei, bb->succs)
+	    next_out |= effect_in[e->dest->index];
+	  unsigned next_in = transfer_effect_demand_block (bb, next_out);
+	  if (next_in != effect_in[bb->index]
+	      || next_out != effect_out[bb->index])
+	    {
+	      effect_in[bb->index] = next_in;
+	      effect_out[bb->index] = next_out;
+	      changed = true;
+	    }
+	}
+    }
+  while (changed);
+
+  const unsigned max_uid = get_max_uid ();
+  auto_vec<unsigned> demand_after (max_uid);
+  demand_after.safe_grow_cleared (max_uid);
+  auto_vec<unsigned> effect_after (max_uid);
+  effect_after.safe_grow_cleared (max_uid);
+  auto_vec<unsigned> provenance_after (max_uid);
+  provenance_after.safe_grow_cleared (max_uid);
+  basic_block demand_bb;
+  FOR_EACH_BB_FN (demand_bb, fn)
+    {
+      unsigned live = demand_out[demand_bb->index];
+      for (rtx_insn *insn = BB_END (demand_bb);;
+	   insn = PREV_INSN (insn))
+	{
+	  if (NONDEBUG_INSN_P (insn))
+	    {
+	      gcc_assert ((unsigned) INSN_UID (insn) < max_uid);
+	      demand_after[INSN_UID (insn)] = live;
+	      unsigned first, writes;
+	      if (raw_effect_p (insn, &first, &writes))
+		live = (live & ~writes) | first;
+	      else if (raw_access_p (insn, &first, &writes))
+		live &= ~(first | writes);
+	      else
+		{
+		  int regno = read_lregno (insn);
+		  if (regno >= 0)
+		    live |= 1u << regno;
+		  else if ((regno = write_lregno (insn)) >= 0)
+		    live &= ~(1u << regno);
+		}
+	    }
+	  if (insn == BB_HEAD (demand_bb))
+	    break;
+	}
+    }
+
+  FOR_EACH_BB_FN (demand_bb, fn)
+    {
+      unsigned live = effect_out[demand_bb->index];
+      for (rtx_insn *insn = BB_END (demand_bb);;
+	   insn = PREV_INSN (insn))
+	{
+	  if (NONDEBUG_INSN_P (insn))
+	    {
+	      effect_after[INSN_UID (insn)] = live;
+	      unsigned first, writes;
+	      if (raw_effect_p (insn, &first, &writes))
+		live = (live & ~writes) | first;
+	      else if (raw_access_p (insn, &first, &writes))
+		live &= ~(first | writes);
+	      else
+		{
+		  int regno = read_lregno (insn);
+		  if (regno < 0)
+		    regno = write_lregno (insn);
+		  if (regno >= 0)
+		    live &= ~(1u << regno);
+		}
+	    }
+	  if (insn == BB_HEAD (demand_bb))
+	    break;
+	}
+    }
+
+  FOR_EACH_BB_FN (demand_bb, fn)
+    {
+      unsigned live = provenance_in[demand_bb->index];
+      rtx_insn *insn;
+      FOR_BB_INSNS (demand_bb, insn)
+	if (NONDEBUG_INSN_P (insn))
+	  {
+	    unsigned first, writes;
+	    if (raw_effect_p (insn, &first, &writes))
+	      live |= writes;
+	    else if (raw_access_p (insn, &first, &writes))
+	      live = (live & ~first) | writes;
+	    else
+	      {
+		int regno = read_lregno (insn);
+		if (regno < 0)
+		  regno = write_lregno (insn);
+		if (regno >= 0)
+		  live &= ~(1u << regno);
+	      }
+	    provenance_after[INSN_UID (insn)] = live;
+	  }
+    }
+
   basic_block bb;
   FOR_EACH_BB_FN (bb, fn)
     {
@@ -390,14 +715,17 @@ make_raw_lregs_live (function *fn)
       if (!first)
         continue;
 
+      unsigned owned = in[bb->index];
+      unsigned entry_demand
+	= effect_in[bb->index]
+	  | (demand_in[bb->index] & provenance_in[bb->index]);
       for (unsigned regno = 0; regno != 8; ++regno)
-        if (in[bb->index] & (1u << regno))
-          {
-	    rtx value = gen_rtx_REG (XTT32SImode,
-				     SFPU_REG_FIRST + regno);
-            live[regno] = value;
-            producer[regno] = emit_sentinel_before (regno, value, first);
-          }
+	if ((owned | entry_demand) & (1u << regno))
+	  {
+	    rtx value = gen_rtx_REG (XTT32SImode, SFPU_REG_FIRST + regno);
+	    live[regno] = value;
+	    producer[regno] = emit_sentinel_before (regno, value, first);
+	  }
 
       for (rtx_insn *insn = BB_HEAD (bb), *next;
            insn != NEXT_INSN (BB_END (bb)); insn = next)
@@ -407,19 +735,53 @@ make_raw_lregs_live (function *fn)
             continue;
 
 	  unsigned releases, writes;
-	  if (raw_access_p (insn, &releases, &writes))
-            {
-              for (unsigned regno = 0; regno != 8; ++regno)
-		if (releases & (1u << regno))
-                  {
-                    end_sentinel (live[regno], insn);
-                    live[regno] = NULL_RTX;
-                    producer[regno] = NULL;
-                  }
-              for (unsigned regno = 0; regno != 8; ++regno)
-                if (writes & (1u << regno))
-                  {
-                    end_sentinel (live[regno], insn);
+	  if (raw_effect_p (insn, &releases, &writes))
+	    {
+	      /* Backward demand normally made each input live from its reaching
+		 definition.  Keep a local fallback for malformed or newly split RTL:
+		 the marker must at minimum reserve the preceding raw instruction.  */
+	      rtx_insn *raw_insn = PREV_INSN (insn);
+	      while (raw_insn && !NONDEBUG_INSN_P (raw_insn))
+		raw_insn = PREV_INSN (raw_insn);
+	      if (!raw_insn || BLOCK_FOR_INSN (raw_insn) != bb)
+		raw_insn = insn;
+
+	      for (unsigned regno = 0; regno != 8; ++regno)
+		if ((releases & (1u << regno)) && !live[regno])
+		  {
+		    rtx value = gen_rtx_REG (XTT32SImode,
+					     SFPU_REG_FIRST + regno);
+		    producer[regno]
+		      = emit_sentinel_before (regno, value, raw_insn);
+		    live[regno] = value;
+		  }
+
+	      unsigned after
+		= owned | effect_after[INSN_UID (insn)]
+		  | (demand_after[INSN_UID (insn)]
+		     & provenance_after[INSN_UID (insn)]);
+
+	      /* A write supersedes the old raw value after the opaque instruction,
+		 including the read/write case.  Other inputs end here only when this
+		 is their last demanded use and no forward ownership remains.  */
+	      for (unsigned regno = 0; regno != 8; ++regno)
+		if ((writes & (1u << regno)) || !(after & (1u << regno)))
+		  {
+		    end_sentinel (live[regno], insn);
+		    live[regno] = NULL_RTX;
+		    producer[regno] = NULL;
+		  }
+
+	      /* Point-clobber every raw output independently of output liveness.
+		 This protects unrelated typed values that span a dead raw write.  */
+	      for (unsigned regno = 0; regno != 8; ++regno)
+		if (writes & (1u << regno))
+		  emit_clobber_before (regno, insn);
+
+	      /* A demanded raw output starts a fresh reservation after the marker.  */
+	      for (unsigned regno = 0; regno != 8; ++regno)
+		if ((writes & after) & (1u << regno))
+		  {
 		    rtx value = gen_rtx_REG (XTT32SImode,
 					     SFPU_REG_FIRST + regno);
                     producer[regno] = emit_sentinel_after (regno, value, insn);
@@ -428,18 +790,55 @@ make_raw_lregs_live (function *fn)
               continue;
             }
 
-          int regno = read_lregno (insn);
-          if (regno < 0)
-            regno = write_lregno (insn);
-          if (regno >= 0)
-            {
-              if (insn == producer[regno])
-                continue;
-              end_sentinel (live[regno], insn);
-              live[regno] = NULL_RTX;
-              producer[regno] = NULL;
-            }
-        }
+	  if (raw_access_p (insn, &releases, &writes))
+	    {
+	      owned = (owned & ~releases) | writes;
+	      unsigned after
+		= owned | effect_after[INSN_UID (insn)]
+		  | (demand_after[INSN_UID (insn)]
+		     & provenance_after[INSN_UID (insn)]);
+	      for (unsigned regno = 0; regno != 8; ++regno)
+		if ((releases | writes) & (1u << regno))
+		  {
+		    end_sentinel (live[regno], insn);
+		    live[regno] = NULL_RTX;
+		    producer[regno] = NULL;
+		    if (after & (1u << regno))
+		      {
+			rtx value = gen_rtx_REG (XTT32SImode,
+						 SFPU_REG_FIRST + regno);
+			producer[regno]
+			  = emit_sentinel_after (regno, value, insn);
+			live[regno] = value;
+		      }
+		  }
+	      continue;
+	    }
+
+	  int regno = read_lregno (insn);
+	  if (regno < 0)
+	    regno = write_lregno (insn);
+	  if (regno >= 0)
+	    {
+	      if (insn == producer[regno])
+		continue;
+	      end_sentinel (live[regno], insn);
+	      live[regno] = NULL_RTX;
+	      producer[regno] = NULL;
+	      owned &= ~(1u << regno);
+	      unsigned after
+		= effect_after[INSN_UID (insn)]
+		  | (demand_after[INSN_UID (insn)]
+		     & provenance_after[INSN_UID (insn)]);
+	      if (after & (1u << regno))
+		{
+		  rtx value = gen_rtx_REG (XTT32SImode,
+					   SFPU_REG_FIRST + regno);
+		  producer[regno] = emit_sentinel_after (regno, value, insn);
+		  live[regno] = value;
+		}
+	    }
+	}
 
       /* A successor gets its own entry token.  This endpoint keeps the local
          interval alive through all instructions in the current block without
