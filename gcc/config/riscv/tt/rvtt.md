@@ -1756,7 +1756,68 @@
   }
   [(set_attr "type" "tensix")])
 
-(define_expand "rvtt_sfpstochrnd_i"
+(define_expand "rvtt_sfpstochrnd"
+  [(set (match_operand:XTT32SI 0 "register_operand")
+        (unspec_volatile:XTT32SI [
+          (match_operand:XTT32SI 1 "register_operand")
+	  (match_operand:SI    2 "const_int_operand")
+          (match_operand:SI    3 "const_int_operand")
+	  ] UNSPECV_SFPSTOCHRND))]
+  "TARGET_XTT_TENSIX"
+{
+  emit_insn (gen_rvtt_sfpstochrnd_lv
+    (operands[0], rvtt_gen_rtx_noval (XTT32SImode),
+     operands[1], operands[2], operands[3]));
+  DONE;
+})
+
+(define_insn "rvtt_sfpstochrnd_lv"
+  [(set (match_operand:XTT32SI 0 "register_operand" "=xr,xr")
+        (unspec_volatile:XTT32SI [
+	  (match_operand:XTT32SI 1 "reg_or_cstlreg_or_noval_operand" "xn,0")
+          (match_operand:XTT32SI 2 "reg_or_cstlreg_operand"  "xrxc,xrxc")
+          (match_operand:SI    3 "const_int_operand" "n,n")
+          (match_operand:SI    4 "const_int_operand" "n,n")
+	  ] UNSPECV_SFPSTOCHRND))]
+  "TARGET_XTT_TENSIX"
+  ;; Use L0 as dummy arg, otherwise simulator complains
+  "@
+   SFPSTOCHRND\t%x0, L0, %x2, 0, %3, %4
+   SFPSTOCHRND\t%x0, L0, %x2, 0, %3, %4\t# LV:%x1"
+  [(set_attr "type" "tensix")])
+
+(define_expand "rvtt_sfpstochrnd_descale_v"
+  [(set (match_operand:XTT32SI 0 "register_operand")
+        (unspec_volatile:XTT32SI [
+          (match_operand:XTT32SI 1 "register_operand")
+          (match_operand:XTT32SI 2 "reg_or_cstlreg_operand")
+	  (match_operand:SI    3 "const_int_operand")
+          (match_operand:SI    4 "const_int_operand")
+	  ] UNSPECV_SFPSTOCHRND))]
+  "TARGET_XTT_TENSIX"
+{
+  emit_insn (gen_rvtt_sfpstochrnd_descale_v_lv
+    (operands[0], rvtt_gen_rtx_noval (XTT32SImode),
+     operands[1], operands[2], operands[3], operands[4]));
+  DONE;
+})
+
+(define_insn "rvtt_sfpstochrnd_descale_v_lv"
+  [(set (match_operand:XTT32SI 0 "register_operand" "=xr,xr")
+        (unspec_volatile:XTT32SI [
+	  (match_operand:XTT32SI 1 "reg_or_cstlreg_or_noval_operand" "xn,0")
+          (match_operand:XTT32SI 2 "reg_or_cstlreg_operand"  "xrxc,xrxc")
+          (match_operand:XTT32SI 3 "reg_or_cstlreg_operand"  "xrxc,xrxc")
+          (match_operand:SI    4 "const_int_operand" "n,n")
+          (match_operand:SI    5 "const_int_operand" "n,n")
+	  ] UNSPECV_SFPSTOCHRND))]
+  "TARGET_XTT_TENSIX"
+  "@
+   SFPSTOCHRND\t%x0, %x3, %x2, 0, %4, %5
+   SFPSTOCHRND\t%x0, %x3, %x2, 0, %4, %5\t# LV:%x1"
+  [(set_attr "type" "tensix")])
+
+(define_expand "rvtt_sfpstochrnd_descale_i"
   [(set (match_operand:XTT32SI 0 "register_operand")
         (unspec_volatile:XTT32SI [
 	  (match_operand:SI    1 "reg_or_0_operand")
@@ -1769,14 +1830,14 @@
 	  ] UNSPECV_SFPSTOCHRND))]
   "TARGET_XTT_TENSIX"
 {
-  emit_insn (gen_rvtt_sfpstochrnd_i_lv
+  emit_insn (gen_rvtt_sfpstochrnd_descale_i_lv
     (operands[0], operands[1], rvtt_gen_rtx_noval (XTT32SImode),
      operands[2], operands[3],
      operands[4], operands[5], operands[6], operands[7]));
   DONE;
 })
 
-(define_expand "rvtt_sfpstochrnd_i_lv"
+(define_expand "rvtt_sfpstochrnd_descale_i_lv"
   [(set (match_operand:XTT32SI 0 "register_operand")
         (unspec_volatile:XTT32SI [
 	  (match_operand:SI    1 "reg_or_0_operand")
@@ -1790,10 +1851,7 @@
 	  ] UNSPECV_SFPSTOCHRND))]
   "TARGET_XTT_TENSIX"
 {
-  unsigned mod1 = INTVAL (operands[7]);
-  if (mod1 == SFPSTOCHRND_MOD1_INT32_TO_UINT8
-      || mod1 == SFPSTOCHRND_MOD1_INT32_TO_INT8)
-    operands[7] = GEN_INT (mod1 | SFPSTOCHRND_MOD1_IMM8);
+  operands[7] = GEN_INT (INTVAL (operands[7]) | SFPSTOCHRND_MOD1_IMM8);
 
   auto mem = const0_rtx;
   auto opc = const0_rtx;
@@ -1804,24 +1862,24 @@
       mem = gen_rtx_MEM (SImode, operands[1]);
       int op
         = TARGET_XTT_TENSIX_WH  ? TT_OP_WH_SFP_STOCH_RND (INTVAL (operands[8]),
-	             0, 0, 0, 0, INTVAL (operands[7]) | SFPSTOCHRND_MOD1_IMM8)
+	             0, 0, 0, 0, INTVAL (operands[7]))
         : TARGET_XTT_TENSIX_BH  ? TT_OP_BH_SFP_STOCH_RND (INTVAL (operands[8]),
-	             0, 0, 0, 0, INTVAL (operands[7]) | SFPSTOCHRND_MOD1_IMM8)
+	             0, 0, 0, 0, INTVAL (operands[7]))
         : TARGET_XTT_TENSIX_QSR ? TT_OP_QSR_SFP_STOCH_RND (INTVAL (operands[8]),
-	             0, 0, 0, 0, INTVAL (operands[7]) | SFPSTOCHRND_MOD1_IMM8)
+	             0, 0, 0, 0, INTVAL (operands[7]))
         : (gcc_unreachable (), 0);
       opc = GEN_INT (op);
       enc = GEN_INT (rvtt_synth (UINTVAL (operands[6])).src_shift (8).dst_shift (4));
       imm = operands[5];
     }
 
-  emit_insn (gen_rvtt_sfpstochrnd_i_lv_int
+  emit_insn (gen_rvtt_sfpstochrnd_descale_i_lv_int
     (operands[0], mem, opc, enc, imm,
      operands[3], operands[2], operands[7], operands[8]));
   DONE;
 })
 
-(define_insn "rvtt_sfpstochrnd_i_lv_int"
+(define_insn "rvtt_sfpstochrnd_descale_i_lv_int"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr,xr,xr,xr")
         (unspec_volatile:XTT32SI [
           (match_operand:SI    1 "mem_or_0_operand" "J,J,m,m")
@@ -1836,43 +1894,13 @@
    (clobber (match_scratch:SI 9 "=X,X,&r,&r"))]
   "TARGET_XTT_TENSIX"
   {
+    // Use L0 as dummy arg, otherwise simulator complains
     return rvtt_synth::pattern (which_alternative >> 1,
       which_alternative & 1
       ? "SFPSTOCHRND\t%x0, L0, %x5, %4, %7, %8\t# LV:%x6"
       : "SFPSTOCHRND\t%x0, L0, %x5, %4, %7, %8",
       operands, true, 9);
   }
-  [(set_attr "type" "tensix")])
-
-(define_expand "rvtt_sfpstochrnd_v"
-  [(set (match_operand:XTT32SI 0 "register_operand")
-        (unspec_volatile:XTT32SI [
-          (match_operand:XTT32SI 1 "register_operand")
-          (match_operand:XTT32SI 2 "reg_or_cstlreg_operand")
-	  (match_operand:SI    3 "const_int_operand")
-          (match_operand:SI    4 "const_int_operand")
-	  ] UNSPECV_SFPSTOCHRND))]
-  "TARGET_XTT_TENSIX"
-{
-  emit_insn (gen_rvtt_sfpstochrnd_v_lv
-    (operands[0], rvtt_gen_rtx_noval (XTT32SImode),
-     operands[1], operands[2], operands[3], operands[4]));
-  DONE;
-})
-
-(define_insn "rvtt_sfpstochrnd_v_lv"
-  [(set (match_operand:XTT32SI 0 "register_operand" "=xr,xr")
-        (unspec_volatile:XTT32SI [
-	  (match_operand:XTT32SI 1 "reg_or_cstlreg_or_noval_operand" "xn,0")
-          (match_operand:XTT32SI 2 "reg_or_cstlreg_operand"  "xrxc,xrxc")
-          (match_operand:XTT32SI 3 "reg_or_cstlreg_operand"  "xrxc,xrxc")
-          (match_operand:SI    4 "const_int_operand" "n,n")
-          (match_operand:SI    5 "const_int_operand" "n,n")
-	  ] UNSPECV_SFPSTOCHRND))]
-  "TARGET_XTT_TENSIX"
-  "@
-   SFPSTOCHRND\t%x0, %x3, %x2, 0, %4, %5
-   SFPSTOCHRND\t%x0, %x3, %x2, 0, %4, %5\t# LV:%x1"
   [(set_attr "type" "tensix")])
 
 (define_expand "rvtt_sfpreadconfig"
