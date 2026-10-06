@@ -43,6 +43,7 @@
 
   UNSPECV_SFPVARLREG
   UNSPECV_SFPRAWLREG_ACCESS
+  UNSPECV_SFPRAWLREG_EFFECT
 
   UNSPECV_SFPNOP
   UNSPECV_SFPBANKDONE
@@ -225,6 +226,23 @@
      ] UNSPECV_SFPRAWLREG_ACCESS)]
   "TARGET_XTT_TENSIX"
   "# RAWLREG %0, %1"
+  [(set_attr "type" "tensix")
+   (set_attr "length" "0")])
+
+;; Compiler-only per-instruction effects marker.  Operand 0 names LREGs read
+;; by the immediately preceding opaque instruction and operand 1 names LREGs
+;; it writes.  The lreg-livein pass extends each input reservation backwards
+;; to its reaching definition (or function entry), through the preceding raw
+;; instruction.  Writes are definitions and remain reserved only when a later
+;; read demands them.  sfprawlreg_access remains the explicit ownership/live-
+;; out interface.
+(define_insn "rvtt_sfprawlreg_effect"
+  [(unspec_volatile:XTT32SI [
+     (match_operand:SI 0 "general_operand" "g")
+     (match_operand:SI 1 "general_operand" "g")
+     ] UNSPECV_SFPRAWLREG_EFFECT)]
+  "TARGET_XTT_TENSIX"
+  "# RAWLREG_EFFECT %0, %1"
   [(set_attr "type" "tensix")
    (set_attr "length" "0")])
 

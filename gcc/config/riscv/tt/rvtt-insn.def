@@ -77,6 +77,13 @@ RVTT_FN (sfpwritelreg,       ,,VOID_FTYPE_XTT_VEC_USI,                          
 // Operand 0 is a release/last-use mask; operand 1 is a write/new-live mask.
 // Keep it through RTL so the pre-IRA lreg-livein pass can consume it.
 RVTT_FN (sfprawlreg_access,  ,,VOID_FTYPE_USI_USI,                                           VOL, ({CU, 8}, {CU, 8}))
+// Metadata only: describe the LREG inputs and outputs of the immediately
+// preceding opaque raw instruction.  Unlike sfprawlreg_access, operand 0 is
+// a read/use mask, not a release mask.  The pass carries that use backwards
+// to its reaching raw/typed definition (or function entry).  A write is a
+// definition and is reserved only when a later read demands it.  Use the
+// legacy access marker for an explicit raw live-out/ownership declaration.
+RVTT_FN (sfprawlreg_effect,  ,,VOID_FTYPE_USI_USI,                                           VOL, ({R}, {R}))
 
 RVTT_FN (sfpnovalue,         ,,XTT_VEC_FTYPE,                                                0, ())
 RVTT_FN (sfpselect2,         ,,XTT_VEC_FTYPE_XTT_VEC2_USI,                                   0, ({CU, 1}))
