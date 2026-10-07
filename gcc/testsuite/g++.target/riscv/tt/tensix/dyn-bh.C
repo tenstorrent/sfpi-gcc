@@ -121,15 +121,15 @@ void stochrnd (unsigned i) {
 /*
 **_Z8stochrndj:
 **	# READ L2
-**	SFPSTOCHRND	L6, L0, L2, 0, 12, 0
+**	SFPSTOCHRND	L6, L9, L2, 0, 12, 0
 **	# WRITE L6
 **	# READ L2
 **	andi	a0,a0,31
-**	li	a5, 2382365292	# 1:8e00026c
+**	li	a5, 2382402156	# 1:8e00926c
 **	slli	a0,a0,16
 **	add	a0,a0,a5
 **	lui	a5,%hi\(iptr\)
-**	sw	a0, %lo\(iptr\)\(a5\)	# 1:SFPSTOCHRND	L6, L0, L2, a0, 12, 0
+**	sw	a0, %lo\(iptr\)\(a5\)	# 1:SFPSTOCHRND	L6, L9, L2, a0, 12, 0
 **	# WRITE L6
 **	ret
 */

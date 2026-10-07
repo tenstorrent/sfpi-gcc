@@ -1780,10 +1780,9 @@
           (match_operand:SI    4 "const_int_operand" "n,n")
 	  ] UNSPECV_SFPSTOCHRND))]
   "TARGET_XTT_TENSIX"
-  ;; Use L0 as dummy arg, otherwise simulator complains
   "@
-   SFPSTOCHRND\t%x0, L0, %x2, 0, %3, %4
-   SFPSTOCHRND\t%x0, L0, %x2, 0, %3, %4\t# LV:%x1"
+   SFPSTOCHRND\t%x0, L9, %x2, 0, %3, %4
+   SFPSTOCHRND\t%x0, L9, %x2, 0, %3, %4\t# LV:%x1"
   [(set_attr "type" "tensix")])
 
 (define_expand "rvtt_sfpstochrnd_descale_v"
@@ -1862,11 +1861,11 @@
       mem = gen_rtx_MEM (SImode, operands[1]);
       int op
         = TARGET_XTT_TENSIX_WH  ? TT_OP_WH_SFP_STOCH_RND (INTVAL (operands[8]),
-	             0, 0, 0, 0, INTVAL (operands[7]))
+	             0, CREG_IDX_0, 0, 0, INTVAL (operands[7]))
         : TARGET_XTT_TENSIX_BH  ? TT_OP_BH_SFP_STOCH_RND (INTVAL (operands[8]),
-	             0, 0, 0, 0, INTVAL (operands[7]))
+	             0, CREG_IDX_0, 0, 0, INTVAL (operands[7]))
         : TARGET_XTT_TENSIX_QSR ? TT_OP_QSR_SFP_STOCH_RND (INTVAL (operands[8]),
-	             0, 0, 0, 0, INTVAL (operands[7]))
+	             0, CREG_IDX_0, 0, 0, INTVAL (operands[7]))
         : (gcc_unreachable (), 0);
       opc = GEN_INT (op);
       enc = GEN_INT (rvtt_synth (UINTVAL (operands[6])).src_shift (8).dst_shift (4));
@@ -1894,11 +1893,10 @@
    (clobber (match_scratch:SI 9 "=X,X,&r,&r"))]
   "TARGET_XTT_TENSIX"
   {
-    // Use L0 as dummy arg, otherwise simulator complains
     return rvtt_synth::pattern (which_alternative >> 1,
       which_alternative & 1
-      ? "SFPSTOCHRND\t%x0, L0, %x5, %4, %7, %8\t# LV:%x6"
-      : "SFPSTOCHRND\t%x0, L0, %x5, %4, %7, %8",
+      ? "SFPSTOCHRND\t%x0, L9, %x5, %4, %7, %8\t# LV:%x6"
+      : "SFPSTOCHRND\t%x0, L9, %x5, %4, %7, %8",
       operands, true, 9);
   }
   [(set_attr "type" "tensix")])
