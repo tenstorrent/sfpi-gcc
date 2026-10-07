@@ -19,13 +19,13 @@ void one () {
 /*
 **_Z3onev:
 **	SFPLOAD	L0, 0, 0, 7, 0, 0
-**	SFPSTOCHRND	L1, L0, L0, 0, 0, 1
+**	SFPSTOCHRND	L1, L9, L0, 0, 0, 1
 **	SFPSTORE	L1, 2, 1, 7, 0, 0
-**	SFPSTOCHRND	L1, L0, L0, 0, 1, 1
+**	SFPSTOCHRND	L1, L9, L0, 0, 1, 1
 **	SFPSTORE	L1, 4, 2, 7, 0, 0
-**	SFPSTOCHRND	L1, L0, L0, 0, 7, 1
+**	SFPSTOCHRND	L1, L9, L0, 0, 7, 1
 **	SFPSTORE	L1, 6, 8, 7, 0, 0
-**	SFPSTOCHRND	L0, L0, L0, 0, 6, 1
+**	SFPSTOCHRND	L0, L9, L0, 0, 6, 1
 **	SFPSTORE	L0, 8, 6, 7, 0, 0
 **	ret
 */
