@@ -79,6 +79,7 @@
 #include "basic-block.h"
 #include "cfgrtl.h"
 #include "emit-rtl.h"
+#include "df.h"
 #include "function.h"
 #include "recog.h"
 #include "rvtt.h"
@@ -178,6 +179,10 @@ raw_effect_p (rtx_insn *insn, unsigned *read_mask, unsigned *write_mask)
       XVECEXP (pat, 0, 0) = GEN_INT (*read_mask);
       XVECEXP (pat, 0, 1) = GEN_INT (*write_mask);
       INSN_CODE (insn) = -1;
+      /* DF use locations still point into the old operand vector.  Without a
+	 rescan, its note problem can attach REG_DEAD to the new CONST_INT;
+	 IRA subsequently interprets that constant as a register number.  */
+      df_insn_rescan (insn);
     }
   return true;
 }
