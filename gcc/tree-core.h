@@ -98,6 +98,9 @@ struct die_struct;
 /* Nonzero if this is a function expected to end with an exception.  */
 #define ECF_XTHROW		  (1 << 16)
 
+/* Nonzero if this function should keep const parms const (like constantp).  */
+#define ECF_STAY_CONST		  (1 << 17)
+
 /* Call argument flags.  */
 
 /* Nonzero if the argument is not used by the function.  */
@@ -2082,8 +2085,9 @@ struct GTY(()) tree_function_decl {
   unsigned has_debug_args_flag : 1;
   unsigned versioned_function : 1;
   unsigned replaceable_operator : 1;
+  unsigned stay_const_flag : 1;
 
-  /* 11 bits left for future expansion.  */
+  /* 10 bits left for future expansion.  */
   /* 32 bits on 64-bit HW.  */
 };
 

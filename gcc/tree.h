@@ -3473,6 +3473,10 @@ set_function_decl_type (tree decl, function_decl_type t, bool set)
    cleared.  */
 #define DECL_PURE_P(NODE) (FUNCTION_DECL_CHECK (NODE)->function_decl.pure_flag)
 
+/* Nonzero in a function where optimizations that could change a const parm to
+   a non-const should not happen.  */
+#define DECL_STAY_CONST_P(NODE) (FUNCTION_DECL_CHECK (NODE)->function_decl.stay_const_flag)
+
 /* Nonzero only if one of TREE_READONLY or DECL_PURE_P is nonzero AND
    the const or pure function may not terminate.  When this is nonzero
    for a const or pure function, it can be dealt with by cse passes

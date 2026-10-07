@@ -9930,6 +9930,9 @@ set_call_expr_flags (tree decl, int flags)
      There is currently no way to declare looping const or looping pure alone.  */
   gcc_assert (!(flags & ECF_LOOPING_CONST_OR_PURE)
 	      || ((flags & ECF_NORETURN) && (flags & (ECF_CONST | ECF_PURE))));
+
+  if (flags & ECF_STAY_CONST)
+    DECL_STAY_CONST_P (decl) = true;
 }
 
 
