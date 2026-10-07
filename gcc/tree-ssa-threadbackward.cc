@@ -645,16 +645,23 @@ back_threader_profitability::possibly_profitable_path_p
 	      /* Do not allow OpenACC loop markers and __builtin_constant_p on
 		 threading paths.  The latter is disallowed, because an
 		 expression might be constant on two threading paths, and
-		 become non-constant (i.e.: phi) when they merge.  */
+		 become non-constant (i.e.: phi) when they merge.  Likewise
+		 for STAY_CONST decls. */
 	      gimple *stmt = gsi_stmt (gsi);
-	      if (gimple_call_internal_p (stmt, IFN_UNIQUE)
-		  || gimple_call_builtin_p (stmt, BUILT_IN_CONSTANT_P))
+	      if (gimple_code (stmt) == GIMPLE_CALL)
 		{
-		  if (dump_file && (dump_flags & TDF_DETAILS))
-		    fputc ('\n', dump_file);
-		  return false;
+		  tree fndecl = gimple_call_fndecl (stmt);
+		  if (gimple_call_internal_p (stmt, IFN_UNIQUE)
+		      || (fndecl
+			  && (fndecl_built_in_p (fndecl, BUILT_IN_CONSTANT_P)
+			      || DECL_STAY_CONST_P (fndecl))))
+		    {
+		      if (dump_file && (dump_flags & TDF_DETAILS))
+			fputc ('\n', dump_file);
+		      return false;
+		    }
 		}
-#if 1
+#if 0 // FIXME
 	      // probably nearly all our builtins?
 	      if (auto *insnd = rvtt_get_insn_data (stmt))
 		//		if (insnd->id == rvtt_insn_data::ttinsn)

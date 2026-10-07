@@ -176,7 +176,7 @@ rvtt_record_builtin (unsigned ix, char const *name, tree decl)
     // Save a bunch of strcmps on the grounds there are at least this many others.
     return false;
 
-  unsigned ecf_flags = ECF_NOTHROW | ECF_NOVOPS;
+  unsigned ecf_flags = ECF_NOTHROW | ECF_NOVOPS | ECF_STAY_CONST;
   if (!riscv_builtin_rvtt_first)
     {
       if (strncmp (name, "__builtin_rvtt_", 15) != 0)

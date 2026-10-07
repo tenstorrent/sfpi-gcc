@@ -243,23 +243,33 @@ jump_threader::record_temporary_equivalences_from_stmts_at_dest (edge e)
 	  && gimple_asm_volatile_p (as_a <gasm *> (stmt)))
 	return NULL;
 
-      /* If the statement is a unique builtin, we cannot thread
-	 through here.  */
-      if (gimple_code (stmt) == GIMPLE_CALL
-	  && gimple_call_internal_p (stmt)
-	  && gimple_call_internal_unique_p (stmt))
-	return NULL;
-#if 1
+      if (gimple_code (stmt) == GIMPLE_CALL)
+	{
+	  tree fndecl = gimple_call_fndecl (stmt);
+	  /* We cannot thread through a unique builtin. Neither can we thread
+	     through __builtin_constant_p, because an expression that is
+	     constant on two threading paths may become non-constant (i.e.:
+	     phi) when they merge.  Similarly for STAY_CONST decls.  */
+	  if (gimple_call_internal_p (stmt, IFN_UNIQUE)
+	      || (fndecl
+		  && (fndecl_built_in_p (fndecl, BUILT_IN_CONSTANT_P)
+		      || DECL_STAY_CONST_P (fndecl))))
+	    return NULL;
+	}
+#if 0 // FIXME
       // probably nearly all our builtins?
       if (auto *insnd = rvtt_get_insn_data (stmt))
 	//	if (insnd->id == rvtt_insn_data::ttinsn)
 	  return NULL;
 #endif
+#if 0
       /* We cannot thread through __builtin_constant_p, because an
 	 expression that is constant on two threading paths may become
 	 non-constant (i.e.: phi) when they merge.  */
-      if (gimple_call_builtin_p (stmt, BUILT_IN_CONSTANT_P))
+      if (gimple_call_flags (stmt) & ECF_STAY_CONST)
+	  || gimple_call_builtin_p (stmt, BUILT_IN_CONSTANT_P))
 	return NULL;
+#endif
 
       /* If duplicating this block is going to cause too much code
 	 expansion, then do not thread through this block.  */
