@@ -8,6 +8,20 @@ namespace ckernel{
 
 using namespace sfpi;
 
+void ldexp0 () {
+  vFloat x = l_reg[LRegs::LReg0];
+
+  x = ldexp (x, 22, LdexpMode::Fast);
+  l_reg[LRegs::LReg0] = x;
+}
+/*
+**_Z6ldexp0v:
+**	# READ L0
+**	SFPDIVP2	L0, L0, 22, 1
+**	# WRITE L0
+**	ret
+*/
+
 void ldexp1 () {
   vFloat x = l_reg[LRegs::LReg0];
 
@@ -17,7 +31,10 @@ void ldexp1 () {
 /*
 **_Z6ldexp1v:
 **	# READ L0
-**	SFPDIVP2	L0, L0, 22, 1
+**	SFPLOADI	L1, 22, 2
+**	SFPIADD	L1, L1, 127, 5
+**	SFPSETEXP	L1, L9, 0, 0
+**	SFPMUL	L0, L0, L1, 0
 **	# WRITE L0
 **	ret
 */
