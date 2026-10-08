@@ -234,9 +234,9 @@ expand_cmp_using_sub (gimple_stmt_iterator *right, gcall *cmp, rvtt_arg_info (&a
 	0xff,
 	0xff,
       };
+      // We always want to use INT type as we're jus concerned about the sign bit
       emit_setcc (right, cmp, args[0].get_arg (), setcc_map[setcc_op],
-		  type == SFPXCMP_MOD1_TYPE_FLOAT
-		  ? SFPSETCC_IMM_TYPE_FLOAT : SFPSETCC_IMM_TYPE_INT, false);
+		  SFPSETCC_IMM_TYPE_INT, false);
     }
 
   return false;
