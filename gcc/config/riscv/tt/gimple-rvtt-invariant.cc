@@ -424,10 +424,26 @@ rvtt_loop_cc_canonical_body (class loop *loop)
 	     the peel (the copied iteration performs the identical
 	     pushes and pops).  They therefore classify exactly like CC
 	     writers: admitted, position-limiting for candidates, and
-	     required to precede the canonical tail.  */
+	     required to precede the canonical tail.
+
+	     The structured condition markers (sfpxpred / sfpxlogic /
+	     sfpxcond) that survive pass_rvtt_vif classify the same way.
+	     By this point the region's real CC effects are explicit
+	     statements in the body (the compare, SETCC/COMPC, the
+	     closing SFPENCC); the markers only carry the condition token
+	     between them and expand to plain moves (rvtt.md), so they
+	     emit no Tensix word.  They are CC machinery to every other
+	     consumer (rvtt_cc_writer_id_p, the cc-region STMT_CC_REFINE
+	     class), and the peel copies them with the rest of the
+	     iteration.  Without this a v_if whose condition kept its
+	     markers -- an integer compare, say -- fails the proof as a
+	     volatile non-Dst effect.  */
 	  if (insnd->sets_cc (call)
 	      || insnd->id == rvtt_insn_data::sfppushc
-	      || insnd->id == rvtt_insn_data::sfppopc)
+	      || insnd->id == rvtt_insn_data::sfppopc
+	      || insnd->id == rvtt_insn_data::sfpxpred
+	      || insnd->id == rvtt_insn_data::sfpxlogic
+	      || insnd->id == rvtt_insn_data::sfpxcond)
 	    {
 	      if (!first_cc)
 		first_cc = stmt;
