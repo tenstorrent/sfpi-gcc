@@ -795,11 +795,14 @@ public:
 	     volatile loads refuse -- a spin-wait is not delivery,
 	 (d) a scalar (non-memory) SSA assignment, PHI, or the loop's
 	     conditionals;
-     - at least one TYPED SFPU word is present (a body of owners, raw
-       words, and computed-word stores only IS the raw-spelling world:
+     - at least one TYPED SFPU word is present, or raw delivery is
+       accompanied by both LREG read and write annotations (the generic
+       size model charges these even when allocation needs no moves).
+       A body of owners, raw words, and computed-word stores only is
+       still the raw-spelling world:
        its size pricing is already word-accurate, and the request must
        not grant raw code an unroll that pricing correctly refused --
-       the topk_xl region-overflow/regression class);
+       the topk_xl region-overflow/regression class;
      - the flattened total is bounded by the replay-unroll word budget
        (XTT_REPLAY_LOOP_UNROLL_MAX_WORDS: the same straight-line size
        class the row-group request already commits to), and a body
@@ -958,15 +961,25 @@ public:
        spelling already gets from the size model: a typed SFPU word is a
        dozen-plus GIMPLE statements, so the estimate refuses loops the
        raw world unrolls.  A body with NO typed SFPU word (raw .ttinsn,
-       computed-word stores, and replay owners only) IS the raw world --
+       computed-word stores, and replay owners only, without explicit
+       read/write lifetimes) IS the raw world --
        its size pricing is already word-accurate, and bypassing it
        grants raw code an unroll that pricing correctly refused (the
        topk_xl TRISC1_CODE overflow and its +3.8% e2e regression came
-       exactly from such raw launch loops).  Require at least one typed
+       exactly from such raw launch loops).  Normally require a typed
        SFPU word (the shared row table plus the transpose spellings;
        TTREPLAY/TTSETRWC owners and plumbing do not count -- the raw
-       world spells those identically).  */
+       world spells those identically).  Explicit lifetime annotations
+       around raw delivery are the additional over-priced class below.  */
     bool typed_word_seen = false;
+    /* Explicit raw-register lifetimes also inflate the generic estimate.
+       Admit only the read/write-annotated delivery class, not arbitrary
+       raw loops or owner-only loops.  This is a profitability distinction,
+       not proof that the annotations correctly describe the raw operation.
+       Allocation may still need moves; the word census remains an estimate.  */
+    bool raw_delivery_seen = false;
+    bool lreg_read_seen = false;
+    bool lreg_write_seen = false;
     basic_block *body = get_loop_body (loop);
     for (unsigned i = 0; i < loop->num_nodes; ++i)
       {
@@ -1015,6 +1028,7 @@ public:
 		    free (body);
 		    return false;
 		  }
+		raw_delivery_seen = true;
 		words += 1;
 		continue;
 	      }
@@ -1036,6 +1050,8 @@ public:
 		    free (body);
 		    return false;
 		  }
+		lreg_read_seen |= insnd->id == rvtt_insn_data::sfpreadlreg;
+		lreg_write_seen |= insnd->id == rvtt_insn_data::sfpwritelreg;
 		if (w > 0 && insnd->id != rvtt_insn_data::ttreplay
 		    && insnd->id != rvtt_insn_data::ttsetrwc)
 		  /* A typed SFPU word: the class the size model
@@ -1062,6 +1078,7 @@ public:
 		    && gimple_assign_single_p (assign)
 		    && is_gimple_val (gimple_assign_rhs1 (assign)))
 		  {
+		    raw_delivery_seen = true;
 		    words += 1;
 		    continue;
 		  }
@@ -1105,7 +1122,8 @@ public:
 	refuse (loop, "launch-flatten-function-budget", NULL);
 	return false;
       }
-    if (!typed_word_seen)
+    if (!typed_word_seen
+	&& !(raw_delivery_seen && lreg_read_seen && lreg_write_seen))
       {
 	refuse (loop, "launch-flatten-no-typed-content", NULL);
 	return false;
