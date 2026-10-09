@@ -18,14 +18,19 @@ void fn (int i)
   __builtin_rvtt_sfpselect2 (x2, 1);
   __builtin_rvtt_sfpselect2 (x2, 2); // { dg-error "is out of range" }
   
-  auto x4 = __builtin_rvtt_sfptransp (cst, cst, cst, cst);
+  auto x4 = __builtin_rvtt_sfpshft2_copy4 (cst, cst, cst, 0);
   __builtin_rvtt_sfpselect4 (x4, 0);
   __builtin_rvtt_sfpselect4 (x4, 3);
   __builtin_rvtt_sfpselect4 (x4, 5); // { dg-error "is out of range" }
 
+  auto x8 = __builtin_rvtt_sfptransp (cst, cst, cst, cst, cst, cst, cst, cst);
+  __builtin_rvtt_sfpselect8 (x8, 0);
+  __builtin_rvtt_sfpselect8 (x8, 3);
+  __builtin_rvtt_sfpselect8 (x8, 9); // { dg-error "is out of range" }
+
   __builtin_rvtt_sfpnop ();
 
-  __builtin_rvtt_sfptransp (cst, cst, cst, cst);
+  __builtin_rvtt_sfptransp (cst, cst, cst, cst, cst, cst, cst, cst);
 
   __builtin_rvtt_sfpswap (cst, cst, 8);
   __builtin_rvtt_sfpswap (cst, cst, 16); // { dg-error "is out of range" }

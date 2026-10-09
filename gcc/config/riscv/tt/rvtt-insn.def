@@ -74,6 +74,7 @@ RVTT_FN (sfpwritelreg,       ,,VOID_FTYPE_XTT_VEC_USI,                          
 RVTT_FN (sfpnovalue,         ,,XTT_VEC_FTYPE,                                                0, ())
 RVTT_FN (sfpselect2,         ,,XTT_VEC_FTYPE_XTT_VEC2_USI,                                   0, ({CU, 1}))
 RVTT_FN (sfpselect4,         ,,XTT_VEC_FTYPE_XTT_VEC4_USI,                                   0, ({CU, 2}))
+RVTT_FN (sfpselect8,         ,,XTT_VEC_FTYPE_XTT_VEC8_USI,                                   0, ({CU, 3}))
 
 RVTT_FN (sfpsetcc,        ,_wh,VOID_FTYPE_XTT_VEC_USI,                                       CC(), ({M, 0x55}))
 RVTT_OVR(sfpsetcc,        qsr,,VOID_FTYPE_XTT_VEC_USI_USI,                                   CC(), ({M, 0x55}, {U, 1}))
@@ -130,7 +131,7 @@ RVTT_FN (sfplutfp32_6r,      ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_XTT
 
 RVTT_FN (sfpswap,          ,_wh,XTT_VEC2_FTYPE_XTT_VEC_XTT_VEC_USI,                          0, ({M, 0x1ff}))
 RVTT_OVR(sfpswap,          qsr,,XTT_VEC2_FTYPE_XTT_VEC_XTT_VEC_USI_USI,                      0, ({M, 0x1ff}, {U, 1}))
-RVTT_FN (sfptransp,           ,,XTT_VEC4_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC,              0, ())
+RVTT_FN (sfptransp,           ,,XTT_VEC8_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC, 0, ())
 RVTT_FN (sfpshft2_copy4,      ,,XTT_VEC4_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_USI,                  0, ({M, 0x1}))
 RVTT_FN (sfpshft2_subvec_copy4, ,,XTT_VEC4_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_USI,        0, ({M, 0x2}))
 RVTT_FN (sfpshft2_subvec_shfl1_copy4, ,,XTT_VEC4_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_USI,  0, ({M, 0x4}))
