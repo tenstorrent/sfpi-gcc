@@ -10,6 +10,9 @@
 # nothing is executed on device.
 name: Build and test
 
+permissions:
+  contents: read
+
 on:
   pull_request:
   push:
@@ -37,11 +40,16 @@ jobs:
       - name: Checkout this compiler as its gcc submodule
         uses: actions/checkout@v6
         with:
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
           path: sfpi/gcc
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
 
       - name: Tweak Git
         run: git config --global --add safe.directory '*'
+
+      - name: Record compiler revision
+        run: git -C sfpi/gcc rev-parse HEAD
 
       # tenstorrent/sfpi's Makefile lists gcc/.git as a prerequisite of the
       # build stamps, and every make invocation runs `git -C gcc describe
@@ -64,15 +72,16 @@ jobs:
             gawk python3 texinfo patchutils ruby wget \
             libexpat1-dev libgmp-dev libmpc-dev libmpfr-dev
 
-      # One build.sh invocation builds and tests; it runs make twice inside,
-      # once to build and once for check-gcc-tt.
-      - name: Build toolchain and run rvtt.exp
+      - name: Build toolchain
         working-directory: sfpi
-        run: |
-          scripts/build.sh --tt-built --small --test-tt \
-            || echo "build.sh flagged failures; the baseline comparison decides"
+        run: scripts/build.sh --tt-built --small
+
+      - name: Run rvtt.exp
+        working-directory: sfpi
+        run: scripts/build.sh --test-tt
 
       - name: Compare failures against the baseline
+        if: ${{ !cancelled() }}
         working-directory: sfpi
         run: |
           set -euo pipefail

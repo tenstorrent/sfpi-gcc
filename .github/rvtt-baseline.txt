@@ -6,7 +6,7 @@
 # difference, never a count, so a fixed test is reported as a stale entry
 # and a new failure fails the job by name.
 #
-# Empty because the suite is clean in this configuration: at gcc
-# ba48edbef33 the run is 1178 expected passes, 2 expected failures and no
-# FAIL, UNRESOLVED, ERROR or XPASS.  Expected failures are marked in the
-# tests themselves with dg-xfail-if and never appear here.
+# Empty because the suite is clean in this configuration: at PR head
+# 2598aef7ad0 the fork run reported 1175 expected passes and 2 expected
+# failures, with no FAIL, UNRESOLVED, ERROR or XPASS.  Expected failures are
+# marked in the tests themselves with dg-xfail-if and never appear here.
