@@ -437,9 +437,12 @@ rvtt_word_facts_classify (uint32_t word, rvtt_word_facts *f)
      CC/PRGM faces, VD == 15: the admitted class is the audited
      default-reset word (MOD1_IMM16_IS_VALUE set, imm16 == 0 --
      TTI_SFPCONFIG (0, 0xF, 1), 0x910000F1): every mod1 completion is
-     LaneConfig-confined and the resulting LaneConfig is the default
-     all-lanes, ROW_MASK == 0 state ([MOPT] LaneConfig default-reset
-     fact, audited) -- an ambient-establishing write.  Near
+     LaneConfig-confined and, applied to the default LaneConfig, leaves
+     it default -- ambient-preserving only.  It is not a reset: the
+     write is gated per column by LaneFlags, the OR/XOR/lane-mask
+     completions leave a set ROW_MASK set, and no arm touches LaneFlags
+     (observed on Blackhole silicon for all five mod1 completions).
+     Near
      misses stay refused by class: imm16 != 0 can set
      ROW_MASK/behavior bits; mod1 bit0 == 0 takes the value from
      LReg[0] (unauditable from the word).  VD != 15 claims the decoded

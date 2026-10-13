@@ -81,10 +81,10 @@ extern bool rvtt_raw_replay_owner_word_p (uint32_t word);
                                 proven to leave lane-enable state
                                 untouched (audited opcode classes below);
      RVTT_RAW_CC_ALL_LANES   -- the word writes lane-enable state, and
-                                the written value is provably the
-                                all-lanes ambient (the word-exact
-                                canonical SFPENCC, or the audited
-                                LaneConfig default-reset);
+                                from the all-lanes ambient it provably
+                                writes the all-lanes ambient back (the
+                                word-exact canonical SFPENCC, or the
+                                audited imm16 == 0 LaneConfig word);
      RVTT_RAW_CC_UNPROVEN    -- everything else (fail-closed: unaudited
                                 opcodes, expander words whose delivered
                                 content this word does not carry,
