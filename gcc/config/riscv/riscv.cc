@@ -10761,6 +10761,12 @@ riscv_override_options_internal (struct gcc_options *opts)
 	    }
 	}
 
+      if (is_cpu_kind ("tt-qsr64"))
+	{
+	  if (TARGET_XTT_ROCC_QSR && riscv_tt_fix_qsr_rocc < 0)
+	    riscv_tt_fix_qsr_rocc = 1;
+	}
+
       // FIXME: Add tune model for our cores.
       tt_core = is_cpu_kind("tt");
     }
