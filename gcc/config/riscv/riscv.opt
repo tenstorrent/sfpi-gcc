@@ -552,6 +552,10 @@ mtt-fix-qsrreplay
 Target Var(riscv_tt_fix_qsr_replay) Init(-1)
 Emit code to address Quasar replay erratum
 
+mtt-fix-qsrrocc
+Target Var(riscv_tt_fix_qsr_rocc) Init(-1)
+Emit code to address Quasar rocc errata
+
 mtt-fix-whfence
 Target Var(riscv_tt_fix_wh_fence) Init(-1)
 Emit code to address Wormhole's inoperative fence instruction
