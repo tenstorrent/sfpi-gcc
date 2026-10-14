@@ -1,5 +1,5 @@
 // { dg-do-compile }
-// { dg-additional-options "-mcpu=tt-qsr64-rocc" }
+// { dg-additional-options "-mcpu=tt-qsr64-rocc -mno-tt-fix-qsrrocc" }
 
 int
 main (void)
