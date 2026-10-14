@@ -274,10 +274,25 @@
   [(set_attr "type" "ttrocc")
    (set_attr "xtt_rocc_addrgen" "yes")])
 
-(define_insn "riscv_ttrocc_addrgen_pop_src"
+(define_expand "riscv_ttrocc_addrgen_pop_src"
+  [(set (match_operand:DI 0 "register_operand")
+        (unspec_volatile:DI [(match_operand:DI 1 "const_int_operand")] UNSPECV_TTROCC_ADDRGEN_POP_SRC))]
+  "TARGET_XTT_ROCC_QSR"
+  {
+    if (riscv_tt_fix_qsr_rocc > 0)
+      {
+        rtx one = gen_reg_rtx (DImode);
+	emit_move_insn (one, GEN_INT (1));
+	emit_insn (gen_riscv_ttrocc_addrgen_pop_x_src
+	  (operands[0], operands[1], one));
+        DONE;
+      }
+  })
+
+(define_insn "*riscv_ttrocc_addrgen_pop_src"
   [(set (match_operand:DI 0 "register_operand" "=r")
         (unspec_volatile:DI [(match_operand:DI 1 "const_int_operand" "n")] UNSPECV_TTROCC_ADDRGEN_POP_SRC))]
-  "TARGET_XTT_ROCC_QSR"
+  "TARGET_XTT_ROCC_QSR && riscv_tt_fix_qsr_rocc <= 0"
   "tt.rocc.addrgen_pop_src\t%0,%1"
   [(set_attr "type" "ttrocc")
    (set_attr "xtt_rocc_addrgen" "yes")])
@@ -299,10 +314,25 @@
   [(set_attr "type" "ttrocc")
    (set_attr "xtt_rocc_addrgen" "yes")])
 
-(define_insn "riscv_ttrocc_addrgen_pop_dest"
+(define_expand "riscv_ttrocc_addrgen_pop_dest"
+  [(set (match_operand:DI 0 "register_operand")
+        (unspec_volatile:DI [(match_operand:DI 1 "const_int_operand")] UNSPECV_TTROCC_ADDRGEN_POP_DEST))]
+  "TARGET_XTT_ROCC_QSR"
+  {
+    if (riscv_tt_fix_qsr_rocc > 0)
+      {
+        rtx one = gen_reg_rtx (DImode);
+	emit_move_insn (one, GEN_INT (1));
+	emit_insn (gen_riscv_ttrocc_addrgen_pop_x_dest
+	  (operands[0], operands[1], one));
+        DONE;
+      }
+  })
+
+(define_insn "*riscv_ttrocc_addrgen_pop_dest"
   [(set (match_operand:DI 0 "register_operand" "=r")
         (unspec_volatile:DI [(match_operand:DI 1 "const_int_operand" "n")] UNSPECV_TTROCC_ADDRGEN_POP_DEST))]
-  "TARGET_XTT_ROCC_QSR"
+  "TARGET_XTT_ROCC_QSR && riscv_tt_fix_qsr_rocc <= 0"
   "tt.rocc.addrgen_pop_dest\t%0,%1"
   [(set_attr "type" "ttrocc")
    (set_attr "xtt_rocc_addrgen" "yes")])
