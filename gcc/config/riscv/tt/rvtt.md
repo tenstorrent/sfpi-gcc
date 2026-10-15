@@ -2678,7 +2678,7 @@
           (match_operand:SI    3 "const_int_operand")
           (match_operand:SI    4 "const_int_operand")
           ] rvtt_gtle_op))]
-  "TARGET_XTT_TENSIX_BH_QSR"
+  "TARGET_XTT_TENSIX_QSR"
   {
     emit_insn (gen_rvtt_sfp<rvtt_gtle_name>_lv
       (operands[0], rvtt_gen_rtx_noval (XTT32SImode),
@@ -2697,13 +2697,8 @@
           ] rvtt_gtle_op))]
   "TARGET_XTT_TENSIX_BH_QSR"
   {
-    if (!(INTVAL (operands[4]) & SFPGTLE_MOD1_SET_DEST))
-      {
-        emit_insn (gen_rvtt_sfp<rvtt_gtle_name>_nv
-          (operands[2], operands[3], operands[4], operands[5]));
-        emit_insn (gen_rvtt_sfpassign_lv (operands[0], operands[1], operands[2]));
-        DONE;
-      }
+    // We clear this later if result is unused
+    operands[4] = GEN_INT (INTVAL (operands[4]) | SFPGTLE_MOD1_SET_DEST);
   })
 
 (define_insn_and_rewrite "*rvtt_sfp<rvtt_gtle_name>_int"
