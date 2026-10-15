@@ -42,8 +42,9 @@ a recorded reason (see section 5).
 			     SFPLUTFP32 table selection, including the FP16
 			     six-entry form.
   Dst / RWC                  Auto-increment addressing formation, per-row
-			     address recurrence fusion, and store-to-load
-			     forwarding over Dst.
+			     address recurrence fusion, row-pair interleave of
+			     counted row loops, and store-to-load forwarding
+			     over Dst.
   crosscall                  Interprocedural LICM across noinline boundaries.
   crosslane                  Cross-lane permute and face-transpose surfaces.
   effects                    rvtt-effects.h is the single source of truth for

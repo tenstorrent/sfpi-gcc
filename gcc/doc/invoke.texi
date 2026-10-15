@@ -1313,6 +1313,7 @@ See RS/6000 and PowerPC Options.
 -mtt-tensix-optimize-transp-involution
 -mtt-tensix-optimize-crosslane
 -mtt-tensix-optimize-dst-iteration-fusion
+-mtt-tensix-optimize-dst-row-interleave
 -mtt-tensix-optimize-cc-region-general
 -mtt-tensix-optimize-round-interleave
 -mtt-tensix-optimize-invariant-loadi
@@ -32080,6 +32081,14 @@ violations as compile-time errors.
 @item -mtt-tensix-optimize-dst-iteration-fusion
 Recognize adjacent Tensix Dst iterations that are provably legal to
 fuse, and fuse them.
+
+@opindex mtt-tensix-optimize-dst-row-interleave
+@item -mtt-tensix-optimize-dst-row-interleave
+Unroll a counted Dst row loop with an even trip count by two and
+interleave the two rows, so one row's instructions fill the other's
+result-latency stalls.  Applies only when the rows are independent,
+the doubled live set fits the vector register file, and the modeled
+issue time of the pair improves (Blackhole only).
 
 @opindex mtt-tensix-optimize-cc-region-general
 @item -mtt-tensix-optimize-cc-region-general

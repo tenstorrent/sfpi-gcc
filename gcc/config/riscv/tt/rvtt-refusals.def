@@ -1663,3 +1663,48 @@ RVTT_REFUSAL (ZERO_LENGTH,
 RVTT_REFUSAL (ZERO_TRIP_PREHEADER_UNPROVEN,
   "zero-trip-preheader-unproven",
   "dump; first seen in rtl-rvtt-macro-planner.cc")
+RVTT_REFUSAL (DST_ROW_INTERLEAVE_BH_ONLY,
+  "dst-row-interleave-bh-only",
+  "the row-latency model and the PRNG/CC proofs are Blackhole facts")
+RVTT_REFUSAL (DST_ROW_INTERLEAVE_LOOP_SHAPE,
+  "dst-row-interleave-loop-shape",
+  "not a single-block counted loop with one stepped induction variable tested after the step")
+RVTT_REFUSAL (DST_ROW_INTERLEAVE_TRIPS_UNPROVEN,
+  "dst-row-interleave-trips-unproven",
+  "the trip count is not a proven constant")
+RVTT_REFUSAL (DST_ROW_INTERLEAVE_TRIPS_ODD,
+  "dst-row-interleave-trips-odd",
+  "the proven trip count is odd, so rows do not pair")
+RVTT_REFUSAL (DST_ROW_INTERLEAVE_LOOP_CARRIED,
+  "dst-row-interleave-loop-carried",
+  "a value other than the induction variable crosses the backedge")
+RVTT_REFUSAL (DST_ROW_INTERLEAVE_SCALAR_DEPENDENCE,
+  "dst-row-interleave-scalar-dependence",
+  "a row word reads a scalar computed in the row")
+RVTT_REFUSAL (DST_ROW_INTERLEAVE_FOREIGN_STMT,
+  "dst-row-interleave-foreign-stmt",
+  "a statement outside the typed Dst/CC/lane-local vocabulary")
+RVTT_REFUSAL (DST_ROW_INTERLEAVE_ROW_STEP_SHAPE,
+  "dst-row-interleave-row-step-shape",
+  "the row is not closed by one Dst-only TTINCRWC")
+RVTT_REFUSAL (DST_ROW_INTERLEAVE_DST_ACCESS_UNPROVEN,
+  "dst-row-interleave-dst-access-unproven",
+  "a Dst access is not a typed no-increment access at a literal in-range address")
+RVTT_REFUSAL (DST_ROW_INTERLEAVE_LIVE_OUT,
+  "dst-row-interleave-live-out",
+  "a row value is read after the loop")
+RVTT_REFUSAL (DST_ROW_INTERLEAVE_CC_UNCLOSED,
+  "dst-row-interleave-cc-unclosed",
+  "a CC writer is not closed by the all-lanes SFPENCC within the row")
+RVTT_REFUSAL (DST_ROW_INTERLEAVE_ENTRY_CC_UNPROVEN,
+  "dst-row-interleave-entry-cc-unproven",
+  "the lane state on the loop entry edge is not proven all-lanes")
+RVTT_REFUSAL (DST_ROW_INTERLEAVE_DST_ALIAS,
+  "dst-row-interleave-dst-alias",
+  "a row-B Dst access may overlap a row-A access with a store")
+RVTT_REFUSAL (DST_ROW_INTERLEAVE_PRESSURE_EXCEEDED,
+  "dst-row-interleave-pressure-exceeded",
+  "the doubled live set does not fit the LREG file after evicting literal invariants")
+RVTT_REFUSAL (DST_ROW_INTERLEAVE_NO_BENEFIT,
+  "dst-row-interleave-no-benefit",
+  "the modeled pair takes no fewer cycles than two rows")

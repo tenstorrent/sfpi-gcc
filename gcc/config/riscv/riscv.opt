@@ -690,6 +690,10 @@ mtt-tensix-optimize-dst-iteration-fusion
 Target Var(riscv_tt_opt_dst_iteration_fusion) Init(0)
 Recognize and fuse legal adjacent Tensix Dst-register iterations.
 
+mtt-tensix-optimize-dst-row-interleave
+Target Var(riscv_tt_opt_dst_row_interleave) Init(0)
+Unroll counted Tensix Dst row loops by two and interleave the independent rows.
+
 mtt-tensix-optimize-lp-schedule
 Target Undocumented Var(riscv_tt_opt_lp_schedule) Init(-1)
 Removed; using this option is an error.

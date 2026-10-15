@@ -85,6 +85,7 @@ along with GCC; see the file COPYING3.  If not see
 #define INCLUDE_UNORDERED_MAP
 #define INCLUDE_UNORDERED_SET
 #define INCLUDE_VECTOR
+#define INCLUDE_ALGORITHM
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
@@ -100,8 +101,15 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree-ssa-operands.h"
 #include "gimple-range.h"
 #include "dominance.h"
+#include "cfgloop.h"
+#include "tree-ssa-loop-niter.h"
+#include "tree-into-ssa.h"
 #include "rvtt.h"
 #include "rvtt-effects.h"
+#include "rvtt-protos.h"
+#include "rvtt-trips.h"
+#include "rvtt-pressure.h"
+#include "rvtt-refuse.h"
 
 namespace {
 
@@ -1098,4 +1106,1206 @@ gimple_opt_pass *
 make_pass_rvtt_dst_interleave (gcc::context *ctxt)
 {
   return new pass_rvtt_dst_interleave (ctxt);
+}
+
+/* Row-pair interleave of rolled Dst row loops.
+
+   The two passes above work on rows that are already written out
+   straight-line.  Most SFPU kernels instead iterate one row per trip of
+   a counted loop, and when the row is a serial dependence chain (a
+   polynomial, a Newton step) every producer whose consumer issues next
+   exposes its result latency: SFPMAD needs two cycles, and the hardware
+   stalls a dependent SFPU instruction presented on the next cycle
+   (SFPMAD.md, "Instruction scheduling").  Two consecutive rows are
+   independent, so the second row's chain is exactly the filler the first
+   row's stalls need.
+
+   rvtt_dst_row_interleave unrolls such a loop by two and jams the copies
+   in one step: row B is a copy of row A with every typed Dst address
+   raised by the row step, the two TTINCRWC(+S) separators become one
+   TTINCRWC(+2S), the induction step doubles, and the rows are zipped so
+   each statement of row A is followed by its row-B twin.  Every statement
+   keeps its operation and its operands; only the order across the two
+   rows changes, and only where the rows are proven independent:
+
+   - shape: an innermost single-block counted loop on Blackhole whose trip
+     count is proven even, with one integral induction variable stepped by
+     a constant and tested after the step (so the doubled loop runs exactly
+     the original's odd-numbered exit tests), and whose body is typed SFPU
+     builtins closed by a single Dst-only TTINCRWC;
+   - independence: no loop-carried or live-out row value, no scalar
+     operand computed in the row, and Dst touched only by typed loads and
+     stores in the no-increment mode at constant addresses that stay in
+     range after the rebase.  An access selects an aligned group of four
+     rows and one column parity (address bit 1; SFPLOAD.md, "Functional
+     model"), so a row-B access and a row-A access of which one is a store
+     must differ in parity, or sit in different row groups of the same
+     Dst view (Dst.md: the 16-bit and 32-bit views map rows differently);
+   - lane state: every CC writer belongs to an atom that ends with the
+     word-exact all-lanes SFPENCC, an atom is never split or entered by
+     the other row, and the ambient state on the loop's entry edge is
+     proven all-lanes, so every statement outside an atom runs with all
+     lanes enabled in both orders;
+   - PRNG order: every SFPSTOCHRND advances the per-lane PRNG even in its
+     deterministic modes, so no row-B advance moves above a row-A advance.
+
+   Two value-identical simplifications follow from the zip.  A literal
+   constant materialization (an SFPLOADI chain) outside any atom is issued
+   once for both rows.  When the doubled live set exceeds the LREG file,
+   loop-invariant literal materializations are re-issued inside the loop
+   once per pair, ahead of the pair's first use, shortest in-loop span
+   first, instead of being held across the loop; nothing else is ever
+   evicted, so a pair that still does not fit refuses.
+
+   The rewrite commits only on a modeled gain: the pair, issued in the new
+   order with the audited result latencies (rvtt_builtin_result_latency)
+   and delivered word counts (rvtt_replay_unroll_row_words), must take
+   fewer cycles than two rows issued back to back.  A row that already
+   issues without exposed latency, or whose evicted constants cost more
+   words than the stalls they hide, refuses by name.  The function-wide
+   pressure model (rvtt_pressure_compute) then has to agree that the block
+   still fits the LREG file, or the rewrite is undone exactly.
+
+   Runs under -mtt-tensix-optimize-dst-row-interleave, after the combiner
+   has formed the final SFPMAD chains and before the fused-group interleave
+   above.  */
+
+namespace {
+
+/* What a row statement is, for the jam's legality.  */
+
+enum row_kind
+{
+  ROW_PURE,	/* lane-local compute, no Dst/CC/config effect */
+  ROW_DST,	/* typed SFPLOAD/SFPSTORE */
+  ROW_CC	/* writes the lane-enable state */
+};
+
+struct row_stmt
+{
+  gcall *call;
+  row_kind kind;
+  bool prng = false;		/* advances the per-lane PRNG */
+  int atom = -1;		/* index of the CC atom holding it */
+  HOST_WIDE_INT address = 0;	/* ROW_DST: the literal Dst address */
+  bool store = false;		/* ROW_DST: SFPSTORE */
+  int view = 0;			/* ROW_DST: Dst view, 16 or 32 bits, 0 unknown */
+  int words = 0;		/* delivered words */
+  int latency = 0;		/* exposed result latency, in issue slots */
+};
+
+/* One scheduled statement of the pair: row A's original statement INDEX,
+   row B's twin of it, or the in-loop materialization of evicted invariant
+   INDEX.  */
+
+enum pair_kind { PAIR_A, PAIR_B, PAIR_REMAT };
+
+struct pair_item
+{
+  pair_kind kind;
+  unsigned index;
+};
+
+/* A loop-invariant vector value the row reads, with its literal
+   materialization chain when it has one (empty otherwise).  */
+
+struct invariant_value
+{
+  tree name;
+  std::vector<gcall *> chain;
+  int words = 0;
+  bool evicted = false;
+};
+
+class row_interleave
+{
+public:
+  unsigned n_fired = 0;
+  unsigned n_refused = 0;
+
+  void process (class loop *loop);
+
+private:
+  class loop *loop = nullptr;
+  basic_block bb = nullptr;
+  edge entry = nullptr;
+  gassign *step_stmt = nullptr;
+  gcall *separator = nullptr;
+  HOST_WIDE_INT row_step = 0;
+  unsigned HOST_WIDE_INT trips = 0;
+  std::vector<row_stmt> row;
+  std::unordered_map<tree, unsigned> row_def;	/* SSA name -> row index */
+  std::vector<invariant_value> invariants;
+  std::unordered_map<tree, unsigned> invariant_index;
+  std::vector<std::pair<unsigned, unsigned>> atoms;
+  std::vector<bool> shared;	/* row B reuses row A's value */
+
+  bool refuse (const char *name, const char *detail = nullptr);
+  bool admit_shape ();
+  bool admit_body ();
+  bool admit_atoms ();
+  bool entry_all_lanes_p () const;
+  bool rows_independent_p () const;
+  void find_shared_materializations ();
+  unsigned unit_end (unsigned first) const;
+  std::vector<pair_item> zip_order () const;
+  unsigned source (pair_kind kind, unsigned def) const;
+  int peak_pressure (const std::vector<pair_item> &order) const;
+  int cycles (const std::vector<pair_item> &order) const;
+  int row_cycles () const;
+  void place_remats (std::vector<pair_item> &order) const;
+  bool evict_for_pressure (std::vector<pair_item> &order);
+  bool apply (const std::vector<pair_item> &order);
+};
+
+bool
+row_interleave::refuse (const char *name, const char *detail)
+{
+  ++n_refused;
+  rvtt_refuse_by_name (name, dump_file,
+		       "Dst-row interleave refused: loop %d (%s)",
+		       loop->num, name);
+  if (dump_file)
+    {
+      if (detail)
+	fprintf (dump_file, ": %s", detail);
+      fprintf (dump_file, "\n");
+    }
+  return false;
+}
+
+/* The loop is an innermost single block with one entry edge, a self
+   latch and one exit tested by the block's final condition; its only
+   non-virtual PHI is an integral induction variable stepped by a
+   constant, whose stepped value feeds only the PHI and the exit test;
+   and the trip count is a proven even constant.  */
+
+bool
+row_interleave::admit_shape ()
+{
+  if (!TARGET_XTT_TENSIX_BH)
+    return refuse ("dst-row-interleave-bh-only");
+  if (loop->inner || loop->num_nodes != 1)
+    return refuse ("dst-row-interleave-loop-shape", "not a single block");
+  bb = loop->header;
+  if (EDGE_COUNT (bb->preds) != 2 || EDGE_COUNT (bb->succs) != 2)
+    return refuse ("dst-row-interleave-loop-shape", "edges");
+  edge e;
+  edge_iterator ei;
+  edge latch = nullptr;
+  FOR_EACH_EDGE (e, ei, bb->preds)
+    if (e->src == bb)
+      latch = e;
+    else
+      entry = e;
+  if (!latch || !entry || (entry->flags & EDGE_ABNORMAL))
+    return refuse ("dst-row-interleave-loop-shape", "latch");
+
+  if (!rvtt_loop_trips_gimple (loop, &trips))
+    return refuse ("dst-row-interleave-trips-unproven");
+  if (trips < 2 || trips % 2)
+    return refuse ("dst-row-interleave-trips-odd");
+
+  gcond *cond = safe_dyn_cast <gcond *> (gsi_stmt (gsi_last_bb (bb)));
+  if (!cond)
+    return refuse ("dst-row-interleave-loop-shape", "no exit test");
+
+  gphi *iv = nullptr;
+  for (gphi_iterator psi = gsi_start_phis (bb); !gsi_end_p (psi);
+       gsi_next (&psi))
+    {
+      gphi *phi = psi.phi ();
+      tree res = gimple_phi_result (phi);
+      if (virtual_operand_p (res))
+	continue;
+      if (iv || !INTEGRAL_TYPE_P (TREE_TYPE (res)))
+	return refuse ("dst-row-interleave-loop-carried");
+      iv = phi;
+    }
+  if (!iv)
+    return refuse ("dst-row-interleave-loop-shape", "no induction variable");
+
+  tree res = gimple_phi_result (iv);
+  tree next = PHI_ARG_DEF_FROM_EDGE (iv, latch);
+  step_stmt = TREE_CODE (next) == SSA_NAME
+	      ? dyn_cast <gassign *> (SSA_NAME_DEF_STMT (next)) : nullptr;
+  if (!step_stmt || gimple_bb (step_stmt) != bb
+      || (gimple_assign_rhs_code (step_stmt) != PLUS_EXPR
+	  && gimple_assign_rhs_code (step_stmt) != MINUS_EXPR)
+      || gimple_assign_rhs1 (step_stmt) != res
+      || TREE_CODE (gimple_assign_rhs2 (step_stmt)) != INTEGER_CST)
+    return refuse ("dst-row-interleave-loop-shape", "induction step");
+
+  tree lhs = gimple_cond_lhs (cond);
+  tree rhs = gimple_cond_rhs (cond);
+  if (!((lhs == next && TREE_CODE (rhs) == INTEGER_CST)
+	|| (rhs == next && TREE_CODE (lhs) == INTEGER_CST)))
+    return refuse ("dst-row-interleave-loop-shape", "exit test");
+
+  use_operand_p use;
+  imm_use_iterator it;
+  FOR_EACH_IMM_USE_FAST (use, it, res)
+    if (USE_STMT (use) != step_stmt && !is_gimple_debug (USE_STMT (use)))
+      return refuse ("dst-row-interleave-scalar-dependence",
+		     "induction variable");
+  FOR_EACH_IMM_USE_FAST (use, it, next)
+    if (USE_STMT (use) != iv && USE_STMT (use) != cond
+	&& !is_gimple_debug (USE_STMT (use)))
+      return refuse ("dst-row-interleave-scalar-dependence",
+		     "induction variable");
+  return true;
+}
+
+/* Is CALL the row separator: TTINCRWC advancing only the Dst counter by
+   a positive constant?  Sets *STEP.  */
+
+static bool
+row_separator_p (gcall *call, HOST_WIDE_INT *step)
+{
+  const rvtt_insn_data *insnd = rvtt_get_insn_data (call);
+  if (!insnd || insnd->id != rvtt_insn_data::ttincrwc
+      || gimple_call_num_args (call) != 4)
+    return false;
+  for (unsigned i : { 0u, 2u, 3u })
+    if (!integer_zerop (gimple_call_arg (call, i)))
+      return false;
+  tree dst = gimple_call_arg (call, 1);
+  if (!tree_fits_shwi_p (dst) || tree_to_shwi (dst) <= 0)
+    return false;
+  *step = tree_to_shwi (dst);
+  return true;
+}
+
+/* Every SFPSTOCHRND form advances the per-lane PRNG.  */
+
+static bool
+prng_advance_p (const rvtt_insn_data *insnd)
+{
+  switch (insnd->id)
+    {
+    case rvtt_insn_data::sfpstochrnd:
+    case rvtt_insn_data::sfpstochrnd_lv:
+    case rvtt_insn_data::sfpstochrnd_descale_i:
+    case rvtt_insn_data::sfpstochrnd_descale_i_lv:
+    case rvtt_insn_data::sfpstochrnd_descale_v:
+    case rvtt_insn_data::sfpstochrnd_descale_v_lv:
+      return true;
+    default:
+      return false;
+    }
+}
+
+/* Read the literal address and the Dst view of the typed access CALL (an
+   SFPSTORE when STORE).  The view follows the Mod0 data-type field
+   (SFPLOAD.md and SFPSTORE.md, "Functional model"): MOD0_FMT_SRCB
+   resolves from configuration and stays unknown.  Fails for the
+   no-increment-mode check, a runtime address or Mod0, and the formats
+   with effects beyond the addressed rows: INT32_ALL steps the stack
+   counter, and the LO16_ONLY/HI16_ONLY loads merge the old register.  */
+
+static bool
+dst_access_view (gcall *call, bool store, HOST_WIDE_INT *address,
+		 int *view)
+{
+  unsigned addr_arg = store ? 2 : 1;
+  unsigned mod_arg = store ? 5 : 4;
+  tree addr = gimple_call_arg (call, addr_arg);
+  tree mod = gimple_call_arg (call, mod_arg);
+  tree mode = gimple_call_arg (call, mod_arg + 1);
+  if (!tree_fits_shwi_p (addr) || tree_to_shwi (addr) < 0
+      || !tree_fits_uhwi_p (mod) || !tree_fits_shwi_p (mode)
+      || tree_to_shwi (mode) != rvtt_no_increment_address_mode ())
+    return false;
+  *address = tree_to_shwi (addr);
+  switch (tree_to_uhwi (mod))
+    {
+    case 0:
+      *view = 0;
+      return true;
+    case 1: case 2: case 5: case 6: case 8: case 13:
+      *view = 16;
+      return true;
+    case 3: case 4: case 12:
+      *view = 32;
+      return true;
+    case 7: case 9:
+      *view = store ? 32 : 16;
+      return true;
+    case 11:
+      *view = 16;
+      return true;
+    case 14: case 15:
+      *view = 16;
+      return store;
+    default:
+      return false;
+    }
+}
+
+/* Is LAST the end of a chain of SFPLOADI words whose operands are all
+   literals, each later word merging into its predecessor's value?  Fills
+   CHAIN in program order.  */
+
+static bool
+literal_chain_p (gcall *last, std::vector<gcall *> *chain)
+{
+  chain->clear ();
+  for (gcall *call = last; call; )
+    {
+      const rvtt_insn_data *insnd = rvtt_get_insn_data (call);
+      if (!insnd || (insnd->id != rvtt_insn_data::sfploadi
+		     && insnd->id != rvtt_insn_data::sfploadi_lv))
+	return false;
+      gcall *prev = nullptr;
+      for (unsigned i = 0; i != gimple_call_num_args (call); ++i)
+	{
+	  tree arg = gimple_call_arg (call, i);
+	  if (TREE_CODE (arg) == INTEGER_CST || rvtt_canonical_buffer_arg_p (arg))
+	    continue;
+	  if (TREE_CODE (arg) != SSA_NAME || !vector_value_p (arg) || prev
+	      || insnd->id != rvtt_insn_data::sfploadi_lv
+	      || !has_single_use (arg))
+	    return false;
+	  prev = dyn_cast <gcall *> (SSA_NAME_DEF_STMT (arg));
+	  if (!prev || gimple_bb (prev) != gimple_bb (call))
+	    return false;
+	}
+      chain->insert (chain->begin (), call);
+      call = prev;
+    }
+  return true;
+}
+
+/* Census of the body: classify every statement, collect the invariant
+   vector inputs, and prove the row's values stay inside the row.  */
+
+bool
+row_interleave::admit_body ()
+{
+  for (gimple_stmt_iterator gsi = gsi_start_bb (bb); !gsi_end_p (gsi);
+       gsi_next (&gsi))
+    {
+      gimple *stmt = gsi_stmt (gsi);
+      if (is_gimple_debug (stmt) || gimple_code (stmt) == GIMPLE_LABEL
+	  || gimple_nop_p (stmt) || gimple_code (stmt) == GIMPLE_COND
+	  || stmt == step_stmt)
+	continue;
+      gcall *call = dyn_cast <gcall *> (stmt);
+      const rvtt_insn_data *insnd = call ? rvtt_get_insn_data (call) : nullptr;
+      if (!insnd)
+	return refuse ("dst-row-interleave-foreign-stmt",
+		       gimple_code_name[gimple_code (stmt)]);
+      if (separator)
+	return refuse ("dst-row-interleave-row-step-shape",
+		       "word after the row step");
+      if (row_separator_p (call, &row_step))
+	{
+	  separator = call;
+	  continue;
+	}
+
+      row_stmt rs;
+      rs.call = call;
+      int words = rvtt_replay_unroll_row_words (insnd);
+      rs.words = words < 0 ? 1 : words;
+      rs.latency = MAX (rvtt_builtin_result_latency (insnd), 0);
+      if (typed_dst_access_p (insnd))
+	{
+	  rs.kind = ROW_DST;
+	  rs.store = insnd->id == rvtt_insn_data::sfpstore;
+	  if (!dst_access_view (call, rs.store, &rs.address, &rs.view))
+	    return refuse ("dst-row-interleave-dst-access-unproven",
+			   insnd->name);
+	}
+      else if (rvtt_cc_writer_id_p (insnd->id) || insnd->sets_cc (call))
+	rs.kind = ROW_CC;
+      else if (rvtt_dst_inert_compute_id_p (insnd->id)
+	       && insnd->id != rvtt_insn_data::synth_opcode)
+	{
+	  rs.kind = ROW_PURE;
+	  rs.prng = prng_advance_p (insnd);
+	  /* A read of an allocatable LREG observes raw architectural
+	     state rather than a row value.  */
+	  if (insnd->id == rvtt_insn_data::sfpreadlreg)
+	    {
+	      tree lhs = gimple_call_lhs (call);
+	      if (!lhs || rvtt_pressure_tracked_p (lhs))
+		return refuse ("dst-row-interleave-foreign-stmt",
+			       insnd->name);
+	    }
+	}
+      else
+	return refuse ("dst-row-interleave-foreign-stmt", insnd->name);
+
+      for (unsigned i = 0; i != gimple_call_num_args (call); ++i)
+	{
+	  tree arg = gimple_call_arg (call, i);
+	  if (TREE_CODE (arg) != SSA_NAME)
+	    continue;
+	  gimple *def = SSA_NAME_DEF_STMT (arg);
+	  if (gimple_bb (def) == bb)
+	    {
+	      if (!row_def.count (arg))
+		return refuse (gimple_code (def) == GIMPLE_PHI
+			       ? "dst-row-interleave-loop-carried"
+			       : "dst-row-interleave-scalar-dependence");
+	      continue;
+	    }
+	  if (!vector_value_p (arg) || invariant_index.count (arg))
+	    continue;
+	  invariant_index.emplace (arg, invariants.size ());
+	  invariant_value inv;
+	  inv.name = arg;
+	  gcall *last = dyn_cast <gcall *> (def);
+	  if (last && literal_chain_p (last, &inv.chain))
+	    for (gcall *c : inv.chain)
+	      inv.words += MAX (rvtt_replay_unroll_row_words
+				(rvtt_get_insn_data (c)), 1);
+	  else
+	    inv.chain.clear ();
+	  invariants.push_back (inv);
+	}
+      if (tree lhs = gimple_call_lhs (call))
+	{
+	  if (TREE_CODE (lhs) != SSA_NAME)
+	    return refuse ("dst-row-interleave-foreign-stmt", "memory result");
+	  use_operand_p use;
+	  imm_use_iterator it;
+	  FOR_EACH_IMM_USE_FAST (use, it, lhs)
+	    {
+	      gimple *user = USE_STMT (use);
+	      if (!is_gimple_debug (user)
+		  && (gimple_bb (user) != bb
+		      || gimple_code (user) == GIMPLE_PHI))
+		return refuse ("dst-row-interleave-live-out");
+	    }
+	  row_def.emplace (lhs, row.size ());
+	}
+      row.push_back (rs);
+    }
+
+  if (!separator)
+    return refuse ("dst-row-interleave-row-step-shape", "no row step");
+  if (row.size () < 2)
+    return refuse ("dst-row-interleave-row-step-shape", "row too short");
+
+  /* Row B's addresses must still fit the encoding.  */
+  for (const row_stmt &rs : row)
+    if (rs.kind == ROW_DST)
+      {
+	unsigned bits = dst_address_bits (rvtt_get_insn_data (rs.call));
+	if (rs.address + row_step > (HOST_WIDE_INT_1 << bits) - 1)
+	  return refuse ("dst-row-interleave-dst-access-unproven",
+			 "address range");
+      }
+  return true;
+}
+
+/* CC atoms: from a CC writer through the next word-exact all-lanes
+   SFPENCC.  A writer left open at the row end would carry lane state
+   into the next row.  */
+
+bool
+row_interleave::admit_atoms ()
+{
+  int open = -1;
+  for (unsigned i = 0; i != row.size (); ++i)
+    {
+      row_stmt &rs = row[i];
+      if (rs.kind == ROW_CC && open < 0)
+	open = i;
+      if (open < 0)
+	continue;
+      rs.atom = atoms.size ();
+      if (rs.kind == ROW_CC
+	  && rvtt_encc_all_lanes_call_p (rs.call, rvtt_get_insn_data (rs.call)))
+	{
+	  atoms.emplace_back (open, i);
+	  open = -1;
+	}
+    }
+  if (open >= 0)
+    return refuse ("dst-row-interleave-cc-unclosed");
+  return true;
+}
+
+/* The ambient lane state on the loop's entry edge is all-lanes: walking
+   back through single-predecessor blocks, the nearest CC writer is the
+   all-lanes SFPENCC, or the walk reaches the function entry (all-lanes by
+   the structured-CC lowering contract).  A call, an asm or an unaudited
+   word may hand back any state.  */
+
+bool
+row_interleave::entry_all_lanes_p () const
+{
+  for (basic_block cur = entry->src; cur != ENTRY_BLOCK_PTR_FOR_FN (cfun);
+       cur = single_pred (cur))
+    {
+      for (gimple_stmt_iterator gsi = gsi_last_bb (cur); !gsi_end_p (gsi);
+	   gsi_prev (&gsi))
+	{
+	  gimple *stmt = gsi_stmt (gsi);
+	  if (gimple_code (stmt) == GIMPLE_ASM)
+	    return false;
+	  gcall *call = dyn_cast <gcall *> (stmt);
+	  if (!call)
+	    continue;
+	  const rvtt_insn_data *insnd = rvtt_get_insn_data (call);
+	  if (!insnd)
+	    return false;
+	  if (rvtt_encc_all_lanes_call_p (call, insnd)
+	      || insnd->id == rvtt_insn_data::sfpencc_all_lanes)
+	    return true;
+	  if (rvtt_cc_writer_id_p (insnd->id) || insnd->sets_cc (call))
+	    return false;
+	  /* Counter and address-modifier words, and SFPCONFIG programming of
+	     the constant registers (dests 12-14; LaneConfig is dest 15),
+	     leave lane state alone; anything else unaudited might not.  */
+	  if (insnd->id == rvtt_insn_data::sfpwriteconfig_v)
+	    {
+	      unsigned mod, dest;
+	      if (rvtt_call_const_uarg (call, 1, &mod) && mod == 0
+		  && rvtt_call_const_uarg (call, 2, &dest)
+		  && dest >= 12 && dest <= 14)
+		continue;
+	      return false;
+	    }
+	  if (!rvtt_cc_quiet_compute_id_p (insnd->id)
+	      && insnd->id != rvtt_insn_data::ttincrwc
+	      && insnd->id != rvtt_insn_data::ttsetc16)
+	    return false;
+	}
+      if (!single_pred_p (cur))
+	return false;
+    }
+  return true;
+}
+
+/* Every row-B Dst access is disjoint from every row-A access when one of
+   the two is a store.  */
+
+bool
+row_interleave::rows_independent_p () const
+{
+  for (const row_stmt &a : row)
+    for (const row_stmt &b : row)
+      if (a.kind == ROW_DST && b.kind == ROW_DST && (a.store || b.store))
+	{
+	  HOST_WIDE_INT delta = b.address + row_step - a.address;
+	  /* Opposite column parity separates them in either view.  */
+	  if (((delta % 4) + 4) % 4 == 2)
+	    continue;
+	  /* Distinct four-row groups of one known view.  */
+	  if (a.view && a.view == b.view && (delta <= -4 || delta >= 4))
+	    continue;
+	  return false;
+	}
+  return true;
+}
+
+/* Row B can reuse row A's value of every literal materialization outside
+   an atom: both run with all lanes enabled and produce the same value,
+   and the zip issues row A's chain first.  */
+
+void
+row_interleave::find_shared_materializations ()
+{
+  shared.assign (row.size (), false);
+  for (unsigned i = 0; i != row.size (); ++i)
+    {
+      tree lhs = gimple_call_lhs (row[i].call);
+      if (row[i].atom >= 0 || !lhs || !vector_value_p (lhs))
+	continue;
+      std::vector<gcall *> chain;
+      if (!literal_chain_p (row[i].call, &chain))
+	continue;
+      bool outside = true;
+      for (gcall *c : chain)
+	{
+	  auto rd = row_def.find (gimple_call_lhs (c));
+	  outside &= rd != row_def.end () && row[rd->second].atom < 0;
+	}
+      if (outside)
+	for (gcall *c : chain)
+	  shared[row_def.at (gimple_call_lhs (c))] = true;
+    }
+}
+
+/* The last statement of the unit starting at FIRST: its atom's end, or
+   FIRST itself.  */
+
+unsigned
+row_interleave::unit_end (unsigned first) const
+{
+  return row[first].atom >= 0 ? atoms[row[first].atom].second : first;
+}
+
+/* The zip: each row-A unit (a statement, or a whole atom) followed by its
+   row-B twin, unless the twin advances the PRNG while row A still has an
+   advance to issue.  Shared materializations are issued once.  */
+
+std::vector<pair_item>
+row_interleave::zip_order () const
+{
+  int last_prng = -1;
+  for (unsigned i = 0; i != row.size (); ++i)
+    if (row[i].prng)
+      last_prng = i;
+
+  std::vector<pair_item> order;
+  auto emit_unit = [&] (pair_kind kind, unsigned first)
+    {
+      unsigned last = unit_end (first);
+      for (unsigned i = first; i <= last; ++i)
+	if (kind == PAIR_A || !shared[i])
+	  order.push_back ({ kind, i });
+      return last + 1;
+    };
+  unsigned b = 0;
+  for (unsigned a = 0; a != row.size (); )
+    {
+      a = emit_unit (PAIR_A, a);
+      while (b < a)
+	{
+	  bool prng = false;
+	  for (unsigned i = b; i <= unit_end (b); ++i)
+	    prng |= row[i].prng;
+	  if (prng && (int) a <= last_prng)
+	    break;
+	  b = emit_unit (PAIR_B, b);
+	}
+    }
+  while (b != row.size ())
+    b = emit_unit (PAIR_B, b);
+  return order;
+}
+
+/* Which copy of row value DEF a statement of KIND reads: row B reads its
+   own twin, except of a shared materialization.  */
+
+unsigned
+row_interleave::source (pair_kind kind, unsigned def) const
+{
+  return kind == PAIR_B && !shared[def] ? 1 : 0;
+}
+
+/* LREGs NAME occupies while live: an SFPSWAP pair against a constant
+   register drops the constant half.  */
+
+static unsigned
+lreg_width (tree name)
+{
+  switch (TYPE_MODE (TREE_TYPE (name)))
+    {
+    case E_XTT32SImode:
+      return 1;
+    case E_XTT64SImode:
+      if (gcall *def = dyn_cast <gcall *> (SSA_NAME_DEF_STMT (name)))
+	{
+	  const rvtt_insn_data *insnd = rvtt_get_insn_data (def);
+	  if (insnd && insnd->id == rvtt_insn_data::sfpswap
+	      && (!rvtt_pressure_tracked_p (gimple_call_arg (def, 0))
+		  || !rvtt_pressure_tracked_p (gimple_call_arg (def, 1))))
+	    return 1;
+	}
+      return 2;
+    case E_XTT128SImode:
+      return 4;
+    default:
+      return SFPU_REG_NUM;
+    }
+}
+
+/* Peak simultaneously-live LREG demand of the body in ORDER, taken at
+   each statement over the values live into it and the values live out of
+   it (an operand read for the last time can hand its register to the
+   result): each row value from its definition to its last read (row B's
+   reads of a shared value extend row A's), every kept tracked invariant
+   throughout, an evicted invariant from its in-loop materialization to
+   the pair's last read, plus the CC-transient charge of each CC word.  */
+
+int
+row_interleave::peak_pressure (const std::vector<pair_item> &order) const
+{
+  int n = order.size ();
+  /* One live range per value: [def, last], def -1 for the body entry.  */
+  struct range { int def, last; unsigned width; };
+  std::vector<range> ranges;
+  std::vector<int> slot[2];
+  slot[0].assign (row.size (), -1);
+  slot[1].assign (row.size (), -1);
+  std::vector<int> remat_slot (invariants.size (), -1);
+  for (unsigned v = 0; v != invariants.size (); ++v)
+    if (rvtt_pressure_tracked_p (invariants[v].name)
+	&& !invariants[v].evicted)
+      ranges.push_back ({ -1, n, lreg_width (invariants[v].name) });
+  for (int p = 0; p != n; ++p)
+    {
+      const pair_item &it = order[p];
+      if (it.kind == PAIR_REMAT)
+	{
+	  remat_slot[it.index] = ranges.size ();
+	  ranges.push_back ({ p, p, lreg_width (invariants[it.index].name) });
+	  continue;
+	}
+      gcall *call = row[it.index].call;
+      for (unsigned i = 0; i != gimple_call_num_args (call); ++i)
+	{
+	  tree arg = gimple_call_arg (call, i);
+	  auto rd = row_def.find (arg);
+	  if (rd != row_def.end ())
+	    {
+	      int r = slot[source (it.kind, rd->second)][rd->second];
+	      if (r >= 0)
+		ranges[r].last = p;
+	      continue;
+	    }
+	  auto iv = invariant_index.find (arg);
+	  if (iv != invariant_index.end () && remat_slot[iv->second] >= 0)
+	    ranges[remat_slot[iv->second]].last = p;
+	}
+      tree lhs = gimple_call_lhs (call);
+      if (lhs && rvtt_pressure_tracked_p (lhs))
+	{
+	  slot[it.kind == PAIR_B][it.index] = ranges.size ();
+	  ranges.push_back ({ p, p, lreg_width (lhs) });
+	}
+    }
+
+  int peak = 0;
+  for (int p = 0; p != n; ++p)
+    {
+      int in = 0, out = 0;
+      for (const range &r : ranges)
+	{
+	  if (r.def < p && p <= r.last)
+	    in += r.width;
+	  if (r.def <= p && (p < r.last || r.def == r.last))
+	    out += r.width;
+	}
+      int live = MAX (in, out);
+      if (order[p].kind != PAIR_REMAT)
+	live += rvtt_pressure_cc_transient (row[order[p].index].call);
+      peak = MAX (peak, live);
+    }
+  return peak;
+}
+
+/* Issue-cycle model of ORDER on the in-order single-issue SFPU: a word
+   issues once its vector operands are ready, occupies its delivered
+   words, and makes its result ready RESULT_LATENCY slots after that.
+   Rows share no value across trips, so one pass is the steady state.  */
+
+int
+row_interleave::cycles (const std::vector<pair_item> &order) const
+{
+  std::vector<int> ready[2];
+  ready[0].assign (row.size (), 0);
+  ready[1].assign (row.size (), 0);
+  int t = 0;
+  for (const pair_item &it : order)
+    {
+      if (it.kind == PAIR_REMAT)
+	{
+	  t += invariants[it.index].words;
+	  continue;
+	}
+      const row_stmt &rs = row[it.index];
+      int start = t;
+      for (unsigned i = 0; i != gimple_call_num_args (rs.call); ++i)
+	{
+	  auto rd = row_def.find (gimple_call_arg (rs.call, i));
+	  if (rd != row_def.end ())
+	    start = MAX (start, ready[source (it.kind, rd->second)][rd->second]);
+	}
+      t = start + rs.words;
+      ready[it.kind == PAIR_B][it.index] = rs.words ? t + rs.latency : start;
+    }
+  return t;
+}
+
+/* Two rows issued back to back, as the loop issues them today.  */
+
+int
+row_interleave::row_cycles () const
+{
+  std::vector<pair_item> order;
+  for (unsigned i = 0; i != row.size (); ++i)
+    order.push_back ({ PAIR_A, i });
+  return 2 * cycles (order);
+}
+
+/* Place each evicted invariant's materialization just ahead of the unit
+   holding its first read in ORDER, so it never lands inside an atom.  */
+
+void
+row_interleave::place_remats (std::vector<pair_item> &order) const
+{
+  order.erase (std::remove_if (order.begin (), order.end (),
+			       [] (const pair_item &it)
+			       { return it.kind == PAIR_REMAT; }),
+	       order.end ());
+  for (unsigned v = 0; v != invariants.size (); ++v)
+    {
+      if (!invariants[v].evicted)
+	continue;
+      for (unsigned p = 0; p != order.size (); ++p)
+	{
+	  if (order[p].kind == PAIR_REMAT)
+	    continue;
+	  gcall *call = row[order[p].index].call;
+	  bool reads = false;
+	  for (unsigned i = 0; i != gimple_call_num_args (call); ++i)
+	    reads |= gimple_call_arg (call, i) == invariants[v].name;
+	  if (!reads)
+	    continue;
+	  int atom = row[order[p].index].atom;
+	  unsigned at = p;
+	  while (atom >= 0 && at && order[at - 1].kind == order[p].kind
+		 && row[order[at - 1].index].atom == atom)
+	    --at;
+	  order.insert (order.begin () + at, { PAIR_REMAT, v });
+	  break;
+	}
+    }
+}
+
+/* Evict literal invariants, shortest in-loop span first, until the pair
+   fits the LREG file.  */
+
+bool
+row_interleave::evict_for_pressure (std::vector<pair_item> &order)
+{
+  while ((unsigned) peak_pressure (order) > rvtt_pressure_capacity ())
+    {
+      int best = -1;
+      int best_span = INT_MAX;
+      for (unsigned v = 0; v != invariants.size (); ++v)
+	{
+	  if (invariants[v].evicted || invariants[v].chain.empty ()
+	      || !rvtt_pressure_tracked_p (invariants[v].name))
+	    continue;
+	  int first = -1, last = -1;
+	  for (unsigned p = 0; p != order.size (); ++p)
+	    {
+	      if (order[p].kind == PAIR_REMAT)
+		continue;
+	      gcall *call = row[order[p].index].call;
+	      for (unsigned i = 0; i != gimple_call_num_args (call); ++i)
+		if (gimple_call_arg (call, i) == invariants[v].name)
+		  {
+		    if (first < 0)
+		      first = p;
+		    last = p;
+		  }
+	    }
+	  if (first >= 0 && last - first < best_span)
+	    {
+	      best = v;
+	      best_span = last - first;
+	    }
+	}
+      if (best < 0)
+	return false;
+      invariants[best].evicted = true;
+      place_remats (order);
+    }
+  return true;
+}
+
+/* Rewrite the loop to ORDER.  Returns false, with the loop restored
+   exactly, when the function-wide pressure model rejects the result.  */
+
+bool
+row_interleave::apply (const std::vector<pair_item> &order)
+{
+  rvtt_pressure_model before;
+  rvtt_pressure_compute (cfun, rvtt_pressure_capacity (), &before);
+  bool over_before = bitmap_bit_p (before.over_bbs, bb->index);
+
+  std::vector<gimple *> original;
+  for (gimple_stmt_iterator gsi = gsi_start_bb (bb); !gsi_end_p (gsi);
+       gsi_next (&gsi))
+    if (gimple_code (gsi_stmt (gsi)) != GIMPLE_LABEL)
+      original.push_back (gsi_stmt (gsi));
+
+  std::vector<gcall *> created;
+  std::vector<std::pair<gcall *, std::pair<unsigned, tree>>> rewired;
+  std::unordered_map<tree, tree> twin;	/* row-A name -> row-B name */
+  std::vector<tree> remat_name (invariants.size (), NULL_TREE);
+  gimple_stmt_iterator at = gsi_for_stmt (separator);
+
+  /* A copy of FROM with a fresh result; its virtual operands are
+     renamed with the rest of the function after the commit.  */
+  auto fresh = [] (gcall *from)
+    {
+      gcall *copy = as_a <gcall *> (gimple_copy (from));
+      if (gimple_vuse (from))
+	gimple_set_vuse (copy, gimple_vop (cfun));
+      if (gimple_vdef (from))
+	gimple_set_vdef (copy, gimple_vop (cfun));
+      if (tree lhs = gimple_call_lhs (from))
+	gimple_call_set_lhs (copy, make_ssa_name (TREE_TYPE (lhs), copy));
+      return copy;
+    };
+  /* The value KIND's statement reads for operand ARG.  */
+  auto operand = [&] (pair_kind kind, tree arg) -> tree
+    {
+      auto iv = invariant_index.find (arg);
+      if (iv != invariant_index.end ())
+	return invariants[iv->second].evicted ? remat_name[iv->second] : arg;
+      auto rd = row_def.find (arg);
+      if (rd != row_def.end () && source (kind, rd->second))
+	return twin.at (arg);
+      return arg;
+    };
+
+  for (const pair_item &it : order)
+    {
+      if (it.kind == PAIR_REMAT)
+	{
+	  tree prev = NULL_TREE;
+	  for (gcall *c : invariants[it.index].chain)
+	    {
+	      gcall *copy = fresh (c);
+	      for (unsigned i = 0; i != gimple_call_num_args (copy); ++i)
+		if (TREE_CODE (gimple_call_arg (copy, i)) == SSA_NAME)
+		  gimple_call_set_arg (copy, i, prev);
+	      gsi_insert_before (&at, copy, GSI_SAME_STMT);
+	      update_stmt (copy);
+	      created.push_back (copy);
+	      prev = gimple_call_lhs (copy);
+	    }
+	  remat_name[it.index] = prev;
+	  continue;
+	}
+
+      gcall *call = row[it.index].call;
+      if (it.kind == PAIR_A)
+	{
+	  gimple_stmt_iterator from = gsi_for_stmt (call);
+	  gsi_move_before (&from, &at);
+	  for (unsigned i = 0; i != gimple_call_num_args (call); ++i)
+	    {
+	      tree arg = gimple_call_arg (call, i);
+	      tree to = operand (PAIR_A, arg);
+	      if (to != arg)
+		{
+		  rewired.push_back ({ call, { i, arg } });
+		  gimple_call_set_arg (call, i, to);
+		}
+	    }
+	  update_stmt (call);
+	  continue;
+	}
+
+      gcall *copy = fresh (call);
+      for (unsigned i = 0; i != gimple_call_num_args (copy); ++i)
+	gimple_call_set_arg (copy, i,
+			     operand (PAIR_B, gimple_call_arg (call, i)));
+      if (row[it.index].kind == ROW_DST)
+	{
+	  unsigned arg = row[it.index].store ? 2 : 1;
+	  tree address = gimple_call_arg (copy, arg);
+	  gimple_call_set_arg (copy, arg,
+			       build_int_cst (TREE_TYPE (address),
+					      row[it.index].address
+					      + row_step));
+	}
+      gsi_insert_before (&at, copy, GSI_SAME_STMT);
+      update_stmt (copy);
+      created.push_back (copy);
+      if (tree lhs = gimple_call_lhs (call))
+	twin.emplace (lhs, gimple_call_lhs (copy));
+    }
+
+  tree old_step = gimple_call_arg (separator, 1);
+  gimple_call_set_arg (separator, 1,
+		       build_int_cst (TREE_TYPE (old_step), 2 * row_step));
+  update_stmt (separator);
+  tree old_iv_step = gimple_assign_rhs2 (step_stmt);
+  gimple_assign_set_rhs2 (step_stmt,
+			  wide_int_to_tree (TREE_TYPE (old_iv_step),
+					    wi::to_wide (old_iv_step) * 2));
+  update_stmt (step_stmt);
+
+  rvtt_pressure_model after;
+  rvtt_pressure_compute (cfun, rvtt_pressure_capacity (), &after);
+  if (over_before || !bitmap_bit_p (after.over_bbs, bb->index))
+    return true;
+
+  for (unsigned k = created.size (); k--;)
+    {
+      gcall *c = created[k];
+      gimple_set_vuse (c, NULL_TREE);
+      gimple_set_vdef (c, NULL_TREE);
+      gimple_stmt_iterator gsi = gsi_for_stmt (c);
+      gsi_remove (&gsi, true);
+      if (tree lhs = gimple_call_lhs (c))
+	release_ssa_name (lhs);
+    }
+  for (auto &rw : rewired)
+    {
+      gimple_call_set_arg (rw.first, rw.second.first, rw.second.second);
+      update_stmt (rw.first);
+    }
+  gimple_stmt_iterator tail = gsi_last_bb (bb);
+  for (gimple *s : original)
+    if (s != gsi_stmt (tail))
+      {
+	gimple_stmt_iterator from = gsi_for_stmt (s);
+	gsi_move_before (&from, &tail);
+      }
+  gimple_call_set_arg (separator, 1, old_step);
+  update_stmt (separator);
+  gimple_assign_set_rhs2 (step_stmt, old_iv_step);
+  update_stmt (step_stmt);
+  return false;
+}
+
+void
+row_interleave::process (class loop *l)
+{
+  loop = l;
+  bb = nullptr;
+  entry = nullptr;
+  step_stmt = nullptr;
+  separator = nullptr;
+  row_step = 0;
+  row.clear ();
+  row_def.clear ();
+  invariants.clear ();
+  invariant_index.clear ();
+  atoms.clear ();
+
+  if (!admit_shape () || !admit_body () || !admit_atoms ())
+    return;
+  if (!entry_all_lanes_p ())
+    {
+      refuse ("dst-row-interleave-entry-cc-unproven");
+      return;
+    }
+  if (!rows_independent_p ())
+    {
+      refuse ("dst-row-interleave-dst-alias");
+      return;
+    }
+
+  find_shared_materializations ();
+  std::vector<pair_item> order = zip_order ();
+  int zip_peak = peak_pressure (order);
+  if (!evict_for_pressure (order))
+    {
+      if (dump_file)
+	fprintf (dump_file, "Dst-row interleave: loop %d pair peak %d "
+		 "exceeds the %u-LREG file\n", loop->num, zip_peak,
+		 rvtt_pressure_capacity ());
+      refuse ("dst-row-interleave-pressure-exceeded");
+      return;
+    }
+  unsigned evicted = 0;
+  for (const invariant_value &inv : invariants)
+    evicted += inv.evicted;
+  int shared_words = 0;
+  for (unsigned i = 0; i != row.size (); ++i)
+    shared_words += shared[i] ? row[i].words : 0;
+
+  int before = row_cycles ();
+  int after = cycles (order);
+  if (dump_file)
+    fprintf (dump_file, "Dst-row interleave: loop %d trips "
+	     HOST_WIDE_INT_PRINT_UNSIGNED " row-step %d stmts %zu "
+	     "atoms %zu pair-cycles %d -> %d shared-words %d evicted %u "
+	     "peak %d\n", loop->num, trips, (int) row_step, row.size (),
+	     atoms.size (), before, after, shared_words, evicted,
+	     peak_pressure (order));
+  if (after >= before)
+    {
+      refuse ("dst-row-interleave-no-benefit");
+      return;
+    }
+  if (!apply (order))
+    {
+      refuse ("dst-row-interleave-pressure-exceeded",
+	      "function-wide model");
+      return;
+    }
+
+  /* The body's debug binds now precede the definitions they name.  */
+  for (gimple_stmt_iterator gsi = gsi_start_bb (bb); !gsi_end_p (gsi);
+       gsi_next (&gsi))
+    {
+      gimple *dbg = gsi_stmt (gsi);
+      if (gimple_debug_bind_p (dbg) && gimple_debug_bind_has_value_p (dbg))
+	{
+	  gimple_debug_bind_reset_value (dbg);
+	  update_stmt (dbg);
+	}
+    }
+  /* An evicted invariant read only in the loop leaves its entry
+     materialization dead.  */
+  for (const invariant_value &inv : invariants)
+    if (inv.evicted)
+      for (unsigned k = inv.chain.size (); k--;)
+	{
+	  gcall *c = inv.chain[k];
+	  if (!has_zero_uses (gimple_call_lhs (c)))
+	    break;
+	  gimple_stmt_iterator gsi = gsi_for_stmt (c);
+	  if (MAY_HAVE_DEBUG_BIND_STMTS)
+	    insert_debug_temps_for_defs (&gsi);
+	  if (gimple_vdef (c))
+	    unlink_stmt_vdef (c);
+	  gsi_remove (&gsi, true);
+	  release_defs (c);
+	}
+  free_numbers_of_iterations_estimates (loop);
+  ++n_fired;
+  if (dump_file)
+    fprintf (dump_file, "Dst-row interleave: loop %d rows paired, "
+	     "row step %d -> %d\n", loop->num, (int) row_step,
+	     (int) (2 * row_step));
+}
+
+const pass_data pass_data_rvtt_dst_row_interleave = {
+  GIMPLE_PASS, "rvtt_dst_row_interleave", OPTGROUP_OTHER, TV_NONE,
+  PROP_cfg | PROP_ssa, 0, 0, 0, 0
+};
+
+class pass_rvtt_dst_row_interleave : public gimple_opt_pass
+{
+public:
+  pass_rvtt_dst_row_interleave (gcc::context *ctxt)
+    : gimple_opt_pass (pass_data_rvtt_dst_row_interleave, ctxt) {}
+  bool gate (function *) final override
+  {
+    return TARGET_XTT_TENSIX && optimize > 0
+      && riscv_tt_opt_dst_row_interleave;
+  }
+  unsigned execute (function *fn) final override
+  {
+    row_interleave ctx;
+    loop_optimizer_init (AVOID_CFG_MODIFICATIONS);
+    for (auto loop : loops_list (fn, LI_ONLY_INNERMOST))
+      ctx.process (loop);
+    loop_optimizer_finalize ();
+    if (dump_file)
+      fprintf (dump_file, "Dst-row interleave: fires=%u refusals=%u\n",
+	       ctx.n_fired, ctx.n_refused);
+    if (!ctx.n_fired)
+      return 0;
+    mark_virtual_operands_for_renaming (fn);
+    return TODO_update_ssa_only_virtuals;
+  }
+};
+
+} /* anonymous namespace */
+
+/* Pass factory for rvtt_dst_row_interleave, referenced from
+   rvtt-passes.def.  */
+
+gimple_opt_pass *
+make_pass_rvtt_dst_row_interleave (gcc::context *ctxt)
+{
+  return new pass_rvtt_dst_row_interleave (ctxt);
 }
