@@ -41,7 +41,7 @@ void sub2() {
 **_Z4sub2v:
 **	# READ L0
 **	# READ L1
-**	SFPMAD	L3, L11, L0, L1, 0
+**	SFPMAD	L3, L0, L11, L1, 0
 **	SFPNOP
 **	# WRITE L3
 **	ret
@@ -114,10 +114,9 @@ void sub5() {
 **	SFPMAD	L2, L11, L1, L0, 0
 **	SFPNOP
 **	SFPSETCC	L2, 0, 0
-**	SFPMAD	L1, L11, L0, L1, 0	# LV:L1
+**	SFPMAD	L1, L0, L11, L1, 0	# LV:L1
 **	SFPCOMPC
-**	SFPMOV	L0, L0, 1
-**	SFPMAD	L1, L11, L0, L1, 0	# LV:L1
+**	SFPADD	L1, L1, L0, 0	# LV:L1
 **	SFPENCC	3, 10
 **	SFPMOV	L3, L1, 2
 **	# WRITE L3
