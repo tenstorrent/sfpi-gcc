@@ -1867,6 +1867,207 @@ residency_collect_pressure_class (function *fn,
 }
 
 
+/* Replace the constant materialization LOAD with a read of PRGM
+   register REG.  The read keeps LOAD's SSA name, so every use follows
+   untouched; it expands to a zero-pressure cstlreg unspec.  */
+
+static void
+replace_with_prgm_read (gcall *load, unsigned reg)
+{
+  const rvtt_insn_data *readlreg_d
+    = rvtt_get_insn_data (rvtt_insn_data::sfpreadlreg);
+  gcall *chain_root = rvtt_chained_loadi_root (load);
+  gimple_stmt_iterator lgsi = gsi_for_stmt (load);
+  gcall *read = gimple_build_call
+    (readlreg_d->decl, 1, build_int_cst (unsigned_type_node, reg));
+  gimple_call_set_lhs (read, gimple_call_lhs (load));
+  unlink_stmt_vdef (load);
+  if (tree vdef = gimple_vdef (load))
+    {
+      gimple_set_vdef (load, NULL_TREE);
+      if (TREE_CODE (vdef) == SSA_NAME)
+	release_ssa_name (vdef);
+    }
+  gsi_replace (&lgsi, read, false);
+  /* Immediate lowering split this value into a root and tail.  The
+     read replaces the whole materialization, so retaining the now-dead
+     root would still emit an architectural SFPLOADI side effect.  */
+  if (chain_root)
+    {
+      gimple_stmt_iterator rgsi = gsi_for_stmt (chain_root);
+      if (tree vdef = gimple_vdef (chain_root))
+	if (TREE_CODE (vdef) == SSA_NAME)
+	  unlink_stmt_vdef (chain_root);
+      gsi_remove (&rgsi, true);
+      release_defs (chain_root);
+    }
+}
+
+/* REPEAT class (-mtt-tensix-optimize-repeat-residency).
+
+   A row loop written under `#pragma GCC unroll' inside a noinline body
+   is gone by the time this pass runs: the body is straight-line and
+   every row materializes its coefficients again, two pushed SFPLOADI
+   words per wide constant per row.  No loop is left for the LOOP class
+   to hoist out of, and the pressure class only rewrites in place.  The
+   handwritten kernels keep such coefficients in the programmable
+   constant registers instead.
+
+   For a function with no loop around the materializations, no call and
+   no asm, this class groups the out-of-loop materializations by their
+   32-bit lane image and, for a group whose words saved exceed the
+   programming cost, programs a PRGM register once at the function entry
+   and turns every member into a read of it.
+
+   Exactness:
+   - the programming point is the function entry, whose lane state is
+     the all-lanes ambient every class here assumes, so the register
+     holds the image in every lane;
+   - a member that executed in the all-lanes state (its nearest
+     preceding CC event in the block is the word-exact all-lanes
+     SFPENCC, or the block entry is proven all-lanes) wrote the image to
+     every lane: the read is bit-identical.  A member under a partial
+     mask is admitted only when every consumer passes the lane-discipline
+     audit (the superset-write refinement the pressure-park tier uses);
+     otherwise it keeps its own materialization;
+   - nothing can rewrite the register between the entry and a member:
+     the function has no call and no asm, a free register has no writer
+     anywhere in the TU, and a DEAD-claim reclaim (a claimed register no
+     TU statement reads) has its writers outside this function.
+
+   Members feeding a compare's VD or a LUT slot, PHIs, or a store (the
+   store-source encoding ceiling) are left alone, as in the other
+   classes.  */
+
+struct repeat_group
+{
+  unsigned value;
+  auto_vec<gcall *> members;
+  int saved;			/* issue words saved per call */
+};
+
+static bool
+stmt_ambient_all_lanes_p (gimple *stmt)
+{
+  gimple_stmt_iterator gsi = gsi_for_stmt (stmt);
+  for (gsi_prev (&gsi); !gsi_end_p (gsi); gsi_prev (&gsi))
+    {
+      gimple *s = gsi_stmt (gsi);
+      if (is_gimple_debug (s))
+	continue;
+      const rvtt_insn_data *insnd = rvtt_get_insn_data (s);
+      if (!insnd)
+	continue;
+      if (rvtt_all_lanes_encc_p (s))
+	return true;
+      gcall *call = as_a <gcall *> (s);
+      if (insnd->sets_cc (call)
+	  || insnd->id == rvtt_insn_data::sfppushc
+	  || insnd->id == rvtt_insn_data::sfppopc)
+	return false;
+    }
+  return prepeel_ambient_all_lanes_p (gimple_bb (stmt));
+}
+
+static void
+residency_collect_repeat_class (function *fn,
+				auto_vec<repeat_group *> &groups,
+				hash_set<gimple *> &taken)
+{
+  if (riscv_tt_opt_repeat_residency <= 0)
+    return;
+  basic_block bb;
+  FOR_EACH_BB_FN (bb, fn)
+    for (gimple_stmt_iterator gsi = gsi_start_bb (bb); !gsi_end_p (gsi);
+	 gsi_next (&gsi))
+      {
+	gimple *stmt = gsi_stmt (gsi);
+	if (gimple_code (stmt) == GIMPLE_ASM
+	    || (is_gimple_call (stmt) && !rvtt_get_insn_data (stmt)))
+	  {
+	    if (dump_file)
+	      fprintf (dump_file, "const-residency: repeat class refused "
+		       "(the function has a call or asm)\n");
+	    return;
+	  }
+      }
+
+  hash_map<int_hash<unsigned, 0>, unsigned> by_value;
+  auto_vec<repeat_group *> all;
+  FOR_EACH_BB_FN (bb, fn)
+    {
+      if (bb->loop_father && bb->loop_father->num != 0)
+	continue;
+      for (gimple_stmt_iterator gsi = gsi_start_bb (bb); !gsi_end_p (gsi);
+	   gsi_next (&gsi))
+	{
+	  gcall *load = dyn_cast <gcall *> (gsi_stmt (gsi));
+	  if (!load || taken.contains (load) || !gimple_call_lhs (load))
+	    continue;
+	  tree name = gimple_call_lhs (load);
+	  remat_chain chain;
+	  if (!remat_chain_p (name, &chain) || chain.tail != load)
+	    continue;
+	  unsigned value;
+	  if (!constant_chain_value_p (chain, &value) || value == 0)
+	    continue;
+	  bool all_lanes = stmt_ambient_all_lanes_p (load);
+	  bool ok = !rvtt_pressure_lut_slot_use_p (name);
+	  imm_use_iterator uit;
+	  gimple *use;
+	  FOR_EACH_IMM_USE_STMT (use, uit, name)
+	    {
+	      if (!ok || is_gimple_debug (use))
+		continue;
+	      const rvtt_insn_data *uinsnd = rvtt_get_insn_data (use);
+	      if (gimple_code (use) == GIMPLE_PHI
+		  || compare_vd_use_p (use, name)
+		  || (uinsnd && uinsnd->id == rvtt_insn_data::sfpstore)
+		  || (!all_lanes && !remat_consumer_audited_p (use, name)))
+		ok = false;
+	    }
+	  if (!ok)
+	    continue;
+	  unsigned *slot = by_value.get (value);
+	  repeat_group *g;
+	  if (slot)
+	    g = all[*slot];
+	  else
+	    {
+	      g = new repeat_group;
+	      g->value = value;
+	      g->saved = 0;
+	      by_value.put (value, all.length ());
+	      all.safe_push (g);
+	    }
+	  g->members.safe_push (load);
+	  g->saved += loadi_issue_words (load);
+	}
+    }
+
+  for (repeat_group *g : all)
+    {
+      /* Programming costs the staged image plus the SFPCONFIG.  */
+      if (!g->members.is_empty ())
+	g->saved -= 1 + (int) loadi_issue_words (g->members[0]);
+      if (g->members.length () < 2 || g->saved <= 0)
+	{
+	  delete g;
+	  continue;
+	}
+      for (gcall *m : g->members)
+	taken.add (m);
+      groups.safe_push (g);
+    }
+  /* Most words saved first; the image breaks ties deterministically.  */
+  for (unsigned i = 1; i < groups.length (); ++i)
+    for (unsigned j = i; j > 0
+	 && (groups[j - 1]->saved < groups[j]->saved
+	     || (groups[j - 1]->saved == groups[j]->saved
+		 && groups[j - 1]->value > groups[j]->value)); --j)
+      std::swap (groups[j - 1], groups[j]);
+}
+
 /* The constant-residency stage of the pass: collect hoist candidates
    over FN by class (loop-invariant constant loads, pressure-bounded
    block candidates, MAD-pair and hoist-reuse groups, and merge-rename
@@ -1897,9 +2098,19 @@ residency_transform (function *fn, prgm_state *st)
   /* PRESSURE class: only when the model exceeds the LREG file.  */
   residency_collect_pressure_class (fn, pressure_cands, taken);
 
+  /* REPEAT class: straight-line repeats in a loop-free, call-free
+     function.  */
+  auto_vec<repeat_group *> repeat_groups;
+  residency_collect_repeat_class (fn, repeat_groups, taken);
+  struct repeat_groups_release
+  {
+    auto_vec<repeat_group *> &v;
+    ~repeat_groups_release () { for (repeat_group *g : v) delete g; }
+  } repeat_release { repeat_groups };
+
   if (loop_cands.is_empty () && pressure_cands.is_empty ()
       && madpair_cands.is_empty () && hoistreuse_cands.is_empty ()
-      && merge_cands.is_empty ())
+      && merge_cands.is_empty () && repeat_groups.is_empty ())
     return false;
 
   /* The freedom proof and the all-lanes proof gate every allocation,
@@ -2013,7 +2224,7 @@ residency_transform (function *fn, prgm_state *st)
 	hoistreuse_cands.truncate (kept);
 	if (loop_cands.is_empty () && pressure_cands.is_empty ()
 	    && madpair_cands.is_empty () && hoistreuse_cands.is_empty ()
-	    && merge_cands.is_empty ())
+	    && merge_cands.is_empty () && repeat_groups.is_empty ())
 	  {
 	    rvtt_refuse (RVTT_REF_CC_REGION_UNPROVEN, dump_file,
 			 "const-residency: refused (cc-region-unproven)"
@@ -2204,8 +2415,6 @@ residency_transform (function *fn, prgm_state *st)
 
   const rvtt_insn_data *wrcfg_d
     = rvtt_get_insn_data (rvtt_insn_data::sfpwriteconfig_v);
-  const rvtt_insn_data *readlreg_d
-    = rvtt_get_insn_data (rvtt_insn_data::sfpreadlreg);
 
   bool changed = false;
   /* One record per peeled loop: the post-peel entry edge (the
@@ -2522,33 +2731,8 @@ residency_transform (function *fn, prgm_state *st)
 		 prgm, c.value, prior_bb->index);
 
       /* The materialization becomes a constant-register read keeping
-	 its SSA name: every use follows untouched, and the read
-	 expands to a zero-pressure cstlreg unspec.  */
-      gcall *chain_root = rvtt_chained_loadi_root (c.load);
-      gimple_stmt_iterator lgsi = gsi_for_stmt (c.load);
-      gcall *read = gimple_build_call
-	(readlreg_d->decl, 1, build_int_cst (unsigned_type_node, prgm));
-      gimple_call_set_lhs (read, gimple_call_lhs (c.load));
-      unlink_stmt_vdef (c.load);
-      if (tree vdef = gimple_vdef (c.load))
-	{
-	  gimple_set_vdef (c.load, NULL_TREE);
-	  if (TREE_CODE (vdef) == SSA_NAME)
-	    release_ssa_name (vdef);
-	}
-      gsi_replace (&lgsi, read, false);
-      /* Immediate lowering split this value into a root and tail.  The
-	 read replaces the whole materialization, so retaining the now-dead
-	 root would still emit an architectural SFPLOADI side effect.  */
-      if (chain_root)
-	{
-	  gimple_stmt_iterator rgsi = gsi_for_stmt (chain_root);
-	  if (tree vdef = gimple_vdef (chain_root))
-	    if (TREE_CODE (vdef) == SSA_NAME)
-	      unlink_stmt_vdef (chain_root);
-	  gsi_remove (&rgsi, true);
-	  release_defs (chain_root);
-	}
+	 its SSA name.  */
+      replace_with_prgm_read (c.load, prgm);
 
       if (dump_file && reprogram)
 	fprintf (dump_file,
@@ -2980,6 +3164,90 @@ residency_transform (function *fn, prgm_state *st)
 
   for (residency_candidate &c : pressure_cands)
     changed |= place (c);
+
+  /* REPEAT groups: register choice in place()'s order (free slot, TU
+     value-identical reuse), then a DEAD-claim reclaim -- the function
+     is call-free and asm-free, so the claim's foreign writers cannot
+     run between the entry programming and the reads.  */
+  for (repeat_group *g : repeat_groups)
+    {
+      bool known = false;
+      for (prgm_alloc &a : st->allocs)
+	known |= a.value == g->value;
+      if (known)
+	continue;
+      const prgm_tu_facts &tu = tu_prgm_facts ();
+      unsigned reg = 0;
+      bool reclaimed = false;
+      for (unsigned r : prgm_regs)
+	if (!(st->claimed & (1u << r)))
+	  {
+	    reg = r;
+	    break;
+	  }
+      if (!reg)
+	for (unsigned r : prgm_regs)
+	  if ((tu.value_known & (1u << r)) && tu.value[r] == g->value)
+	    {
+	      bool repurposed = false;
+	      for (prgm_alloc &a : st->allocs)
+		repurposed |= a.reg == r;
+	      if (!repurposed)
+		{
+		  reg = r;
+		  break;
+		}
+	    }
+      if (!reg)
+	for (unsigned r : prgm_regs)
+	  {
+	    bool in_allocs = false;
+	    for (prgm_alloc &a : st->allocs)
+	      in_allocs |= a.reg == r;
+	    if (!in_allocs && (tu.claimed & (1u << r))
+		&& !(tu.creg_read & (1u << r)))
+	      {
+		reg = r;
+		reclaimed = true;
+		break;
+	      }
+	  }
+      if (!reg)
+	{
+	  if (dump_file)
+	    fprintf (dump_file, "const-residency: repeat group 0x%08x "
+		     "refused (prgm-exhausted)\n", g->value);
+	  continue;
+	}
+      st->claimed |= 1u << reg;
+
+      edge entry = single_succ_edge (ENTRY_BLOCK_PTR_FOR_FN (fn));
+      basic_block prog_bb = entry->dest;
+      if (!single_pred_p (prog_bb))
+	prog_bb = split_edge (entry);
+      auto_vec<gcall *> seq;
+      tree staged = rvtt_build_loadimm32 (g->value, &seq);
+      gcall *wrcfg = gimple_build_call
+	(wrcfg_d->decl, 3, staged, build_int_cst (unsigned_type_node, 0),
+	 build_int_cst (unsigned_type_node, reg));
+      gimple_stmt_iterator at = gsi_after_labels (prog_bb);
+      for (gcall *ld : seq)
+	gsi_insert_before (&at, ld, GSI_SAME_STMT);
+      gsi_insert_before (&at, wrcfg, GSI_SAME_STMT);
+      st->allocs.safe_push (prgm_alloc { g->value, reg, prog_bb,
+					 reclaimed, false, true });
+      for (gcall *m : g->members)
+	replace_with_prgm_read (m, reg);
+      changed = true;
+      if (dump_file)
+	fprintf (dump_file,
+		 "const-residency: repeat group 0x%08x: %u materializations "
+		 "read PRGM L%u%s, programmed once at the function entry "
+		 "(bb %d; %d issue words saved per call)\n",
+		 g->value, g->members.length (), reg,
+		 reclaimed ? " (DEAD claim reclaimed)" : "",
+		 prog_bb->index, g->saved);
+    }
 
   /* MERGE-RENAME placement (block comment at
      merge_rename_cand): runs after every established class has placed,

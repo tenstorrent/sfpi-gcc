@@ -608,6 +608,10 @@ Remove dead Tensix instructions.
 
 
 
+mtt-tensix-optimize-repeat-residency
+Target Var(riscv_tt_opt_repeat_residency) Init(0)
+Park a constant that a loop-free, call-free function materializes repeatedly in a PRGM register programmed once at the function entry.
+
 
 
 

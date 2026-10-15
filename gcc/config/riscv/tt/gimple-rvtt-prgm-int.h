@@ -89,7 +89,13 @@ struct prgm_alloc { unsigned value; unsigned reg; basic_block bb;
 		    /* The programming sits at the end of BB rather than at
 		       its entry or at an in-place statement: every block
 		       strictly dominated by BB sees the value.  */
-		    bool at_end = false; };
+		    bool at_end = false;
+		    /* Placed by the REPEAT class: programmed once at the
+		       entry of a call-free function, so even a reclaimed
+		       slot may move to the callers, whose own scan proves
+		       no writer of it between the moved programming and
+		       the call.  */
+		    bool repeat = false; };
 
 struct prgm_state
 {
