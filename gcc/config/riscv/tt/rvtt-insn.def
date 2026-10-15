@@ -77,6 +77,7 @@ RVTT_FN (sfpnovalue,         ,,XTT_VEC_FTYPE,                                   
 RVTT_FN (sfpselect2,         ,,XTT_VEC_FTYPE_XTT_VEC2_USI,                                   0, ({CU, 1}))
 RVTT_FN (sfpselect4,         ,,XTT_VEC_FTYPE_XTT_VEC4_USI,                                   0, ({CU, 2}))
 RVTT_FN (sfpselect8,         ,,XTT_VEC_FTYPE_XTT_VEC8_USI,                                   0, ({CU, 3}))
+RVTT_FN (sfpconcat2,         ,,XTT_VEC2_FTYPE_XTT_VEC_XTT_VEC,                               0, ())
 
 RVTT_FN (sfpsetcc,        ,_wh,VOID_FTYPE_XTT_VEC_USI,                                       CC(), ({M, 0x55}))
 RVTT_OVR(sfpsetcc,        qsr,,VOID_FTYPE_XTT_VEC_USI_USI,                                   CC(), ({M, 0x55}, {U, 1}))

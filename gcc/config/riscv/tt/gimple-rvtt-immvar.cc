@@ -168,6 +168,8 @@ emit_replacement (gimple_stmt_iterator &gsi, const rvtt_insn_data *insnd, gcall 
   return true;
 }
 
+// Expand immediate arguments, and simplify concat2/select2 chains
+
 static bool
 immvar_expand (gimple_stmt_iterator &gsi, const rvtt_insn_data *insnd, gcall *call)
 {
@@ -696,14 +698,55 @@ public:
 	   !gsi_end_p (gsi);)
 	{
 	  if (auto *insnd = rvtt_get_insn_data (*gsi))
-	    if (immvar_expand (gsi, insnd, as_a <gcall *> (*gsi)))
-	      {
-		unlink_stmt_vdef (*gsi);
-		gsi_remove (&gsi, true);
-		changed = true;
-		continue;
-	      }
+	    {
+	      if (immvar_expand (gsi, insnd, as_a <gcall *> (*gsi)))
+		{
+		  unlink_stmt_vdef (*gsi);
+		  gsi_remove (&gsi, true);
+		  changed = true;
+		  continue;
+		}
+	      else if (insnd->id == rvtt_insn_data::sfpselect2)
+		{
+		  auto *select_call = as_a <gcall *> (*gsi);
+		  tree concat_vec = gimple_call_arg (select_call, 0);
+		  auto concat_stmt = SSA_NAME_DEF_STMT (concat_vec);
+		  auto *concat_insnd = rvtt_get_insn_data (concat_stmt);
+		  if (concat_insnd && concat_insnd->id == rvtt_insn_data::sfpconcat2)
+		    {
+		      // Propagate the appropriate concat's arg to users of the
+		      // select_call's result.
+		      unsigned argno = TREE_INT_CST_LOW (gimple_call_arg (select_call, 1));
+		      auto incoming_vec = gimple_call_arg (concat_stmt, argno);
+		      auto select_result = gimple_call_lhs (select_call);
 
+		      if (dump_file)
+			{
+			  fprintf (dump_file, "Propagating concat/select:\n");
+			  print_gimple_stmt (dump_file, concat_stmt, 0);
+			  print_gimple_stmt (dump_file, select_call, 0);
+			}
+		      rvtt_substitute_value (select_result, incoming_vec);
+
+		      // Delete the select
+		      unlink_stmt_vdef (*gsi);
+		      gsi_remove (&gsi, true);
+
+		      // If there are no remaining uses of the concat result delete
+		      // it.
+		      if (has_zero_uses (concat_vec))
+			{
+			  if (dump_file)
+			    fprintf (dump_file, "Deleting concat\n");
+			  unlink_stmt_vdef (concat_stmt);
+			  auto concat_gsi = gsi_for_stmt (concat_stmt);
+			  gsi_remove (&concat_gsi, true);
+			}
+		      changed = true;
+		      continue;
+		    }
+		}
+	    }
 	  gsi_next (&gsi);
 	}
 
