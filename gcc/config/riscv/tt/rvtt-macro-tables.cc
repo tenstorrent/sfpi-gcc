@@ -1006,6 +1006,13 @@ opcode_l16_target_proven (const caps *c, uint8_t opcode, uint8_t mod1)
      keeps the entry.  */
   if (c->cpu == CPU_BH && opcode == 0x90 && mod1 == 3)
     return false;
+  /* On Blackhole an SFPIADD whose mode writes CC (CC_NONE clear) still
+     updates LaneFlags when the macro routes its result to LReg16, although
+     SFPIADD.md only updates them for VD < 8.  A delayed store reading
+     LReg16 then skips every lane the flag write disabled.  Only the
+     CC_NONE modes keep the LReg16 route.  */
+  if (c->cpu == CPU_BH && opcode == 0x79 && !(mod1 & 4))
+    return false;
   switch (opcode)
     {
     case 0x79:	/* SFPIADD	*/

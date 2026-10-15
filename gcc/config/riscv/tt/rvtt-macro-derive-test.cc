@@ -479,6 +479,41 @@ test_wp12_template_sharing (const caps *c)
 	   "mod-3 cast uses target-specific store routing");
 }
 
+/* LReg16 store routing of a lone SFPIADD event: the CC_NONE mode stages
+   through LReg16, a CC-writing mode reads the launch VD on BH.  */
+static void
+test_iadd_store_routing (const caps *c)
+{
+  row_spec row = fresh_row ();
+  row.n_events = 2;
+  row.events[0] = { 0x79, false, 0, 0, 0, 0, true, /*planned VC=L3*/ 3 };
+  row.events[0].template_mod1 = 4;
+  row.events[1] = { 0, true, 0, 0, 0x1, -1, false, 0 };
+  row.n_macros = 1;
+  row.macro_slot[0] = 0;
+  row.ii = 2;
+  row.last_issue_slot = 1;
+  row.explicits[0] = { 1, 0 };	/* the kept separator (non-SFPU)  */
+  row.n_explicits = 1;
+  row.vd_alternates = false;
+  row.window_all_sfpu = false;
+  row.store_event = 1;
+  row.store_producer = 0;
+
+  derived_calendar cal;
+  bool ok = derive_calendar (c, row, &cal);
+  check (ok && !cal.refusal, "CC_NONE iadd row derives");
+  if (ok && !cal.refusal)
+    check (cal.store_reads_l16, "CC_NONE iadd stages through LReg16");
+
+  row.events[0].template_mod1 = 0;
+  ok = derive_calendar (c, row, &cal);
+  check (ok && !cal.refusal, "CC-writing iadd row derives");
+  if (ok && !cal.refusal)
+    check (cal.store_reads_l16 == (c->cpu != CPU_BH),
+	   "CC-writing iadd uses target-specific store routing");
+}
+
 /* Explicit-issue hazards: the WAR floor delays an event past an
    earlier explicit reader of its written register, and an
    impossible overwrite deadline refuses.  */
@@ -541,6 +576,7 @@ main ()
       test_unary_maxmin (c);
       test_addsub_placement_refusal (c);
       test_wp12_template_sharing (c);
+      test_iadd_store_routing (c);
       test_wp12_explicit_hazards (c);
     }
   check (!rvtt_macro_caps_for_cpu (CPU_QSR),
