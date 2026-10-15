@@ -353,9 +353,8 @@ remat_consumer_audited_p (gimple *stmt, tree name)
      alternatives constrain it "0"): the consumer's CC-DISABLED result
      lanes ARE this operand's lanes, so a clone that wrote only the
      enabled lanes would leak garbage through the merge.  Refuse the
-     whole use.  (SFPSWAP is excluded from the table below for the
-     same reason: both of its operands are tied in/out,
-     rvtt.md rvtt_sfpswap.)  */
+     whole use.  (SFPSWAP ties both of its operands in/out,
+     rvtt.md rvtt_sfpswap; see its case below.)  */
   if (insnd->is_live ()
       && gimple_call_arg (call, insnd->live_arg ()) == name)
     return false;
@@ -434,6 +433,33 @@ remat_consumer_audited_p (gimple *stmt, tree name)
 	tree mod = gimple_call_arg (call, gimple_call_num_args (call) - 1);
 	return TREE_CODE (mod) == INTEGER_CST && TREE_INT_CST_LOW (mod) == 1
 	  && gimple_call_arg (call, 0) != name;
+      }
+
+    case rvtt_insn_data::sfpswap:
+      {
+	/* SFPSWAP writes both operands back, but only where enabled, and
+	   drops the VC-side write for LRegs >= 8 (SFPSWAP.md).  So a
+	   constant in VC is only read, provided nothing consumes the VC
+	   result.  VD stays excluded: a VD of 12 or above suppresses the
+	   whole instruction.  */
+	if (gimple_call_arg (call, 0) == name
+	    || gimple_call_arg (call, 1) != name)
+	  return false;
+	tree res = gimple_call_lhs (call);
+	if (!res || TREE_CODE (res) != SSA_NAME)
+	  return false;
+	imm_use_iterator uit;
+	gimple *use;
+	FOR_EACH_IMM_USE_STMT (use, uit, res)
+	  {
+	    if (is_gimple_debug (use))
+	      continue;
+	    const rvtt_insn_data *used = rvtt_get_insn_data (use);
+	    if (!used || used->id != rvtt_insn_data::sfpselect2
+		|| !integer_zerop (gimple_call_arg (use, 1)))
+	      return false;
+	  }
+	return true;
       }
 
     case rvtt_insn_data::sfpmov:
