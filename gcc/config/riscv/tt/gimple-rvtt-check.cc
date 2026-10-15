@@ -30,6 +30,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree-pass.h"
 #include "ssa.h"
 #include "gimple-iterator.h"
+#include "gimple-pretty-print.h"
 #include "tree-ssa.h"
 #include "tree-into-ssa.h"
 #include "diagnostic-core.h"
@@ -206,26 +207,26 @@ const_zero_reg (gimple_stmt_iterator *gsi, tree res = nullptr)
 }
 
 static bool
-check_assign (gimple_stmt_iterator *gsi, bool is_early, gassign *assign)
+check_assign (gimple_stmt_iterator &gsi, bool is_early)
 {
   if (!is_early)
-    if (auto *lhs = gimple_get_lhs (assign))
+    if (auto *lhs = gimple_get_lhs (*gsi))
       if (is_memory (lhs))
 	{
-	  error_at (gimple_nonartificial_location (assign),
+	  error_at (gimple_nonartificial_location (*gsi),
 		    "cannot write SFPU object to memory");
 	  goto remove;
 	}
 
   {
-    auto *rhs = gimple_assign_rhs1 (assign);
+    auto *rhs = gimple_assign_rhs1 (*gsi);
     if (is_early ? is_undef_sfpu (rhs) : is_memory (rhs))
       {
-	error_at (gimple_nonartificial_location (assign),
+	error_at (gimple_nonartificial_location (*gsi),
 		  is_early ? "reading uninitialized"
 		  : "cannot read SFPU object from memory");
-	if (auto *lhs = gimple_get_lhs (assign))
-	  const_zero_reg (gsi, lhs);
+	if (auto *lhs = gimple_get_lhs (*gsi))
+	  const_zero_reg (&gsi, lhs);
 	goto remove;
       }
   }
@@ -233,8 +234,15 @@ check_assign (gimple_stmt_iterator *gsi, bool is_early, gassign *assign)
   return false;
 
  remove:;
-  unlink_stmt_vdef (assign);
-  gsi_remove (gsi, true);
+  if (dump_file)
+    {
+      fprintf (dump_file, "Removing erroneous ");
+      print_gimple_stmt (dump_file, *gsi, 2);
+    }
+
+  unlink_stmt_vdef (*gsi);
+  gsi_remove (&gsi, true);
+
   return true;
 }
 
@@ -278,9 +286,9 @@ check_early (function *fn)
 		  }
 	      }
 	  }
-	else if (auto *a = dyn_cast<gassign *> (*gsi))
+	else if (is_a <gassign *> (*gsi))
 	  {
-	    if (check_assign (&gsi, true, a))
+	    if (check_assign (gsi, true))
 	      {
 		changed = true;
 		continue;
@@ -310,13 +318,10 @@ check_late (function *fn)
 	 !gsi_end_p (gsi);)
       {
 	if (auto *insnd = rvtt_get_insn_data (*gsi))
+	  changed |= check_int_args (false, insnd, as_a <gcall *> (*gsi));
+	else if (is_a <gassign *> (*gsi))
 	  {
-	    auto *call = as_a <gcall *> (*gsi);
-	    changed |= check_int_args (false, insnd, call);
-	  }
-	else if (auto *a = dyn_cast<gassign *> (*gsi))
-	  {
-	    if (check_assign (&gsi, false, a))
+	    if (check_assign (gsi, false))
 	      {
 		changed = true;
 		continue;

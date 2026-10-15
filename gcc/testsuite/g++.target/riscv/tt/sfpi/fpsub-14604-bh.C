@@ -105,12 +105,12 @@ void sub5() {
 **_Z4sub5v:
 **	# READ L0
 **	# READ L1
-**	SFPMOV	L3, L1, 2
 **	SFPGT	L1, L0, 0, 1
-**	SFPADD	L3, L0, L1, 1	# LV:L3
+**	SFPADD	L1, L0, L1, 1	# LV:L1
 **	SFPCOMPC
-**	SFPADD	L3, L3, L0, 0	# LV:L3
+**	SFPADD	L1, L1, L0, 0	# LV:L1
 **	SFPENCC	3, 10
+**	SFPMOV	L3, L1, 2
 **	# WRITE L3
 **	ret
 */
