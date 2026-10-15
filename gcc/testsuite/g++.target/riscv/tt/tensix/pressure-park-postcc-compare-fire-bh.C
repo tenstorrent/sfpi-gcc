@@ -3,12 +3,14 @@
 // the threshold body's "x <= -inf" test) is a lane-local read whose only
 // write is LaneFlags in enabled lanes, so the every-lane constant-register
 // read is exact on every lane the original read.  The constant parks in a
-// PRGM register instead of being re-materialized each row.  The second
-// function is the near miss: the constant is the compare's VD operand,
-// which the consumer audit keeps refusing.
+// PRGM register instead of being re-materialized each row.  In the second
+// function the constant is the compare's VD operand, equally lane-local,
+// but a VD of L12 or above suppresses the compare, so it parks in a free
+// LREG instead of a PRGM register.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-unroll-loops -mtt-tensix-optimize-const-residency -mtt-tensix-optimize-pressure-park -fdump-tree-rvtt_prgm_const-details" }
-// { dg-final { scan-tree-dump-times "pressure-park: admitted post-CC candidate" 1 "rvtt_prgm_const" } }
-// { dg-final { scan-tree-dump-times "pressure-park: refused .consumer-lane-discipline-unaudited." 1 "rvtt_prgm_const" } }
+// { dg-final { scan-tree-dump-times "pressure-park: admitted post-CC candidate" 2 "rvtt_prgm_const" } }
+// { dg-final { scan-tree-dump-not "consumer-lane-discipline-unaudited" "rvtt_prgm_const" } }
+// { dg-final { scan-tree-dump-times "pressure-park: hoisted invariant materialization to a free LREG" 1 "rvtt_prgm_const" } }
 // { dg-final { scan-assembler-times "SFPCONFIG" 1 } }
 // { dg-final { scan-assembler "SFPLE\tL\\d+, L1\\d, 0, 1" } }
 
@@ -29,7 +31,7 @@ void compare_vc_fire (void)
   __builtin_rvtt_sfpwritelreg (out, 1);
 }
 
-void compare_vd_refuse (void)
+void compare_vd_lreg_park (void)
 {
   auto y = __builtin_rvtt_sfpreadlreg (2);
   auto res = __builtin_rvtt_sfpreadlreg (3);

@@ -839,6 +839,26 @@ struct merge_rename_cand
    CC-merge outside the vocabulary; returns false silently for
    statements that are not immediate CC-merges at all.  */
 
+/* True when USE is a SET_CC compare reading NAME as its VD.  It is
+   lane-predicated like the VC form (SFPGT.md, SFPLE.md), but a VD of L12
+   or above suppresses the compare, so such a constant can only stay
+   resident in an LREG.  */
+
+static bool
+compare_vd_use_p (gimple *use, tree name)
+{
+  const rvtt_insn_data *insnd = rvtt_get_insn_data (use);
+  if (!insnd
+      || (insnd->id != rvtt_insn_data::sfpgt
+	  && insnd->id != rvtt_insn_data::sfple))
+    return false;
+  gcall *call = as_a <gcall *> (use);
+  tree mod = gimple_call_arg (call, gimple_call_num_args (call) - 1);
+  return TREE_CODE (mod) == INTEGER_CST && TREE_INT_CST_LOW (mod) == 1
+	 && gimple_call_arg (call, 0) == name
+	 && gimple_call_arg (call, 1) != name;
+}
+
 static bool
 merge_rename_shape_p (gcall *load, FILE *stream,
 		      tree *link_out, unsigned *value_out)
@@ -1239,7 +1259,8 @@ residency_collect_loop_class (function *fn,
 			  break;
 			}
 		      if (!remat_consumer_audited_p (use,
-						     gimple_call_lhs (load)))
+						     gimple_call_lhs (load))
+			  && !compare_vd_use_p (use, gimple_call_lhs (load)))
 			{
 			  bad = "consumer-lane-discipline-unaudited";
 			  bad_use = use;
@@ -2786,6 +2807,19 @@ residency_transform (function *fn, prgm_state *st)
 	break;
       }
 
+  auto_vec<residency_candidate *> lreg_only_cands;
+  auto lreg_only_p = [] (residency_candidate &c) -> bool
+    {
+      tree name = gimple_call_lhs (c.load);
+      if (rvtt_pressure_lut_slot_use_p (name))
+	return true;
+      imm_use_iterator uit;
+      gimple *use;
+      FOR_EACH_IMM_USE_STMT (use, uit, name)
+	if (compare_vd_use_p (use, name))
+	  return true;
+      return false;
+    };
   for (residency_candidate &c : loop_cands)
     {
       /* Store-source tier (-mtt-tensix-optimize-store-source-tier):
@@ -2841,7 +2875,31 @@ residency_transform (function *fn, prgm_state *st)
 	      continue;
 	    }
 	}
+      /* A LUT table slot reads a fixed LREG, and a compare's VD cannot
+	 be a PRGM register, so a PRGM park would be copied back into an
+	 LREG on every row.  Such candidates take the LREG tier after the
+	 others have placed, so that the PRGM programming (staged through
+	 L0) precedes the parked values and every PRGM taker has already
+	 left the LREG file.  */
+      if (riscv_tt_opt_pressure_park > 0 && lreg_only_p (c))
+	{
+	  lreg_only_cands.safe_push (&c);
+	  continue;
+	}
       changed |= place (c) || lreg_hoist (c);
+    }
+  /* The flat one-register charge per park reserves room for the LREG
+     temporaries CC lowering adds at RTL.  A loop without SFPU barriers
+     has none, so measure the residual there instead: a parked LUT slot
+     value is already live at its LUT and often costs nothing.  */
+  for (residency_candidate *c : lreg_only_cands)
+    {
+      if (!rvtt_loop_has_sfpu_barrier_p (c->loop))
+	lreg_budget = rvtt_pressure_residual (fn);
+      if (lreg_hoist (*c))
+	changed = true;
+      else if (rvtt_pressure_lut_slot_use_p (gimple_call_lhs (c->load)))
+	changed |= place (*c);
     }
 
   /* MAD-PAIR groups place all-or-none: a half-claimed pair pays its

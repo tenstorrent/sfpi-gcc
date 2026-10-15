@@ -207,7 +207,7 @@ rvtt_pressure_validate_lut_slot_facts ()
    (see the fact above): such a use forces a physical copy of a
    constant-register value and must never be creg-exempted.  */
 
-static bool
+bool
 rvtt_pressure_lut_slot_use_p (tree name)
 {
   if (flag_checking)
