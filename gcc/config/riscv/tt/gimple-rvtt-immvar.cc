@@ -292,6 +292,10 @@ immvar_expand (gimple_stmt_iterator &gsi, const rvtt_insn_data *insnd, gcall *ca
 	if (!expand)
 	  {
 	    HOST_WIDE_INT i_imm = TREE_INT_CST_LOW (imm);
+	    /* A signed field sees the 32-bit value it stands for: vInt - 1
+	       arrives as 0xffffffff and is the immediate -1.  */
+	    if (is_signed)
+	      i_imm = sext_hwi (i_imm, 32);
 	    HOST_WIDE_INT bound = (1u << info.bits ()) - 1;
 	    if (is_signed)
 	      {
