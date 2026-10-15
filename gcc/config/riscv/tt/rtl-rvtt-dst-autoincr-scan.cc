@@ -181,6 +181,22 @@ classify_insn (rtx_insn *insn, access_info *acc)
        the typed pattern.  (Raw `.ttinsn' words of the same architectural
        class are admitted above through the audited field decode.)  */
     return AIC_RWC_STEP;
+  if (code == CODE_FOR_rvtt_ttsetrwc_wh_bh)
+    {
+      /* Typed TTSETRWC (lltt::setrwc): the same architectural word as a
+	 raw TTI_SETRWC, so it takes the same audited field decode.  A
+	 pure Dst-leg counter step is the face-advance class; any other
+	 field combination keeps the refusing default.  */
+      rtx pat = PATTERN (insn);
+      unsigned HOST_WIDE_INT f[6];
+      for (int i = 0; i != 6; ++i)
+	f[i] = UINTVAL (XVECEXP (pat, 0, i));
+      uint32_t word
+	= TARGET_XTT_TENSIX_WH
+	? TT_OP_WH_SETRWC (f[0], f[1], f[2], f[3], f[4], f[5])
+	: TT_OP_BH_SETRWC (f[0], f[1], f[2], f[3], f[4], f[5]);
+      return rvtt_word_pure_dst_rwc_p (word) ? AIC_RWC_STEP : AIC_FOREIGN;
+    }
   if (code == CODE_FOR_rvtt_ttreplay_int)
     return AIC_REPLAY;
   if (classify_access (insn, code, acc))
