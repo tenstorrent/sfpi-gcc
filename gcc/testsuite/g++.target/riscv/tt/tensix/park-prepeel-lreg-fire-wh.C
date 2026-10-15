@@ -13,6 +13,9 @@
 void wharf_prepeel_scale (void)
 {
   auto north = __builtin_rvtt_sfpreadlreg (2);
+  __builtin_rvtt_sfppushc (0);
+  __builtin_rvtt_sfpsetcc (north, 0);
+  __builtin_rvtt_sfppopc (0);
   for (unsigned step = 0; step != 24; ++step)
     {
       __builtin_rvtt_sfppushc (0);

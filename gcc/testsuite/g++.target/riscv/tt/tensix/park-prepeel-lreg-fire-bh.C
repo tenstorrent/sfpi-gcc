@@ -4,8 +4,9 @@
 // Four admitted post-CC candidates against three free PRGM
 // destinations -- the fourth hits prgm-exhausted and takes the LREG
 // tier, whose placement moves to the HEAD of the peel block (the
-// pre-peel ambient here is trivially all-lanes: only the function
-// entry reaches the loop) and ERASES the peeled iteration's copy of
+// CC region ahead of the loop keeps the peel, and it ends in the
+// all-lanes SFPENCC, so the pre-peel ambient is proven all-lanes) and
+// ERASES the peeled iteration's copy of
 // the materialization, redirecting its uses to the parked definition.
 // The post-peel programming-point placement line must not appear.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-unroll-loops -mtt-tensix-optimize-const-residency -mtt-tensix-optimize-pressure-park -mtt-tensix-optimize-park-ordering -fdump-tree-rvtt_prgm_const-details" }
@@ -19,6 +20,9 @@
 void park_prepeel_fire (void)
 {
   auto x = __builtin_rvtt_sfpreadlreg (0);
+  __builtin_rvtt_sfppushc (0);
+  __builtin_rvtt_sfpsetcc (x, 0);
+  __builtin_rvtt_sfppopc (0);
   for (unsigned ix = 0; ix != 32; ++ix)
     {
       __builtin_rvtt_sfppushc (0);

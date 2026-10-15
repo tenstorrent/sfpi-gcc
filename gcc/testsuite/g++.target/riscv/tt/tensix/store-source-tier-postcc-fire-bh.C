@@ -6,6 +6,8 @@
 // -mtt-tensix-optimize-store-source-tier hoists to the peeled
 // programming point as a plain LREG instead of parking in L12-L14
 // where every predicated store row would pay the SFPMOV copy.
+// A CC region ahead of each loop reaches its preheader, so the peel is
+// still the only proven all-lanes programming point.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-unroll-loops -mtt-tensix-optimize-const-residency -mtt-tensix-optimize-pressure-park -mtt-tensix-optimize-store-source-tier -fdump-tree-rvtt_prgm_const-details" }
 // { dg-final { scan-tree-dump-times "pressure-park: admitted post-CC candidate" 1 "rvtt_prgm_const" } }
 // { dg-final { scan-tree-dump-times "store-source-tier .store-source-encoding-ceiling." 1 "rvtt_prgm_const" } }
@@ -17,6 +19,9 @@
 void tier_postcc_fire (void)
 {
   auto x = __builtin_rvtt_sfpreadlreg (0);
+  __builtin_rvtt_sfppushc (0);
+  __builtin_rvtt_sfpsetcc (x, 0);
+  __builtin_rvtt_sfppopc (0);
   for (unsigned ix = 0; ix != 32; ++ix)
     {
       __builtin_rvtt_sfppushc (0);

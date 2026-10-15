@@ -4,7 +4,7 @@
 // count (17), and four different loop-invariant constants.  The pre-peel
 // LREG-tier placement must key on the structural facts alone (post-CC
 // candidates exceeding the free PRGM file inside a canonical CC-restore
-// loop whose only entry path is the function entry) and still erase the
+// loop whose entry paths end in an all-lanes SFPENCC) and still erase the
 // peel duplicate.
 // { dg-final { scan-tree-dump-times "pressure-park: admitted post-CC candidate" 4 "rvtt_prgm_const" } }
 // { dg-final { scan-tree-dump-times "allocated PRGM L1\\d for constant 0x\[0-9a-f\]+ .loop class" 3 "rvtt_prgm_const" } }
@@ -16,6 +16,9 @@
 void audit_ip_ladder (void)
 {
   auto acc = __builtin_rvtt_sfpreadlreg (3);
+  __builtin_rvtt_sfppushc (0);
+  __builtin_rvtt_sfpsetcc (acc, 0);
+  __builtin_rvtt_sfppopc (0);
   for (unsigned step = 0; step != 17; ++step)
     {
       __builtin_rvtt_sfppushc (0);

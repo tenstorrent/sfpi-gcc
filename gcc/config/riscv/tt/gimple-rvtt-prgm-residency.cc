@@ -126,6 +126,9 @@ struct residency_candidate
 				   function's own programming and its
 				   reads.  Value-identical reuse never
 				   needs it (idempotence).  */
+  bool own_entry = false;	/* LOOP class: a CC-canonical body
+				   programmed on its own all-lanes entry
+				   edge instead of being peeled */
 };
 
 /* Fold VAL through the in-loop constant chain from a header PHI to OP:
@@ -1038,6 +1041,32 @@ residency_collect_loop_class (function *fn,
 	    }
 	}
 
+      /* The peel only manufactures an all-lanes programming point.  When
+	 no function-local CC write reaches the loop's own preheader, the
+	 plain loop class's fn-entry all-lanes proof already holds there,
+	 and the body's trailing all-lanes SFPENCC carries that state into
+	 every later trip, so the pre-CC candidates execute all-lanes on
+	 every trip.  Program on the entry edge and skip the peel; post-CC
+	 candidates still pass the consumer audit below.  */
+      bool own_entry = false;
+      if (peel && !cc_lifted_loop
+	  && classify_second_trip (loop, entry) != TRIPS_PROVEN_SINGLE)
+	{
+	  auto_vec<gimple *> writers;
+	  collect_cc_writers (fn, &writers);
+	  if (!cc_write_reaches_point_p (writers, entry->src, nullptr))
+	    {
+	      cc_lifted_loop = true;
+	      own_entry = true;
+	      lifted_entry = entry;
+	      if (dump_file)
+		fprintf (dump_file,
+			 "const-residency: loop bb %d programmed on its "
+			 "all-lanes entry edge (no CC write reaches the "
+			 "preheader; no peel)\n", loop->header->index);
+	    }
+	}
+
       /* Plain (non-cc-lifted) placement point for this loop's candidates:
 	 the outermost audited entry for a NON-peel candidate, exactly the
 	 fusion class's discipline.  A PEEL-class candidate is
@@ -1151,7 +1180,7 @@ residency_collect_loop_class (function *fn,
 	      if (!constant_chain_value_p (chain, &value))
 		continue;
 	      bool lift_this = cc_lifted_loop;
-	      if (cc_reached || cc_lifted_loop)
+	      if (cc_reached || (cc_lifted_loop && !own_entry))
 		{
 		  /* The consumer audit.  Post-CC candidates (the
 		     pressure-park admission) require it always.  A
@@ -1235,6 +1264,7 @@ residency_collect_loop_class (function *fn,
 		  c.entry = lifted_entry;
 		  c.peel = false;
 		  c.cc_lifted = true;
+		  c.own_entry = own_entry;
 		}
 	      else
 		{
@@ -2684,6 +2714,18 @@ residency_transform (function *fn, prgm_state *st)
 	}
       return true;
     };
+
+  /* An own-entry loop has no peeled copy whose inline materializations
+     bound the function's peak, and the CC machinery adds LREG
+     temporaries only at RTL, which the model cannot see.  Price its
+     parks against the function before this walk rewrites the in-loop
+     materializations, which keeps the margin the peeled copy gave.  */
+  for (residency_candidate &c : loop_cands)
+    if (c.own_entry)
+      {
+	lreg_budget = rvtt_pressure_residual (fn);
+	break;
+      }
 
   for (residency_candidate &c : loop_cands)
     {

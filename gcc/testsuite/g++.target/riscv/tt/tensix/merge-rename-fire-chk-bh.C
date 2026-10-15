@@ -11,7 +11,9 @@
 // { dg-final { scan-tree-dump-times "pressure-park: hoisted invariant materialization to a free LREG" 1 "rvtt_prgm_const" } }
 // { dg-final { scan-tree-dump-not "merge-rename: refused" "rvtt_prgm_const" } }
 // { dg-final { scan-assembler "SFPMOV" } }
-// { dg-final { scan-assembler-times "SFPLOADI\tL\\d+, 32704, 0" 2 } }
+// The parked twin is the only materialization left: the loop is
+// programmed on its entry edge, so no peeled copy keeps the merge.
+// { dg-final { scan-assembler-times "SFPLOADI\tL\\d+, 32704, 0" 1 } }
 
 void merge_rename_fire_chk (void)
 {
