@@ -238,6 +238,64 @@ rvtt_pressure_lut_slot_use_p (tree name)
    only makes callers refuse or relieve pressure earlier, it never accepts
    an unsound state.  */
 
+/* Index of the constant register NAME reads, or -1.  */
+
+static int
+creg_read_index (tree name)
+{
+  if (TREE_CODE (name) != SSA_NAME)
+    return -1;
+  gimple *def = SSA_NAME_DEF_STMT (name);
+  const rvtt_insn_data *insnd = def ? rvtt_get_insn_data (def) : nullptr;
+  if (!insnd || insnd->id != rvtt_insn_data::sfpreadlreg)
+    return -1;
+  tree arg = gimple_call_arg (as_a <gcall *> (def), 0);
+  if (TREE_CODE (arg) != INTEGER_CST
+      || TREE_INT_CST_LOW (arg) < SFPU_CREG_IDX_LWM)
+    return -1;
+  return TREE_INT_CST_LOW (arg);
+}
+
+/* True when NAME is an SFPSWAP pair against a constant register of which
+   only the other half is used.  SFPSWAP drops the write to the constant
+   register, so the pair occupies a single LREG (rvtt.md
+   *rvtt_sfpswap_cst1 and *rvtt_sfpswap_cst2; a VD constant must be below
+   L12, or the instruction does not execute).  */
+
+static bool
+single_lreg_swap_p (tree name)
+{
+  gimple *def = SSA_NAME_DEF_STMT (name);
+  const rvtt_insn_data *insnd = def ? rvtt_get_insn_data (def) : nullptr;
+  if (!insnd || insnd->id != rvtt_insn_data::sfpswap)
+    return false;
+  gcall *call = as_a <gcall *> (def);
+  int vd = creg_read_index (gimple_call_arg (call, 0));
+  int vc = creg_read_index (gimple_call_arg (call, 1));
+  unsigned creg_half;
+  if (vc >= 0 && vd < 0)
+    creg_half = 1;
+  else if (vd >= 0 && vd < 12 && vc < 0)
+    creg_half = 0;
+  else
+    return false;
+  gimple *use;
+  imm_use_iterator iter;
+  FOR_EACH_IMM_USE_STMT (use, iter, name)
+    {
+      if (is_gimple_debug (use))
+	continue;
+      const rvtt_insn_data *used = rvtt_get_insn_data (use);
+      if (!used || used->id != rvtt_insn_data::sfpselect2)
+	return false;
+      tree half = gimple_call_arg (as_a <gcall *> (use), 1);
+      if (TREE_CODE (half) != INTEGER_CST
+	  || TREE_INT_CST_LOW (half) == creg_half)
+	return false;
+    }
+  return true;
+}
+
 static unsigned
 lreg_width (tree name)
 {
@@ -246,7 +304,7 @@ lreg_width (tree name)
     case E_XTT32SImode:
       return 1;
     case E_XTT64SImode:
-      return 2;
+      return single_lreg_swap_p (name) ? 1 : 2;
     case E_XTT128SImode:
       return 4;
     default:
