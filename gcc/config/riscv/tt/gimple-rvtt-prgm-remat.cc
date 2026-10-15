@@ -423,6 +423,19 @@ remat_consumer_audited_p (gimple *stmt, tree name)
     case rvtt_insn_data::sfplutfp32_6r:
       return true;
 
+    case rvtt_insn_data::sfpgt:
+    case rvtt_insn_data::sfple:
+      {
+	/* The SET_CC form (mod1 1) compares lanewise and writes LaneFlags
+	   only where enabled; the other modes write a tied destination
+	   (rvtt.md rvtt_sfp<gtle>_cc) [SPEC][SIM].  Only the VC operand
+	   accepts a constant register; in VD the read would just become a
+	   per-row copy.  */
+	tree mod = gimple_call_arg (call, gimple_call_num_args (call) - 1);
+	return TREE_CODE (mod) == INTEGER_CST && TREE_INT_CST_LOW (mod) == 1
+	  && gimple_call_arg (call, 0) != name;
+      }
+
     case rvtt_insn_data::sfpmov:
     case rvtt_insn_data::sfpmov_lv:
       {
