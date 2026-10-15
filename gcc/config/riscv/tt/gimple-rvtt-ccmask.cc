@@ -97,6 +97,29 @@ along with GCC; see the file COPYING3.  If not see
    lanes write neither mask nor z.  The deleted pushc/popc pair is
    stack-neutral.
 
+   The same pass folds sfpi's Blackhole sign-magnitude to
+   two's-complement conversion,
+
+       v_if (x < 0) { x = setsgn (x, 0); x = 0 - x; } v_endif
+
+   whose CC spine (SETCC, predicated SETSGN and IADD, ENCC) costs four
+   serially dependent words per conversion on every sign-magnitude
+   integer row.  Its lane predicate becomes the sign bit of a value
+   instead:
+
+       a  = SFPABS (x, INT)       -- 0 - x on sign-set lanes
+       t  = SFPXOR (x, a)
+       x' = SFPSETSGN (a, t)      -- a's low 31 bits, t's sign
+
+   SFPABS leaves 0x80000000 unchanged and maps every other sign-set x to
+   a sign-clear value, so t's sign is set exactly when x is a nonzero
+   negative.  Those lanes get 0 - |x| (a with the sign put back),
+   sign-magnitude -0 gets 0, and sign-clear x passes through: the
+   helper's result for all 2^32 x, including the -0 -> 0 the sfpi
+   contract requires (SFPCAST mod1 3 would give INT32_MIN there).  As
+   for the zeroing fold, the XOR and SETSGN destinations are tied to x,
+   so enclosing-disabled lanes keep x.
+
    The pass runs immediately before pass_rvtt_invariant: the fold
    removes the region's CC-setting statement -- the loop-scoped barrier
    (rvtt_loop_has_sfpu_barrier_p) that otherwise forces the invariant
@@ -962,6 +985,294 @@ transform_group (ccmask_group *g)
   n_folded++;
 }
 
+/* The sign-magnitude conversion region, as the frontend leaves it:
+
+       sfppushc (0)
+       tok = sfpxpred (IF|PUSH, depth 1)
+       c   = sfpxcmp (x, 0, TYPE_INT|CC_LT)
+       sfpxcond (0, tok, c)
+       s   = sfpsetsgn_i (ib, x, 0, 0, 0, 0)
+       x1  = sfpassign_lv (x, s)
+       n   = sfpiadd_v (x1, 0, ARG_2SCOMP_LREG_DST|CC_NONE)	-- 0 - x1
+       x2  = sfpassign_lv (x1, n)
+       sfpxpred (depth 1, c)
+       sfppopc (0)
+
+   with zero materializations anywhere inside.  Anything else is left
+   alone without a refusal: this shape is a recognized helper, not a
+   family with near misses worth naming.  */
+
+struct ccmask_smag_group
+{
+  gcall *pushc, *xvif, *icmp, *condb, *setsgn, *assign1, *iadd, *assign;
+  gcall *end, *popc;
+  tree x;
+};
+
+static bool
+match_smag_group (const rvtt_cc_region_tree *ccr, gimple_stmt_iterator gsi,
+		  ccmask_smag_group *g)
+{
+  enum { WANT_XVIF, WANT_ICMP, WANT_CONDB, WANT_SETSGN, WANT_ASSIGN1,
+	 WANT_IADD, WANT_ASSIGN, WANT_END, WANT_POPC }
+    want = WANT_XVIF;
+
+  memset (g, 0, sizeof (*g));
+  g->pushc = rvtt_call_with_id (gsi_stmt (gsi), rvtt_insn_data::sfppushc);
+  if (!g->pushc || rvtt_call_int_arg (g->pushc, 0) != 0)
+    return false;
+
+  gsi_next (&gsi);
+  for (unsigned steps = 0; !gsi_end_p (gsi) && steps < 64; gsi_next (&gsi))
+    {
+      gimple *stmt = gsi_stmt (gsi);
+      if (is_gimple_debug (stmt) || gimple_code (stmt) == GIMPLE_LABEL)
+	continue;
+      steps++;
+
+      if (gimple_code (stmt) == GIMPLE_ASSIGN)
+	{
+	  tree lhs = gimple_get_lhs (stmt);
+	  if (lhs && TREE_CODE (lhs) == SSA_NAME
+	      && !VECTOR_TYPE_P (TREE_TYPE (lhs)))
+	    continue;
+	  return false;
+	}
+
+      const rvtt_insn_data *insnd = rvtt_get_insn_data (stmt);
+      if (!insnd)
+	return false;
+      gcall *call = as_a <gcall *> (stmt);
+
+      switch (insnd->id)
+	{
+	case rvtt_insn_data::sfpxpred:
+	  if (want == WANT_XVIF
+	      && rvtt_call_int_arg (call, 0)
+		 == (SFPXPRED_MOD1_IF | SFPXPRED_MOD1_PUSH
+		     | (1u << SFPXPRED_MOD1_DEPTH_SHIFT))
+	      && integer_zerop (gimple_call_arg (call, 1)))
+	    {
+	      g->xvif = call;
+	      want = WANT_ICMP;
+	      continue;
+	    }
+	  if (want == WANT_END
+	      && rvtt_call_int_arg (call, 0)
+		 == (1u << SFPXPRED_MOD1_DEPTH_SHIFT)
+	      && gimple_call_arg (call, 1) == gimple_call_lhs (g->condb))
+	    {
+	      g->end = call;
+	      want = WANT_POPC;
+	      continue;
+	    }
+	  return false;
+
+	case rvtt_insn_data::sfpxcmp:
+	  {
+	    /* Signed x < 0 with x first: the raw sign-bit test.  */
+	    tree value;
+	    uint32_t cst;
+	    if (want != WANT_ICMP
+		|| !rvtt_cmp_value_and_cst (call, &value, &cst)
+		|| cst != 0 || gimple_call_arg (call, 0) != value
+		|| rvtt_call_int_arg (call, insnd->mod_arg ())
+		   != (long) ((SFPXCMP_MOD1_TYPE_INT
+			       << SFPXCMP_MOD1_TYPE_SHIFT)
+			      | SFPXCMP_MOD1_CC_LT))
+	      return false;
+	    g->icmp = call;
+	    g->x = value;
+	    want = WANT_CONDB;
+	    continue;
+	  }
+
+	case rvtt_insn_data::sfpxcond:
+	  {
+	    if (want != WANT_CONDB)
+	      return false;
+	    tree c = gimple_call_arg (call, insnd->mod_arg () + 2);
+	    tree t = gimple_call_arg (call, insnd->mod_arg () + 1);
+	    if (TREE_CODE (c) != SSA_NAME || TREE_CODE (t) != SSA_NAME
+		|| SSA_NAME_DEF_STMT (c) != g->icmp
+		|| SSA_NAME_DEF_STMT (t) != g->xvif
+		|| !has_single_use (c) || !has_single_use (t))
+	      return false;
+	    g->condb = call;
+	    want = WANT_SETSGN;
+	    continue;
+	  }
+
+	case rvtt_insn_data::sfpsetsgn_i:
+	  /* (ib, src, imm, 0, 0, mod1): clear the sign of x.  */
+	  if (want != WANT_SETSGN
+	      || gimple_call_arg (call, 1) != g->x
+	      || rvtt_call_int_arg (call, 2) != 0
+	      || rvtt_call_int_arg (call, 3) != 0
+	      || rvtt_call_int_arg (call, 4) != 0
+	      || rvtt_call_int_arg (call, 5) != 0
+	      || !has_single_use (gimple_call_lhs (call)))
+	    return false;
+	  g->setsgn = call;
+	  want = WANT_ASSIGN1;
+	  continue;
+
+	case rvtt_insn_data::sfpassign_lv:
+	  if (want == WANT_ASSIGN1
+	      && gimple_call_arg (call, 0) == g->x
+	      && gimple_call_arg (call, 1) == gimple_call_lhs (g->setsgn))
+	    {
+	      g->assign1 = call;
+	      want = WANT_IADD;
+	      continue;
+	    }
+	  if (want == WANT_ASSIGN
+	      && gimple_call_arg (call, 0) == gimple_call_lhs (g->assign1)
+	      && gimple_call_arg (call, 1) == gimple_call_lhs (g->iadd))
+	    {
+	      g->assign = call;
+	      want = WANT_END;
+	      continue;
+	    }
+	  return false;
+
+	case rvtt_insn_data::sfpiadd_v:
+	  /* sfpiadd_v (A, B, ARG_2SCOMP_LREG_DST) computes B - A.  */
+	  if (want != WANT_IADD
+	      || gimple_call_arg (call, 0) != gimple_call_lhs (g->assign1)
+	      || !rvtt_zero_vector_p (gimple_call_arg (call, 1))
+	      || rvtt_call_int_arg (call, 2)
+		 != (long) (SFPIADD_MOD1_ARG_2SCOMP_LREG_DST
+			    | SFPIADD_MOD1_CC_NONE)
+	      || !has_single_use (gimple_call_lhs (call)))
+	    return false;
+	  g->iadd = call;
+	  want = WANT_ASSIGN;
+	  continue;
+
+	case rvtt_insn_data::sfppopc:
+	  if (want != WANT_POPC || rvtt_call_int_arg (call, 0) != 0)
+	    return false;
+	  g->popc = call;
+	  goto region_closed;
+
+	case rvtt_insn_data::sfpxloadi:
+	case rvtt_insn_data::sfploadi:
+	case rvtt_insn_data::sfploadi_lv:
+	case rvtt_insn_data::sfpreadlreg:
+	  continue;
+
+	default:
+	  return false;
+	}
+    }
+  return false;
+
+ region_closed:
+  if (TREE_CODE (g->x) != SSA_NAME)
+    return false;
+  /* The intermediate merge feeds only the subtract and the final merge;
+     the fold removes it.  */
+  {
+    imm_use_iterator iter;
+    use_operand_p use_p;
+    FOR_EACH_IMM_USE_FAST (use_p, iter, gimple_call_lhs (g->assign1))
+      {
+	gimple *use = USE_STMT (use_p);
+	if (!is_gimple_debug (use) && use != g->iadd && use != g->assign)
+	  return false;
+      }
+  }
+  rvtt_cc_region *r = ccr->region_opened_by (g->pushc);
+  return (r && ccr->refinements_pure_p (r)
+	  && ccr->region_of (g->assign) == r
+	  && r->exits.length () == 1 && r->exits[0] == g->popc);
+}
+
+static void
+transform_smag_group (ccmask_smag_group *g)
+{
+  const rvtt_insn_data *abs_insnd
+    = rvtt_get_insn_data (rvtt_insn_data::sfpabs);
+  const rvtt_insn_data *xor_insnd
+    = rvtt_get_insn_data (rvtt_insn_data::sfpxor);
+  const rvtt_insn_data *sgn_insnd
+    = rvtt_get_insn_data (rvtt_insn_data::sfpsetsgn_v);
+  gcc_assert (abs_insnd->decl && xor_insnd->decl && sgn_insnd->decl);
+
+  tree vec_type = TREE_TYPE (g->x);
+  gimple_stmt_iterator at = gsi_for_stmt (g->assign);
+  location_t loc = gimple_location (g->assign);
+
+  gcall *abscall
+    = gimple_build_call (abs_insnd->decl, 2, g->x,
+			 build_int_cst (unsigned_type_node, SFPABS_MOD1_INT));
+  tree a = make_ssa_name (vec_type);
+  gimple_call_set_lhs (abscall, a);
+  gimple_set_location (abscall, loc);
+  gsi_insert_before (&at, abscall, GSI_SAME_STMT);
+
+  gcall *xorcall = gimple_build_call (xor_insnd->decl, 2, g->x, a);
+  tree t = make_ssa_name (vec_type);
+  gimple_call_set_lhs (xorcall, t);
+  gimple_set_location (xorcall, loc);
+  gsi_insert_before (&at, xorcall, GSI_SAME_STMT);
+
+  gcall *sgncall
+    = gimple_build_call (sgn_insnd->decl, 3, a, t,
+			 build_int_cst (unsigned_type_node,
+					SFPSETSGN_MOD1_LREG));
+  gimple_call_set_lhs (sgncall, gimple_call_lhs (g->assign));
+  gimple_set_location (sgncall, loc);
+  gsi_replace (&at, sgncall, false);
+
+  if (dump_file)
+    {
+      fprintf (dump_file, "ccmask: folded sign-magnitude conversion into ");
+      print_gimple_stmt (dump_file, sgncall, 0);
+    }
+
+  /* Find the zero materializations before their uses go away.  */
+  gimple *zdefs[2] = { nullptr, nullptr };
+  tree zeros[2] = { gimple_call_arg (g->icmp, 1),
+		    gimple_call_arg (g->iadd, 1) };
+  for (unsigned i = 0; i < 2; i++)
+    if (TREE_CODE (zeros[i]) == SSA_NAME)
+      {
+	gimple *d = SSA_NAME_DEF_STMT (zeros[i]);
+	if (d && rvtt_get_insn_data (d))
+	  zdefs[i] = d;
+      }
+
+  auto remove = [] (gimple *stmt)
+    {
+      rvtt_prep_stmt_for_deletion (stmt);
+      unlink_stmt_vdef (stmt);
+      gimple_stmt_iterator gsi = gsi_for_stmt (stmt);
+      gsi_remove (&gsi, true);
+      release_defs (stmt);
+    };
+  remove (g->iadd);
+  remove (g->assign1);
+  remove (g->setsgn);
+  remove (g->end);
+  remove (g->condb);
+  remove (g->icmp);
+  remove (g->xvif);
+  remove (g->pushc);
+  remove (g->popc);
+  for (unsigned i = 0; i < 2; i++)
+    if (zdefs[i] && gimple_bb (zdefs[i])
+	&& (i == 0 || zdefs[i] != zdefs[0]))
+      {
+	tree lhs = gimple_call_lhs (zdefs[i]);
+	if (!lhs || (TREE_CODE (lhs) == SSA_NAME && has_zero_uses (lhs)))
+	  remove (zdefs[i]);
+      }
+
+  n_folded++;
+}
+
 /* Walk FUN for structured CC regions opened by an sfppushc and fold
    every matched single-zero-assign group into value-mask arithmetic
    (the statement machine's layouts; under
@@ -1009,6 +1320,17 @@ transform (function *fun)
 		     no-rebuild contract above still holds.  */
 		  transform_group (&g);
 		  changed = true;
+		}
+	      else
+		{
+		  ccmask_smag_group sg;
+		  if (match_smag_group (&ccr, gsi, &sg))
+		    {
+		      /* Also a whole leaf frame replaced by CC-inert
+			 statements.  */
+		      transform_smag_group (&sg);
+		      changed = true;
+		    }
 		}
 	    }
 	  gsi = next;
