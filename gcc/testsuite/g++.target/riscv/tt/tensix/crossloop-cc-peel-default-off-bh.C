@@ -6,6 +6,8 @@
 // region discipline), the first iteration is peeled, and the
 // programming follows the peeled all-lanes SFPENCC inside the tile
 // loop.  Init(0): the flag never rides the ON set implicitly.
+// The tile loop's partial-lane SFPENCC keeps the inner loop's entry
+// state unproven, so its CC-canonical body still needs the peel.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-unroll-loops -mtt-tensix-optimize-const-residency -mtt-tensix-optimize-pressure-park -mtt-tensix-optimize-crossloop-hoist -fdump-tree-rvtt_prgm_const-details" }
 // { dg-final { scan-tree-dump "placement walk stops at loop bb \\d+ .crossloop-cc-unproven." "rvtt_prgm_const" } }
 // { dg-final { scan-tree-dump-not "cc-peel" "rvtt_prgm_const" } }
@@ -18,6 +20,7 @@ void ccpeel_fire (int tiles)
   for (int t = 0; t != tiles; ++t)
     {
       __asm__ __volatile__ (".ttinsn %0" : : "n" (0x37000104));
+      __builtin_rvtt_sfpencc (10, 0);
       for (int row = 0; row != 8; ++row)
 	{
 	  auto x = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 6, 7);

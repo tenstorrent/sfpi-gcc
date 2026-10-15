@@ -2,8 +2,8 @@
 // admission is arch-independent -- the consumer audit, the peel, and
 // the SFPCONFIG programming discipline are the same on WH.  One
 // function (the BH file carries the renamed twin pair).
-// A CC region ahead of each loop reaches its preheader, so the peel is
-// still the only proven all-lanes programming point.
+// A partial-lane SFPENCC ahead of each loop reaches its preheader, so
+// the peel is still the only proven all-lanes programming point.
 // { dg-options "-mcpu=tt-wh-tensix -O2 -fno-unroll-loops -mtt-tensix-optimize-const-residency -mtt-tensix-optimize-pressure-park -fdump-tree-rvtt_prgm_const-details" }
 // { dg-final { scan-tree-dump-times "pressure-park: admitted post-CC candidate" 1 "rvtt_prgm_const" } }
 // { dg-final { scan-tree-dump-times "peeled first iteration" 1 "rvtt_prgm_const" } }
@@ -13,9 +13,7 @@
 void park_postcc_fire_wh (void)
 {
   auto x = __builtin_rvtt_sfpreadlreg (0);
-  __builtin_rvtt_sfppushc (0);
-  __builtin_rvtt_sfpsetcc (x, 0);
-  __builtin_rvtt_sfppopc (0);
+  __builtin_rvtt_sfpencc (10, 0);
   for (unsigned ix = 0; ix != 32; ++ix)
     {
       __builtin_rvtt_sfppushc (0);

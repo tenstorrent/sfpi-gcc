@@ -756,6 +756,25 @@ prepeel_ambient_all_lanes_p (basic_block point_bb)
   return true;
 }
 
+/* Whether the lane-enable state on exit from BB is provably all-lanes:
+   BB itself ends on the all-lanes SFPENCC, or it has no CC event and
+   its entry state is proven (prepeel_ambient_all_lanes_p).  */
+
+static bool
+block_exit_ambient_all_lanes_p (basic_block bb)
+{
+  switch (classify_cc_block (bb))
+    {
+    case CC_BLOCK_KILLS:
+      return true;
+    case CC_BLOCK_DIRTY:
+      return false;
+    case CC_BLOCK_TRANSPARENT:
+      break;
+    }
+  return prepeel_ambient_all_lanes_p (bb);
+}
+
 /* MERGE-RENAME class.
 
    The one materialization shape no invariant or residency class can
@@ -1047,14 +1066,21 @@ residency_collect_loop_class (function *fn,
 	 and the body's trailing all-lanes SFPENCC carries that state into
 	 every later trip, so the pre-CC candidates execute all-lanes on
 	 every trip.  Program on the entry edge and skip the peel; post-CC
-	 candidates still pass the consumer audit below.  */
+	 candidates still pass the consumer audit below.
+
+	 A loop nested in another loop sees its own writers reach the
+	 preheader around the enclosing backedge, but every such path
+	 leaves through the body's trailing all-lanes SFPENCC.  The
+	 kill-aware walk proves the same entry fact for that shape.  */
       bool own_entry = false;
       if (peel && !cc_lifted_loop
 	  && classify_second_trip (loop, entry) != TRIPS_PROVEN_SINGLE)
 	{
 	  auto_vec<gimple *> writers;
 	  collect_cc_writers (fn, &writers);
-	  if (!cc_write_reaches_point_p (writers, entry->src, nullptr))
+	  bool unreached
+	    = !cc_write_reaches_point_p (writers, entry->src, nullptr);
+	  if (unreached || block_exit_ambient_all_lanes_p (entry->src))
 	    {
 	      cc_lifted_loop = true;
 	      own_entry = true;
@@ -1062,8 +1088,11 @@ residency_collect_loop_class (function *fn,
 	      if (dump_file)
 		fprintf (dump_file,
 			 "const-residency: loop bb %d programmed on its "
-			 "all-lanes entry edge (no CC write reaches the "
-			 "preheader; no peel)\n", loop->header->index);
+			 "all-lanes entry edge (%s; no peel)\n",
+			 loop->header->index,
+			 unreached ? "no CC write reaches the preheader"
+			 : "every CC write reaching the preheader is "
+			 "killed by an all-lanes SFPENCC");
 	    }
 	}
 

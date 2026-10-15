@@ -1,20 +1,16 @@
-// PRESSURE-PARK pre-peel placement fire (the HN hand-arm
-// +0.65 residual): under -mtt-tensix-optimize-park-ordering the park
-// LREG tier no longer pays the peel's duplicated materialization.
-// Four admitted post-CC candidates against three free PRGM
-// destinations -- the fourth hits prgm-exhausted and takes the LREG
-// tier, whose placement moves to the HEAD of the peel block (the
-// CC region ahead of the loop keeps the peel, and it ends in the
-// all-lanes SFPENCC, so the pre-peel ambient is proven all-lanes) and
-// ERASES the peeled iteration's copy of
-// the materialization, redirecting its uses to the parked definition.
-// The post-peel programming-point placement line must not appear.
+// PRESSURE-PARK LREG tier on a CC-canonical loop programmed on its own
+// entry edge.  Four admitted post-CC candidates against three free PRGM
+// destinations -- the fourth hits prgm-exhausted and parks in a free
+// LREG.  The CC region ahead of the loop ends in the all-lanes SFPENCC,
+// so nothing is peeled and there is no peeled copy of the
+// materialization to pay for.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-unroll-loops -mtt-tensix-optimize-const-residency -mtt-tensix-optimize-pressure-park -mtt-tensix-optimize-park-ordering -fdump-tree-rvtt_prgm_const-details" }
 // { dg-final { scan-tree-dump-times "pressure-park: admitted post-CC candidate" 4 "rvtt_prgm_const" } }
 // { dg-final { scan-tree-dump-times "allocated PRGM L1\\d for constant 0x\[0-9a-f\]+ .loop class" 3 "rvtt_prgm_const" } }
 // { dg-final { scan-tree-dump "const-residency: refused .prgm-exhausted." "rvtt_prgm_const" } }
-// { dg-final { scan-tree-dump-times "pressure-park: hoisted invariant materialization to a free LREG at the pre-peel entry .peel bb \\d+; ambient all-lanes proven; peel duplicate erased." 1 "rvtt_prgm_const" } }
-// { dg-final { scan-tree-dump-not "free LREG at the programming point" "rvtt_prgm_const" } }
+// { dg-final { scan-tree-dump-times "programmed on its all-lanes entry edge" 1 "rvtt_prgm_const" } }
+// { dg-final { scan-tree-dump-times "pressure-park: hoisted invariant materialization to a free LREG at the programming point" 1 "rvtt_prgm_const" } }
+// { dg-final { scan-tree-dump-not "peeled first iteration" "rvtt_prgm_const" } }
 // { dg-final { scan-assembler-times "SFPCONFIG" 3 } }
 
 void park_prepeel_fire (void)

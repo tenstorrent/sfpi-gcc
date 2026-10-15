@@ -3,9 +3,9 @@
 // fn-entry all-lanes state holds there and the body's trailing all-lanes
 // SFPENCC carries it into every later trip: the constant is programmed
 // once before the loop and nothing is peeled.  Its two same-value
-// materializations share one programming.  prior_cc_keeps_peel runs a v_if
-// region before its loop; that CC write reaches the preheader, so the
-// first-iteration peel stays.
+// materializations share one programming.  prior_cc_keeps_peel writes a
+// partial lane state ahead of its loop; nothing kills it before the
+// preheader, so the first-iteration peel stays.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-unroll-loops -mtt-tensix-optimize-const-residency -fdump-tree-rvtt_prgm_const-details" }
 // { dg-final { scan-tree-dump-times "programmed on its all-lanes entry edge" 1 "rvtt_prgm_const" } }
 // { dg-final { scan-tree-dump-times "reused PRGM L1\\d for identical constant 0x40000000" 1 "rvtt_prgm_const" } }
@@ -37,13 +37,7 @@ void prior_cc_keeps_peel (void)
 {
   auto west = __builtin_rvtt_sfpreadlreg (2);
   auto floor = __builtin_rvtt_sfpreadlreg (3);
-  __builtin_rvtt_sfppushc (0);
-  auto pre = __builtin_rvtt_sfpxpred (0x15, 0);
-  auto low = __builtin_rvtt_sfpxcmp (west, floor, 0x12);
-  auto done = __builtin_rvtt_sfpxcond (0, pre, low);
-  west = __builtin_rvtt_sfpassign_lv (west, floor);
-  __builtin_rvtt_sfpxpred (0x10, done);
-  __builtin_rvtt_sfppopc (0);
+  __builtin_rvtt_sfpencc (10, 0);
   for (unsigned step = 0; step != 12; ++step)
     {
       auto bias = __builtin_rvtt_sfpxloadi (nullptr, 0x40e90fdb, 0, 0, 31);

@@ -3,6 +3,8 @@
 // the typed structured-CC-atom refusal -- recorded replay content is
 // still not derivable, the walk stops by the established name, and the
 // peel placement is kept byte-identically.
+// The tile loop's partial-lane SFPENCC keeps the inner loop's entry
+// state unproven, so its CC-canonical body still needs the peel.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-unroll-loops -mtt-tensix-optimize-const-residency -mtt-tensix-optimize-pressure-park -mtt-tensix-optimize-crossloop-hoist -mtt-tensix-optimize-crossloop-cc-peel -fdump-tree-rvtt_prgm_const-details" }
 // { dg-final { scan-tree-dump "placement walk stops at loop bb \\d+ .crossloop-replay-unproven." "rvtt_prgm_const" } }
 // { dg-final { scan-tree-dump-not "cc-peel placement lifted" "rvtt_prgm_const" } }
@@ -15,6 +17,7 @@ void ccpeel_replay_refuse (int tiles)
   for (int t = 0; t != tiles; ++t)
     {
       __builtin_rvtt_ttreplay (nullptr, 4, 0, 0, 0, 0, 0);
+      __builtin_rvtt_sfpencc (10, 0);
       for (int row = 0; row != 8; ++row)
 	{
 	  auto x = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 6, 7);

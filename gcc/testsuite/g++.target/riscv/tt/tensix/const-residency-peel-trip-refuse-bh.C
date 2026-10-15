@@ -4,8 +4,8 @@
 // loop's own scalar control (rvtt-cost.md residency-peel model).  A
 // runtime trip count does not fold; a two-trip loop folds but sits
 // below break-even.  Both refuse by name.
-// A CC region ahead of each loop reaches its preheader, so the peel is
-// still the only proven all-lanes programming point.
+// A partial-lane SFPENCC ahead of each loop reaches its preheader, so
+// the peel is still the only proven all-lanes programming point.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-unroll-loops -mtt-tensix-optimize-const-residency -fdump-tree-rvtt_prgm_const-details" }
 // { dg-final { scan-tree-dump-times "refused .peel-trip-count-unproven" 2 "rvtt_prgm_const" } }
 // { dg-final { scan-tree-dump-not "peeled first iteration" "rvtt_prgm_const" } }
@@ -14,9 +14,7 @@
 void peel_trip_unproven (unsigned n)
 {
   auto x = __builtin_rvtt_sfpreadlreg (1);
-  __builtin_rvtt_sfppushc (0);
-  __builtin_rvtt_sfpsetcc (x, 0);
-  __builtin_rvtt_sfppopc (0);
+  __builtin_rvtt_sfpencc (10, 0);
   for (unsigned ix = 0; ix != n; ++ix)
     {
       auto gain = __builtin_rvtt_sfpxloadi (nullptr, 0x40490fdb, 0, 0, 31);
@@ -31,9 +29,7 @@ void peel_trip_unproven (unsigned n)
 void peel_two_trips (void)
 {
   auto x = __builtin_rvtt_sfpreadlreg (2);
-  __builtin_rvtt_sfppushc (0);
-  __builtin_rvtt_sfpsetcc (x, 0);
-  __builtin_rvtt_sfppopc (0);
+  __builtin_rvtt_sfpencc (10, 0);
   for (unsigned ix = 0; ix != 2; ++ix)
     {
       auto gain = __builtin_rvtt_sfpxloadi (nullptr, 0x3f000000, 0, 0, 31);

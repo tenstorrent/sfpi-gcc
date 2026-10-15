@@ -1,15 +1,13 @@
-// Pre-peel ambient proof, ENCC-kill arm: the softplus
-// PRODUCTION anatomy -- the canonical loop sits inside an OUTER loop,
-// so its own lowered CC writers reach the pre-peel point around the
-// outer backedge.  The plain reachability oracle
-// (cc_write_reaches_point_p) would refuse; the kill-aware walk proves
-// every such path passes the body's trailing word-exact all-lanes
-// SFPENCC (the canonical tail itself), so the ambient is all-lanes and
-// the park LREG tier still takes the pre-peel placement and erases the
-// peel duplicate.
+// The softplus production anatomy: the canonical loop sits inside an
+// outer loop, so its own CC writers reach its preheader around the outer
+// backedge.  Every such path passes the body's trailing all-lanes
+// SFPENCC, so the loop is programmed on its own entry edge without a
+// peel, and the constant that exhausts the PRGM file parks in a free
+// LREG there.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-unroll-loops -mtt-tensix-optimize-const-residency -mtt-tensix-optimize-pressure-park -mtt-tensix-optimize-park-ordering -fdump-tree-rvtt_prgm_const-details" }
-// { dg-final { scan-tree-dump-times "pressure-park: hoisted invariant materialization to a free LREG at the pre-peel entry .peel bb \\d+; ambient all-lanes proven; peel duplicate erased." 1 "rvtt_prgm_const" } }
-// { dg-final { scan-tree-dump-not "free LREG at the programming point" "rvtt_prgm_const" } }
+// { dg-final { scan-tree-dump-times "programmed on its all-lanes entry edge" 1 "rvtt_prgm_const" } }
+// { dg-final { scan-tree-dump-times "pressure-park: hoisted invariant materialization to a free LREG at the programming point" 1 "rvtt_prgm_const" } }
+// { dg-final { scan-tree-dump-not "peeled first iteration" "rvtt_prgm_const" } }
 // { dg-final { scan-tree-dump-not "park-prepeel-ambient-unproven" "rvtt_prgm_const" } }
 // { dg-final { scan-assembler-times "SFPCONFIG" 3 } }
 

@@ -1,16 +1,15 @@
+// Renamed twin of park-prepeel-lreg-fire-bh.C with varied constants:
+// different function and value names, a different input LREG (3), a
+// different trip count (17), and four different loop-invariant
+// constants.  The LREG-tier placement must key on the structural facts
+// alone.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-unroll-loops -mtt-tensix-optimize-const-residency -mtt-tensix-optimize-pressure-park -mtt-tensix-optimize-park-ordering -fdump-tree-rvtt_prgm_const-details" }
-// Pre-peel park placement, renamed twin with varied constants: different
-// function and value names, a different input LREG (3), a different trip
-// count (17), and four different loop-invariant constants.  The pre-peel
-// LREG-tier placement must key on the structural facts alone (post-CC
-// candidates exceeding the free PRGM file inside a canonical CC-restore
-// loop whose entry paths end in an all-lanes SFPENCC) and still erase the
-// peel duplicate.
 // { dg-final { scan-tree-dump-times "pressure-park: admitted post-CC candidate" 4 "rvtt_prgm_const" } }
 // { dg-final { scan-tree-dump-times "allocated PRGM L1\\d for constant 0x\[0-9a-f\]+ .loop class" 3 "rvtt_prgm_const" } }
 // { dg-final { scan-tree-dump "const-residency: refused .prgm-exhausted." "rvtt_prgm_const" } }
-// { dg-final { scan-tree-dump-times "pressure-park: hoisted invariant materialization to a free LREG at the pre-peel entry .peel bb \\d+; ambient all-lanes proven; peel duplicate erased." 1 "rvtt_prgm_const" } }
-// { dg-final { scan-tree-dump-not "free LREG at the programming point" "rvtt_prgm_const" } }
+// { dg-final { scan-tree-dump-times "programmed on its all-lanes entry edge" 1 "rvtt_prgm_const" } }
+// { dg-final { scan-tree-dump-times "pressure-park: hoisted invariant materialization to a free LREG at the programming point" 1 "rvtt_prgm_const" } }
+// { dg-final { scan-tree-dump-not "peeled first iteration" "rvtt_prgm_const" } }
 // { dg-final { scan-assembler-times "SFPCONFIG" 3 } }
 
 void audit_ip_ladder (void)

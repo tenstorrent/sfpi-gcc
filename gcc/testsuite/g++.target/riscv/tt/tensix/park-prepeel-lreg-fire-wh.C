@@ -1,13 +1,12 @@
-// WH arm of park-prepeel-lreg-fire-bh.C: the pre-peel park placement
-// is architecture-independent (the ambient proof and the peel-copy
-// erase are gimple facts; the canonical all-lanes SFPENCC word is the
-// shared capability-table derivation on both).  Names, constants and
-// trip count varied.
+// WH arm of park-prepeel-lreg-fire-bh.C: the entry proof and the park
+// placement are gimple facts shared by both architectures.  Names,
+// constants and trip count varied.
 // { dg-options "-mcpu=tt-wh-tensix -O2 -fno-unroll-loops -mtt-tensix-optimize-const-residency -mtt-tensix-optimize-pressure-park -mtt-tensix-optimize-park-ordering -fdump-tree-rvtt_prgm_const-details" }
 // { dg-final { scan-tree-dump-times "pressure-park: admitted post-CC candidate" 4 "rvtt_prgm_const" } }
 // { dg-final { scan-tree-dump-times "allocated PRGM L1\\d for constant 0x\[0-9a-f\]+ .loop class" 3 "rvtt_prgm_const" } }
-// { dg-final { scan-tree-dump-times "pressure-park: hoisted invariant materialization to a free LREG at the pre-peel entry .peel bb \\d+; ambient all-lanes proven; peel duplicate erased." 1 "rvtt_prgm_const" } }
-// { dg-final { scan-tree-dump-not "free LREG at the programming point" "rvtt_prgm_const" } }
+// { dg-final { scan-tree-dump-times "programmed on its all-lanes entry edge" 1 "rvtt_prgm_const" } }
+// { dg-final { scan-tree-dump-times "pressure-park: hoisted invariant materialization to a free LREG at the programming point" 1 "rvtt_prgm_const" } }
+// { dg-final { scan-tree-dump-not "peeled first iteration" "rvtt_prgm_const" } }
 // { dg-final { scan-assembler-times "SFPCONFIG" 3 } }
 
 void wharf_prepeel_scale (void)
