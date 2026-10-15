@@ -1362,13 +1362,43 @@ residency_collect_loop_class (function *fn,
 		      unsigned nops = 0;
 		      unsigned value;
 		      bool vulnerable, is_shared;
+		      /* A sign-flipping copy of the addend (the y * (C - x * y)
+			 Newton spelling) is folded into the add's mode by the
+			 combiner, so the constant behind it still feeds the
+			 pair and is just as fold-vulnerable.  */
+		      tree addend = gimple_call_arg (add, ab + (1 - swap));
+		      gimple *addend_use = add;
+		      gcall *neg = TREE_CODE (addend) == SSA_NAME
+			? dyn_cast <gcall *> (SSA_NAME_DEF_STMT (addend))
+			: nullptr;
+		      const rvtt_insn_data *negd
+			= neg ? rvtt_get_insn_data (neg) : nullptr;
+		      if (negd && negd->id == rvtt_insn_data::sfpmov
+			  && integer_onep (gimple_call_arg (neg, 1))
+			  && gimple_bb (neg)
+			  && flow_bb_inside_loop_p (loop, gimple_bb (neg))
+			  && single_nondebug_use_p (addend, add))
+			{
+			  addend = gimple_call_arg (neg, 0);
+			  addend_use = neg;
+			}
+		      else
+			neg = nullptr;
 		      if (gcall *l
-			  = hoisted_madpair_load_p (gimple_call_arg
-						    (add, ab + (1 - swap)),
-						    loop, add, &value,
-						    &vulnerable, &is_shared))
-			ops[nops++]
-			  = pair_op { l, value, vulnerable, is_shared };
+			  = hoisted_madpair_load_p (addend, loop, addend_use,
+						    &value, &vulnerable,
+						    &is_shared))
+			{
+			  /* The negated-immediate fold ends at the add, not
+			     at the copy.  */
+			  if (neg)
+			    vulnerable
+			      = rvtt_combine_will_fuse_p
+				  (l, rvtt_insn_data::sfploadi,
+				   rvtt_insn_data::sfpadd_lv);
+			  ops[nops++]
+			    = pair_op { l, value, vulnerable, is_shared };
+			}
 		      for (unsigned mx = 0; mx != 2; ++mx)
 			if (gcall *l
 			    = hoisted_madpair_load_p (gimple_call_arg
