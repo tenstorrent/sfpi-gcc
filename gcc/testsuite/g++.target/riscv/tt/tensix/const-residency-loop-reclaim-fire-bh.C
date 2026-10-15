@@ -19,13 +19,12 @@
 // The final value now reaches this late pass as the lowered two-issue
 // SFPLOADI chain; pin the capacity verdict, not one member's spelling.
 // { dg-final { scan-tree-dump-times "refused .prgm-exhausted." 1 "rvtt_prgm_const" } }
-// Five programming placements (the duplicate-value second statements
-// re-program their shared slot: same register, same value -- the
-// shipped redundant-but-sound path, and on a reclaimed slot the forced
-// reprogram under the candidate's own proven window).
-// { dg-final { scan-tree-dump-times "allocated PRGM L1\\d for constant 0x\[0-9a-f\]+ .loop class" 5 "rvtt_prgm_const" } }
-// The init's three SFPCONFIGs plus the loop's five placements.
-// { dg-final { scan-assembler-times "SFPCONFIG" 8 } }
+// Four programming placements: the L12 duplicate reuses the programming
+// already at the end of the shared preheader, while the reclaimed slot's
+// duplicate is forced to reprogram under its own proven window.
+// { dg-final { scan-tree-dump-times "allocated PRGM L1\\d for constant 0x\[0-9a-f\]+ .loop class" 4 "rvtt_prgm_const" } }
+// The init's three SFPCONFIGs plus the loop's four placements.
+// { dg-final { scan-assembler-times "SFPCONFIG" 7 } }
 
 void owner_init (void)
 {

@@ -8,10 +8,9 @@
 // { dg-final { scan-tree-dump-not "reclaiming DEAD-claimed" "rvtt_prgm_const" } }
 // { dg-final { scan-tree-dump-not "loop-reclaim-call-window" "rvtt_prgm_const" } }
 // { dg-final { scan-tree-dump-times "refused .prgm-exhausted" 4 "rvtt_prgm_const" } }
-// The init's three SFPCONFIGs plus the value-identical pair's two
-// programmings (the duplicate's reprogram is the shipped
-// redundant-but-sound path).
-// { dg-final { scan-assembler-times "SFPCONFIG" 5 } }
+// The init's three SFPCONFIGs plus one programming shared by the
+// value-identical pair.
+// { dg-final { scan-assembler-times "SFPCONFIG" 4 } }
 
 void owner_init (void)
 {

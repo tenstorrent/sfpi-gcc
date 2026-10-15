@@ -12,8 +12,8 @@
 // { dg-final { scan-tree-dump-times "reclaiming DEAD-claimed PRGM L13 for 0x3f2e147b .loop class" 1 "rvtt_prgm_const" } }
 // { dg-final { scan-tree-dump-times "reclaiming DEAD-claimed PRGM L14 for 0x419d70a4 .loop class" 1 "rvtt_prgm_const" } }
 // { dg-final { scan-tree-dump-times "refused .prgm-exhausted." 1 "rvtt_prgm_const" } }
-// { dg-final { scan-tree-dump-times "allocated PRGM L1\\d for constant 0x\[0-9a-f\]+ .loop class" 5 "rvtt_prgm_const" } }
-// { dg-final { scan-assembler-times "SFPCONFIG" 8 } }
+// { dg-final { scan-tree-dump-times "allocated PRGM L1\\d for constant 0x\[0-9a-f\]+ .loop class" 4 "rvtt_prgm_const" } }
+// { dg-final { scan-assembler-times "SFPCONFIG" 7 } }
 
 void audit_ip_claimer (void)
 {

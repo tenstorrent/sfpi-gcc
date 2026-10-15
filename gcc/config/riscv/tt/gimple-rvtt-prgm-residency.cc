@@ -2177,12 +2177,14 @@ residency_transform (function *fn, prgm_state *st)
       unsigned prgm = 0;
       basic_block prior_bb = nullptr;
       bool prior_reclaimed = false;
+      bool prior_at_end = false;
       for (prgm_alloc &a : st->allocs)
 	if (a.value == c.value)
 	  {
 	    prgm = a.reg;
 	    prior_bb = a.bb;
 	    prior_reclaimed = a.reclaimed;
+	    prior_at_end = a.at_end;
 	    break;
 	  }
       /* A same-value candidate landing on a DEAD-claim reclaimed slot:
@@ -2346,12 +2348,21 @@ residency_transform (function *fn, prgm_state *st)
 	 in-place (pressure class) programming point does NOT dominate
 	 later statements of its own block -- so equality must
 	 reprogram (same register, same value: always sound, merely
-	 redundant).  */
+	 redundant).  A loop-class programming sits at the end of its
+	 preheader, so it covers every later candidate whose reads lie in
+	 blocks that preheader strictly dominates -- including the
+	 remaining candidates of the same loop, whose entry edge now ends
+	 in that preheader.  */
+      basic_block use_bb = (c.loop && !c.inplace)
+	? c.loop->header : gimple_bb (c.load);
       bool reprogram
 	= !prior_bb
 	  || prior_reclaimed
-	  || point_bb == prior_bb
-	  || !dominated_by_p (CDI_DOMINATORS, point_bb, prior_bb);
+	  || (prior_at_end
+	      ? (use_bb == prior_bb
+		 || !dominated_by_p (CDI_DOMINATORS, use_bb, prior_bb))
+	      : (point_bb == prior_bb
+		 || !dominated_by_p (CDI_DOMINATORS, point_bb, prior_bb)));
       if (reprogram)
 	{
 	  auto_vec<gcall *> seq;
@@ -2359,9 +2370,13 @@ residency_transform (function *fn, prgm_state *st)
 	  gcall *wrcfg = gimple_build_call
 	    (wrcfg_d->decl, 3, staged, build_int_cst (unsigned_type_node, 0),
 	     build_int_cst (unsigned_type_node, prgm));
+	  basic_block prog_bb = point_bb;
+	  bool prog_at_end = false;
 	  if (c.loop && !c.inplace)
 	    {
 	      basic_block preheader = rvtt_commit_hoist_preheader (c.entry);
+	      prog_bb = preheader;
+	      prog_at_end = true;
 	      gimple_stmt_iterator phg = gsi_last_bb (preheader);
 	      if (gsi_end_p (phg) || !stmt_ends_bb_p (gsi_stmt (phg)))
 		{
@@ -2387,8 +2402,8 @@ residency_transform (function *fn, prgm_state *st)
 	      gsi_insert_before (&lgsi, wrcfg, GSI_SAME_STMT);
 	    }
 	  if (!prior_bb)
-	    st->allocs.safe_push (prgm_alloc { c.value, prgm, point_bb,
-					       tu_reclaim });
+	    st->allocs.safe_push (prgm_alloc { c.value, prgm, prog_bb,
+					       tu_reclaim, prog_at_end });
 	}
       else if (dump_file)
 	fprintf (dump_file,

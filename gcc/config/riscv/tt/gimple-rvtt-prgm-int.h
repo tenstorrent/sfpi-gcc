@@ -85,7 +85,11 @@ struct prgm_alloc { unsigned value; unsigned reg; basic_block bb;
 		       persistence across any call is unprovable -- a
 		       later same-value candidate must re-prove its own
 		       call-free window and always reprograms.  */
-		    bool reclaimed = false; };
+		    bool reclaimed = false;
+		    /* The programming sits at the end of BB rather than at
+		       its entry or at an in-place statement: every block
+		       strictly dominated by BB sees the value.  */
+		    bool at_end = false; };
 
 struct prgm_state
 {
