@@ -953,6 +953,23 @@ public:
       changed |= transform (fn, &st);
     if (riscv_tt_opt_const_residency)
       changed |= residency_transform (fn, &st);
+    /* A callee's own-entry residency programming moves to its callers'
+       loop entries; the moved registers then stay out of every later
+       function's allocation (claimed, and read, so never reclaimed).  */
+    if (riscv_tt_opt_crosscall_prgm > 0 && riscv_tt_opt_crosscall_hoist
+	&& !tu_facts.refused)
+      {
+	unsigned regs = 0;
+	for (const prgm_alloc &a : st.allocs)
+	  if (!a.reclaimed)
+	    regs |= 1u << a.reg;
+	if (unsigned moved = rvtt_crosscall_prgm_hoist (fn, regs))
+	  {
+	    tu_facts.claimed |= moved;
+	    tu_facts.creg_read |= moved;
+	    changed = true;
+	  }
+      }
     if (riscv_tt_opt_const_remat)
       changed |= remat_transform (fn);
     loop_optimizer_finalize ();

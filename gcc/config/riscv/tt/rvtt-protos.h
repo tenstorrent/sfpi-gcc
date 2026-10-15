@@ -541,6 +541,11 @@ struct rvtt_addrmod_hoist_program
 extern const char *rvtt_crosscall_addrmod_hoist (function *callee,
 						 rvtt_addrmod_hoist_program *);
 
+/* Defined in gimple-rvtt-crosscall.cc: move CALLEE's own-entry programming
+   of the constant registers in REGS (residency allocations) to its proven
+   callers' loop entries.  Returns the mask of registers moved.  */
+extern unsigned rvtt_crosscall_prgm_hoist (function *callee, unsigned regs);
+
 /* Defined in rtl-rvtt-schedule.cc; exported for the other Tensix scheduling
    passes.  */
 extern bool issued_tensix_p (rtx_insn *insn);

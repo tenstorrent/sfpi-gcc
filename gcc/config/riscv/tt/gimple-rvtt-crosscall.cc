@@ -848,8 +848,10 @@ scan_stmt (scan_ctx *ctx, gimple *stmt, bool in_caller)
 	  return true;
 	}
 
-      if (in_caller && ctx->callee_decl
-	  && gimple_call_fndecl (call) == ctx->callee_decl)
+      if (in_caller
+	  && ((ctx->callee_decl
+	       && gimple_call_fndecl (call) == ctx->callee_decl)
+	      || stmt == ctx->site))
 	return true;		/* the contract call itself */
       if (gimple_call_internal_p (call))
 	return gimple_vdef (call)
@@ -1365,8 +1367,8 @@ callee_body_ok_p (function *fn, const auto_vec<contract_entry> &contract,
 
 static bool
 prove_caller (cgraph_node *caller, gcall *call_stmt, tree callee_decl,
-	      unsigned contract_mask, unsigned config_mask, edge *entry_out,
-	      unsigned *lift_levels_out)
+	      unsigned contract_mask, unsigned config_mask, bool prgm_only,
+	      edge *entry_out, unsigned *lift_levels_out)
 {
   *lift_levels_out = 0;
   function *fn = DECL_STRUCT_FUNCTION (caller->decl);
@@ -1388,6 +1390,12 @@ prove_caller (cgraph_node *caller, gcall *call_stmt, tree callee_decl,
   scan_ctx ctx;
   ctx.contract_mask = contract_mask | config_mask;
   ctx.callee_decl = callee_decl;
+  /* A programming-only contract may target a clone the caller's call
+     has not been redirected to yet (its own inline transform runs at
+     the head of its late pipeline): the proven edge's statement is the
+     call.  */
+  if (prgm_only)
+    ctx.site = call_stmt;
   ctx.in_caller = true;
   ctx.config_strict = config_mask != 0;
 
@@ -1410,7 +1418,8 @@ prove_caller (cgraph_node *caller, gcall *call_stmt, tree callee_decl,
   if (!ok)
     return false;
 
-  /* Placement residency walk (config-prefix knob): lift the contract's
+  /* Placement residency walk (the config-prefix knob, or a
+     programming-only contract): lift the contract's
      programming point across ENCLOSING loops whose bodies pass the
      same caller-epoch scan (the zero-trip clobber argument is
      loop-agnostic: nothing between the outer entry and the calls can
@@ -1419,7 +1428,7 @@ prove_caller (cgraph_node *caller, gcall *call_stmt, tree callee_decl,
      one).  A level that fails any proof simply stops the walk -- the
      inner placement stands, nothing refuses.  */
   class loop *place_loop = loop;
-  if (riscv_tt_opt_crosscall_config_prefix)
+  if (riscv_tt_opt_crosscall_config_prefix || prgm_only)
     for (class loop *outer = loop_outer (loop); outer && outer->num;
 	 outer = loop_outer (outer))
       {
@@ -1664,6 +1673,17 @@ commit_callee (function *fn, const auto_vec<contract_entry> &contract,
       gsi_remove (&lsi, true);
       if (lhs && TREE_CODE (lhs) == SSA_NAME)
 	release_ssa_name (lhs);
+      /* A chained materialization's SFPLOADI half fed only the tail
+	 just removed; left behind it would still issue a stray load.  */
+      if (p.root)
+	{
+	  gimple_stmt_iterator rsi = gsi_for_stmt (p.root);
+	  if (tree vdef = gimple_vdef (p.root))
+	    if (TREE_CODE (vdef) == SSA_NAME)
+	      unlink_stmt_vdef (p.root);
+	  gsi_remove (&rsi, true);
+	  release_defs (p.root);
+	}
       if (dump_file)
 	fprintf (dump_file,
 		 "crosscall-hoist: config pair (creg %u) removed from %s "
@@ -1829,7 +1849,8 @@ transform (function *fn)
       if (!dom)
 	calculate_dominance_info (CDI_DOMINATORS);
       bool ok = prove_caller (p.node, p.call_stmt, fn->decl, contract_mask,
-			      config_mask, &p.entry, &p.lift_levels);
+			      config_mask, /*prgm_only=*/false, &p.entry,
+			      &p.lift_levels);
       if (!dom)
 	free_dominance_info (CDI_DOMINATORS);
       loop_optimizer_finalize ();
@@ -1871,6 +1892,362 @@ transform (function *fn)
 	     config.is_empty () ? "" : " (+config prefix)",
 	     IDENTIFIER_POINTER (DECL_NAME (fn->decl)), plans.length ());
   return true;
+}
+
+/* ------------------------------------------------------------------ */
+/* Cross-call programming of residency-claimed constant registers
+   (-mtt-tensix-optimize-crosscall-prgm).
+
+   Constant residency (gimple-rvtt-prgm-residency.cc) parks a callee's
+   invariant constants in the programmable constant registers 12..14
+   and programs them at the callee's own entry, so a noinline per-tile
+   callee re-runs that programming on every call.  A hand kernel
+   programs the same registers once, in its init.  This entry runs in
+   the callee right after residency -- every caller is still gimple
+   (callees run the late pipeline first) -- and moves each such
+   programming pair (an all-constant materialization whose single use
+   is sfpwriteconfig_v) into the proven callers' loop entries, lifted
+   across the enclosing loops the caller-epoch scan proves.  It is the
+   config-prefix widening without a coefficient contract: the pairs are
+   the whole contract.
+
+   Callee proofs (each refusal leaves both sides untouched):
+   - only registers residency allocated here (REGS, never a reclaimed
+     slot) are candidates; every writer of such a register in the
+     callee is a qualified pair outside any loop, all of them store the
+     same image, and one of them dominates every return and every read
+     of the register -- the per-call original wrote it unconditionally
+     before any read, so the callee observes the identical value;
+   - every other statement passes the callee scan with delivered
+     SFPCONFIG-class words refused (config_strict) and no call;
+   - CC activity is immaterial (the cc_immaterial atom whitelist): the
+     moved programming executes before the callee under the caller's
+     proven all-lanes state, and no CC write reaches a constant
+     register.
+   Caller proofs: prove_caller with the pair registers as the config
+   mask, all callers or none.  The moved registers are then marked
+   claimed and read in the TU facts, so no later function's residency
+   reuses or reclaims them.  */
+
+static bool
+prgm_load_same_p (gcall *a, gcall *b, bool skip_link)
+{
+  if (!a || !b)
+    return a == b;
+  if (gimple_call_fndecl (a) != gimple_call_fndecl (b)
+      || gimple_call_num_args (a) != gimple_call_num_args (b))
+    return false;
+  /* Argument 0 is the canonical buffer operand (prefix_load_p).  */
+  for (unsigned i = 1; i != gimple_call_num_args (a); ++i)
+    if (!(skip_link && i == 1)
+	&& !operand_equal_p (gimple_call_arg (a, i), gimple_call_arg (b, i),
+			     0))
+      return false;
+  return true;
+}
+
+static unsigned
+prgm_refuse (const char *reason, tree fn, gimple *stmt)
+{
+  crosscall_refuse (reason, fn, stmt);
+  return 0;
+}
+
+/* True if the pair P's write executes before STMT on every path.  */
+
+static bool
+prgm_pair_dominates_p (const config_prefix_entry &p, gimple *stmt)
+{
+  basic_block pb = gimple_bb (p.write);
+  basic_block sb = gimple_bb (stmt);
+  if (pb != sb)
+    return dominated_by_p (CDI_DOMINATORS, sb, pb);
+  for (gimple_stmt_iterator gsi = gsi_for_stmt (p.write); !gsi_end_p (gsi);
+       gsi_next (&gsi))
+    if (gsi_stmt (gsi) == stmt)
+      return true;
+  return false;
+}
+
+unsigned
+rvtt_crosscall_prgm_hoist (function *fn, unsigned regs)
+{
+  regs &= (1u << 12) | (1u << 13) | (1u << 14);
+  cgraph_node *cn = cgraph_node::get (fn->decl);
+  if (!regs || !cn)
+    return 0;
+
+  /* Residency may have split edges for its programming points.  */
+  free_dominance_info (CDI_DOMINATORS);
+  calculate_dominance_info (CDI_DOMINATORS);
+
+  /* Pairs, and every other writer or reader of a candidate register.  */
+  auto_vec<config_prefix_entry> pairs;
+  auto_vec<gimple *> reads;
+  unsigned foreign = 0;
+  basic_block bb;
+  FOR_EACH_BB_FN (bb, fn)
+    for (gimple_stmt_iterator gsi = gsi_start_bb (bb); !gsi_end_p (gsi);
+	 gsi_next (&gsi))
+      {
+	gcall *call = dyn_cast <gcall *> (gsi_stmt (gsi));
+	const rvtt_insn_data *insnd = call ? rvtt_get_insn_data (call)
+	  : nullptr;
+	if (!insnd)
+	  continue;
+	if (insnd->id == rvtt_insn_data::sfpreadlreg)
+	  {
+	    tree r = gimple_call_arg (call, 0);
+	    if (TREE_CODE (r) != INTEGER_CST)
+	      foreign = regs;
+	    else if ((regs >> (TREE_INT_CST_LOW (r) & 0xf)) & 1)
+	      reads.safe_push (call);
+	    continue;
+	  }
+	if (insnd->id == rvtt_insn_data::sfprawlreg_access)
+	  {
+	    tree rel = gimple_call_arg (call, 0);
+	    tree wr = gimple_call_arg (call, 1);
+	    if (TREE_CODE (rel) != INTEGER_CST || TREE_CODE (wr) != INTEGER_CST)
+	      foreign = regs;
+	    else
+	      foreign |= (TREE_INT_CST_LOW (rel) | TREE_INT_CST_LOW (wr)) & regs;
+	    continue;
+	  }
+	if (insnd->id != rvtt_insn_data::sfpwriteconfig_v)
+	  continue;
+	tree dest = gimple_call_arg (call, 2);
+	if (TREE_CODE (dest) != INTEGER_CST || TREE_INT_CST_LOW (dest) > 15)
+	  {
+	    foreign = regs;
+	    continue;
+	  }
+	unsigned d = TREE_INT_CST_LOW (dest);
+	if (!((regs >> d) & 1))
+	  continue;
+	tree val = gimple_call_arg (call, 0);
+	gcall *load = TREE_CODE (val) == SSA_NAME
+	  ? dyn_cast <gcall *> (SSA_NAME_DEF_STMT (val)) : nullptr;
+	if (loop_outer (bb->loop_father) || gimple_call_lhs (call)
+	    || !load || gimple_bb (load) != bb || !prefix_load_p (load)
+	    || !has_single_use (val))
+	  {
+	    foreign |= 1u << d;
+	    continue;
+	  }
+	config_prefix_entry p = { load, call, d, prefix_load_root (load) };
+	pairs.safe_push (p);
+      }
+
+  /* Per register: one image, and a representative pair that precedes
+     every read and every return.  */
+  auto_vec<config_prefix_entry> reps;
+  unsigned mask = 0;
+  for (unsigned d = 12; d <= 14; ++d)
+    {
+      if (!((regs >> d) & 1) || ((foreign >> d) & 1))
+	continue;
+      const config_prefix_entry *first = nullptr;
+      const config_prefix_entry *rep = nullptr;
+      bool same = true;
+      for (const config_prefix_entry &p : pairs)
+	{
+	  if (p.dest != d)
+	    continue;
+	  if (!first)
+	    first = &p;
+	  else if (!prgm_load_same_p (first->root, p.root, false)
+		   || !prgm_load_same_p (first->load, p.load, p.root != nullptr))
+	    same = false;
+	  bool covers = true;
+	  for (gimple *r : reads)
+	    if (TREE_INT_CST_LOW (gimple_call_arg (r, 0)) == d
+		&& !prgm_pair_dominates_p (p, r))
+	      covers = false;
+	  edge e;
+	  edge_iterator ei;
+	  FOR_EACH_EDGE (e, ei, EXIT_BLOCK_PTR_FOR_FN (fn)->preds)
+	    if (!dominated_by_p (CDI_DOMINATORS, e->src, gimple_bb (p.write)))
+	      covers = false;
+	  if (covers && !rep)
+	    rep = &p;
+	}
+      if (!first)
+	continue;
+      if (!same || !rep)
+	{
+	  if (dump_file)
+	    fprintf (dump_file, "crosscall-prgm: creg %u not moved (%s)\n", d,
+		     !same ? "crosscall-config-writer-unproven"
+		     : "crosscall-config-shape-unproven");
+	  continue;
+	}
+      reps.safe_push (*rep);
+      mask |= 1u << d;
+    }
+  if (!mask)
+    return 0;
+  unsigned kept = 0;
+  for (unsigned i = 0; i != pairs.length (); ++i)
+    if ((mask >> pairs[i].dest) & 1)
+      pairs[kept++] = pairs[i];
+  pairs.truncate (kept);
+
+  /* Callee scan: everything but the moved pairs.  */
+  scan_ctx ctx;
+  ctx.contract_mask = 0;
+  ctx.callee_decl = NULL_TREE;
+  ctx.in_caller = false;
+  ctx.config_strict = true;
+  ctx.cc_immaterial = true;
+  FOR_EACH_BB_FN (bb, fn)
+    for (gimple_stmt_iterator gsi = gsi_start_bb (bb); !gsi_end_p (gsi);
+	 gsi_next (&gsi))
+      {
+	gimple *stmt = gsi_stmt (gsi);
+	bool moved = false;
+	for (const config_prefix_entry &p : pairs)
+	  if (stmt == p.load || stmt == p.write || stmt == p.root)
+	    moved = true;
+	if (!moved && !scan_stmt (&ctx, stmt, /*in_caller=*/false))
+	  return prgm_refuse (ctx.why, fn->decl, ctx.why_stmt);
+      }
+  if (ctx.saw_mop)
+    {
+      const char *why = nullptr;
+      if (!mop_contract_ok_p (mask, &why) || !mop_config_ok_p (&why))
+	return prgm_refuse ("crosscall-caller-mop-slot-unproven", fn->decl,
+			    nullptr);
+    }
+
+  /* The caller closure, as for a coefficient contract.  */
+  if (!cn->definition || cn->address_taken || cn->alias || cn->thunk
+      || cn->clones || !cn->callers)
+    return prgm_refuse ("crosscall-caller-body-unavailable", fn->decl,
+			nullptr);
+  auto_vec<caller_plan> plans;
+  for (cgraph_edge *e = cn->callers; e; e = e->next_caller)
+    {
+      if (e->caller == cn)
+	return prgm_refuse ("crosscall-caller-body-unavailable", fn->decl,
+			    nullptr);
+      if (!e->caller->definition || !e->caller->has_gimple_body_p ()
+	  || !e->call_stmt)
+	return prgm_refuse ("crosscall-caller-body-unavailable",
+			    e->caller->decl, nullptr);
+      cgraph_node *host = e->caller;
+      gcall *site = e->call_stmt;
+      /* A call inside an inline clone reaches its loop only when the
+	 clone's host runs its own inline transform.  Every clone body on
+	 the way is copied whole into the loop, so it joins the epoch: it
+	 must pass the caller scan as it stands, with the inner call as
+	 the contract call, and the placement is proven in the host.  */
+      while (host->inlined_to)
+	{
+	  function *ifn = DECL_STRUCT_FUNCTION (host->decl);
+	  if (!ifn || !ifn->cfg || !host->callers
+	      || host->callers->next_caller || !host->callers->call_stmt)
+	    return prgm_refuse ("crosscall-caller-body-unavailable",
+				host->decl, nullptr);
+	  scan_ctx ictx;
+	  ictx.contract_mask = mask;
+	  ictx.callee_decl = fn->decl;
+	  ictx.site = site;
+	  ictx.in_caller = true;
+	  ictx.config_strict = true;
+	  bool ok = true;
+	  push_cfun (ifn);
+	  basic_block ibb;
+	  FOR_EACH_BB_FN (ibb, ifn)
+	    {
+	      for (gphi_iterator psi = gsi_start_phis (ibb);
+		   ok && !gsi_end_p (psi); gsi_next (&psi))
+		if (vector_typed_p (gimple_phi_result (psi.phi ()))
+		    && !virtual_operand_p (gimple_phi_result (psi.phi ())))
+		  ok = crosscall_refuse ("crosscall-caller-lreg-live",
+					 host->decl, psi.phi ());
+	      for (gimple_stmt_iterator gsi = gsi_start_bb (ibb);
+		   ok && !gsi_end_p (gsi); gsi_next (&gsi))
+		if (!scan_stmt (&ictx, gsi_stmt (gsi), /*in_caller=*/true))
+		  ok = crosscall_refuse (ictx.why, host->decl, ictx.why_stmt);
+	    }
+	  pop_cfun ();
+	  if (!ok)
+	    return 0;
+	  if (ictx.saw_mop)
+	    {
+	      const char *why = nullptr;
+	      if (!mop_contract_ok_p (mask, &why) || !mop_config_ok_p (&why))
+		return prgm_refuse ("crosscall-caller-mop-slot-unproven",
+				    host->decl, nullptr);
+	    }
+	  site = host->callers->call_stmt;
+	  host = host->callers->caller;
+	}
+      if (!host->definition || !host->has_gimple_body_p ())
+	return prgm_refuse ("crosscall-caller-body-unavailable", host->decl,
+			    nullptr);
+      if (tu_facts.executable && !tu_facts.executable->contains (host))
+	return prgm_refuse ("crosscall-caller-unrooted", host->decl, nullptr);
+      for (const caller_plan &p : plans)
+	if (p.node == host)
+	  return prgm_refuse ("crosscall-caller-multi-site", host->decl,
+			      nullptr);
+      function *cfn = DECL_STRUCT_FUNCTION (host->decl);
+      if (!cfn || !cfn->cfg)
+	return prgm_refuse ("crosscall-caller-body-unavailable", host->decl,
+			    nullptr);
+      caller_plan p = { host, site, nullptr, nullptr, 0 };
+      plans.safe_push (p);
+    }
+
+  for (caller_plan &p : plans)
+    {
+      push_cfun (DECL_STRUCT_FUNCTION (p.node->decl));
+      /* Sample before the loop init, which computes dominators itself:
+	 a caller body must not be left holding them.  */
+      bool dom = dom_info_available_p (CDI_DOMINATORS);
+      loop_optimizer_init (AVOID_CFG_MODIFICATIONS);
+      if (!dom_info_available_p (CDI_DOMINATORS))
+	calculate_dominance_info (CDI_DOMINATORS);
+      bool ok = prove_caller (p.node, p.call_stmt, fn->decl, 0, mask,
+			      /*prgm_only=*/true, &p.entry, &p.lift_levels);
+      loop_optimizer_finalize ();
+      if (!dom)
+	free_dominance_info (CDI_DOMINATORS);
+      pop_cfun ();
+      if (!ok)
+	return 0;
+    }
+
+  auto_vec<contract_entry> no_contract;
+  for (caller_plan &p : plans)
+    {
+      push_cfun (DECL_STRUCT_FUNCTION (p.node->decl));
+      bool dom = dom_info_available_p (CDI_DOMINATORS);
+      loop_optimizer_init (AVOID_CFG_MODIFICATIONS);
+      class loop *loop = gimple_bb (p.call_stmt)->loop_father;
+      for (unsigned l = 0; l != p.lift_levels; ++l)
+	loop = loop_outer (loop);
+      edge entry = rvtt_loop_entry_edge (loop);
+      gcc_assert (entry);
+      commit_caller (p.node, entry, no_contract, reps);
+      rvtt_ipa_summary_invalidate (DECL_STRUCT_FUNCTION (p.node->decl));
+      loop_optimizer_finalize ();
+      if (!dom)
+	free_dominance_info (CDI_DOMINATORS);
+      pop_cfun ();
+    }
+  commit_callee (fn, no_contract, pairs);
+  rvtt_ipa_summary_invalidate (fn);
+
+  if (dump_file)
+    fprintf (dump_file,
+	     "crosscall-prgm: moved %u programming pair(s) (creg mask %#x) "
+	     "from %s into %u caller(s)\n",
+	     pairs.length (), mask,
+	     IDENTIFIER_POINTER (DECL_NAME (fn->decl)), plans.length ());
+  return mask;
 }
 
 const pass_data pass_data_rvtt_crosscall =
