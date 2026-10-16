@@ -9,7 +9,7 @@ namespace ckernel{
 using namespace sfpi;
 
 void one () {
-  SrcSView<1> src_reg;
+  ComputeSrcS src_reg;
   vFloat a = src_reg[0];
   vFloat b = src_reg[2].mode<DataLayout::F32> (2);
 
@@ -28,7 +28,7 @@ void one () {
 */
 
 void two () {
-  SrcSView<1> src_reg;
+  ComputeSrcS src_reg;
   vInt a = src_reg[0];
   vUInt b = src_reg[1];
 

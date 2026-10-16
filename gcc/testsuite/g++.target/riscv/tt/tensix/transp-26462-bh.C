@@ -106,12 +106,12 @@ void three ()
 **_ZN3tng5threeEv:
 **	SFPLOAD	L1, 0, 0, 0
 **	SFPLOAD	L3, 0, 0, 0
-**	SFPMOV	L5, L1, 2
-**	SFPMOV	L7, L3, 2
 **	SFPMOV	L0, L8, 2
 **	SFPMOV	L2, L0, 2
 **	SFPMOV	L4, L0, 2
+**	SFPMOV	L5, L1, 2
 **	SFPMOV	L6, L0, 2
+**	SFPMOV	L7, L3, 2
 **	SFPTRANSP
 **	SFPSTORE	L0, 0, 0, 0
 **	SFPSTORE	L1, 0, 0, 0
