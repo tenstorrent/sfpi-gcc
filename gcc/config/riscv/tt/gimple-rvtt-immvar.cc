@@ -168,8 +168,6 @@ emit_replacement (gimple_stmt_iterator &gsi, const rvtt_insn_data *insnd, gcall 
   return true;
 }
 
-// Expand immediate arguments, and simplify concat2/select2 chains
-
 static bool
 immvar_expand (gimple_stmt_iterator &gsi, const rvtt_insn_data *insnd, gcall *call)
 {
@@ -190,6 +188,10 @@ immvar_expand (gimple_stmt_iterator &gsi, const rvtt_insn_data *insnd, gcall *ca
 	if (!expand)
 	  {
 	    HOST_WIDE_INT i_imm = TREE_INT_CST_LOW (imm);
+	    /* A signed field sees the 32-bit value it stands for: vInt - 1
+	       arrives as 0xffffffff and is the immediate -1.  */
+	    if (is_signed)
+	      i_imm = sext_hwi (i_imm, 32);
 	    HOST_WIDE_INT bound = (1u << info.bits ()) - 1;
 	    if (is_signed)
 	      {
@@ -220,6 +222,11 @@ immvar_expand (gimple_stmt_iterator &gsi, const rvtt_insn_data *insnd, gcall *ca
     }
   return false;
 }
+
+/* rvtt_immload_shorten, phase (a): if CALL's originally variable
+   immediate is now constant, clear the stale synthesis operands; also
+   collect plain SFPLOADIs into LOADS for phase (b).  Returns true if
+   CALL changed.  */
 
 static bool
 immvar_gather (const rvtt_insn_data *insnd,
