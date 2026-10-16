@@ -856,6 +856,22 @@
 (define_constants [
   (XTT_MOP_FORM_MIN_BENEFIT 60)
 ])
+(define_automaton "rvtt_tensix")
+(define_cpu_unit "rvtt_math,rvtt_sfpu,rvtt_tdma,rvtt_cfg,rvtt_sync"
+  "rvtt_tensix")
+
+;; These are top-level issue slots, one per class and cycle.  They do not
+;; claim to model cross-TRISC wait gates or bank-valid dependencies.
+(define_insn_reservation "rvtt_issue_math" 1
+  (eq_attr "xtt_issue" "math") "rvtt_math")
+(define_insn_reservation "rvtt_issue_sfpu" 1
+  (eq_attr "xtt_issue" "sfpu") "rvtt_sfpu")
+(define_insn_reservation "rvtt_issue_tdma" 1
+  (eq_attr "xtt_issue" "tdma") "rvtt_tdma")
+(define_insn_reservation "rvtt_issue_cfg" 2
+  (eq_attr "xtt_issue" "cfg") "rvtt_cfg")
+(define_insn_reservation "rvtt_issue_sync" 1
+  (eq_attr "xtt_issue" "sync") "rvtt_sync")
 
 ;; -----------------------------------------------------------------------
 ;; Constant residency and rematerialization pricing.

@@ -67,14 +67,14 @@ void addi (unsigned val) {
 /*
 **_Z4addij:
 **	SFPLOAD	L0, 0, 0, 0
-**	zext.h	a4,a0
 **	li	a5, 1897005056	# 1:71120000
+**	zext.h	a4,a0
 **	add	a4,a4,a5
 **	lui	a5,%hi\(iptr\)
 **	addi	a5,a5,%lo\(iptr\)
 **	sw	a4, 0\(a5\)	# 1:SFPLOADI	L1, a4, 2
-**	srli	a0,a0,16
 **	li	a4, 1897398272	# 2:71180000
+**	srli	a0,a0,16
 **	add	a0,a0,a4
 **	sw	a0, 0\(a5\)	# 2:SFPLOADI	L1, a0, 8	# LV:L1
 **	SFPMOV	L2, L0, 2
