@@ -27,6 +27,7 @@ along with GCC; see the file COPYING3.  If not see
    by their mechanism.  */
 
 RVTT_REFUSAL (ALL_LANES_PROOF_MISSING, "all-lanes-proof-missing")
+RVTT_REFUSAL (ASSOCIATIVE_MATH_LICENSE_ABSENT, "associative-math-license-absent")
 RVTT_REFUSAL (CC_ENABLE_UNPROVED, "cc-enable-unproved")
 RVTT_REFUSAL (CC_POSITION_WIDENING_UNPROVEN, "cc-position-widening-unproven")
 RVTT_REFUSAL (CC_RESTORE_AMBIENT_CC_WRITE, "cc-restore-ambient-cc-write")
@@ -95,6 +96,7 @@ RVTT_REFUSAL (PEEL_TRIP_COUNT_UNPROVEN, "peel-trip-count-unproven")
 RVTT_REFUSAL (POSTCC_PHI_USE, "postcc-phi-use")
 RVTT_REFUSAL (PRGM_EXHAUSTED, "prgm-exhausted")
 RVTT_REFUSAL (QSR_UNPROVEN, "qsr-unproven")
+RVTT_REFUSAL (REASSOC_PRESSURE_BUDGET_EXCEEDED, "reassoc-pressure-budget-exceeded")
 RVTT_REFUSAL (RECORD_HOIST_COMPLETION_RUNTIME_TRIPS_UNPROVEN, "record-hoist-completion-runtime-trips-unproven")
 RVTT_REFUSAL (RECORD_HOIST_DOWNSTREAM_FALLBACK_UNPROFITABLE, "record-hoist-downstream-fallback-unprofitable")
 RVTT_REFUSAL (RECORD_HOIST_RUNTIME_TRIPS_BREAK_EVEN, "record-hoist-runtime-trips-break-even")

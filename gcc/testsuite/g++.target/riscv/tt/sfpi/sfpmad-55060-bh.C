@@ -16,9 +16,8 @@ void one () {
 /*
 **_Z3onev:
 **	# READ L0
-**	SFPLOADI	L1, 16320, 0
-**	SFPLOADI	L2, 16384, 0
-**	SFPMAD	L0, L0, L1, L2, 0
+**	SFPMULI	L0, 16320, 0
+**	SFPADDI	L0, 16384, 0
 **	# WRITE L0
 **	ret
 */

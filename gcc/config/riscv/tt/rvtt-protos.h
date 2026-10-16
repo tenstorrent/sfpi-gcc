@@ -122,6 +122,13 @@ public:
 
 };
 
+/* The reassociation license key: true only when
+   BOTH -fassociative-math (the generic opt-in to
+   value-changing FP reassociation) and -mtt-tensix-optimize-reassoc
+   are given.  Every value-changing FP reassociation site must test
+   this; integer/bitwise value-identical rebalancing tests only the
+   target flag.  */
+extern bool rvtt_reassoc_fp_licensed_p (void);
 extern bool rvtt_hll_p (rtx pat);
 extern bool rvtt_l1_load_p (rtx pat);
 extern bool rvtt_reg_load_p (rtx pat);
