@@ -1,0 +1,79 @@
+/* Refusal-name registry for the Tensix (riscv-tt) backend.
+   Copyright (C) 2026 Tenstorrent Inc.
+
+This file is part of GCC.
+
+GCC is free software; you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free
+Software Foundation; either version 3, or (at your option) any later
+version.
+
+GCC is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or
+FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+for more details.
+
+You should have received a copy of the GNU General Public License
+along with GCC; see the file COPYING3.  If not see
+<http://www.gnu.org/licenses/>.  */
+
+/* The named refusals of the Tensix optimization passes, one row per name:
+
+     RVTT_REFUSAL (ENUM_ID, "name-string")
+
+   A pass that declines a transformation records why under one of these
+   names (tt/rvtt-refuse.h); the name appears in the pass dump and in the
+   -fopt-info-missed remark.  Names are lowercase, hyphenated and prefixed
+   by their mechanism.  */
+
+RVTT_REFUSAL (ALL_LANES_PROOF_MISSING, "all-lanes-proof-missing")
+RVTT_REFUSAL (CC_ENABLE_UNPROVED, "cc-enable-unproved")
+RVTT_REFUSAL (CC_RESTORE_STORE_RACE, "cc-restore-store-race")
+RVTT_REFUSAL (CONSUMER_LANE_DISCIPLINE_UNAUDITED, "consumer-lane-discipline-unaudited")
+RVTT_REFUSAL (CONTROL_FLOW, "control-flow")
+RVTT_REFUSAL (COUNTED_CAPTURE_PEEL, "counted-capture-peel")
+RVTT_REFUSAL (COUNTED_CAPTURE_PEEL_BENEFIT, "counted-capture-peel-benefit")
+RVTT_REFUSAL (COUNTED_CAPTURE_PEEL_TRIPS_UNPROVEN, "counted-capture-peel-trips-unproven")
+RVTT_REFUSAL (CROSSCALL_CALLER_CONFIG_WORD_UNPROVEN, "crosscall-caller-config-word-unproven")
+RVTT_REFUSAL (CROSSCALL_CALLER_REPLAY_UNPROVEN, "crosscall-caller-replay-unproven")
+RVTT_REFUSAL (CROSSCALL_CALLER_WORD_UNPROVEN, "crosscall-caller-word-unproven")
+RVTT_REFUSAL (CROSSLOOP_CC_ATOM_UNPROVEN, "crossloop-cc-atom-unproven")
+RVTT_REFUSAL (CROSSLOOP_CC_PEEL_ENTRYCC_UNPROVEN, "crossloop-cc-peel-entrycc-unproven")
+RVTT_REFUSAL (CROSSROW_PAIRING_RENAME_CC_DOMAIN, "crossrow-pairing-rename-cc-domain")
+RVTT_REFUSAL (DEBUG_REGS_WRITE_UNPROVEN, "debug-regs-write-unproven")
+RVTT_REFUSAL (DEF_USE, "def-use")
+RVTT_REFUSAL (DELIVERY_SHAPE_EXEC_TERM_UNAUDITED, "delivery-shape-exec-term-unaudited")
+RVTT_REFUSAL (DERIVED_STRIDE_ABSORPTION_UNPROVEN, "derived-stride-absorption-unproven")
+RVTT_REFUSAL (DRAIN_INIT_OWNERSHIP_UNPROVEN, "drain-init-ownership-unproven")
+RVTT_REFUSAL (DUALBANK_PIN_SHAPE_UNMODELED, "dualbank-pin-shape-unmodeled")
+RVTT_REFUSAL (EFFECT_OPAQUE, "effect-opaque")
+RVTT_REFUSAL (GLOBAL_POINTER_VALUE_UNPROVEN, "global-pointer-value-unproven")
+RVTT_REFUSAL (IMM_STRIDE_NOT_ABSORBED, "imm-stride-not-absorbed")
+RVTT_REFUSAL (IMM_STRIDE_REWRITE_UNPROVEN, "imm-stride-rewrite-unproven")
+RVTT_REFUSAL (INIT_HOIST_COMMIT_DIVERGED, "init-hoist-commit-diverged")
+RVTT_REFUSAL (LAUNCH_FLATTEN_FUNCTION_BUDGET, "launch-flatten-function-budget")
+RVTT_REFUSAL (LIVE_IN, "live-in")
+RVTT_REFUSAL (LREG_FILE_EXHAUSTED, "lreg-file-exhausted")
+RVTT_REFUSAL (MADPAIR_PRGM_EXHAUSTED, "madpair-prgm-exhausted")
+RVTT_REFUSAL (MOD_WRITE_DOMINATES_ROLLED_BODY, "mod-write-dominates-rolled-body")
+RVTT_REFUSAL (MOP_CALLER_TEMPLATE_LIVE_UNPROVEN, "mop-caller-template-live-unproven")
+RVTT_REFUSAL (MOP_TEMPLATE_REPLAY_UNPROVEN, "mop-template-replay-unproven")
+RVTT_REFUSAL (MOP_TEMPLATE_SLOT_RANGE_UNPROVEN, "mop-template-slot-range-unproven")
+RVTT_REFUSAL (NOEXEC_RERECORD_DSTSTORE_COMPOSITION_UNAUDITED, "noexec-rerecord-dststore-composition-unaudited")
+RVTT_REFUSAL (PARK_PREPEEL_AMBIENT_UNPROVEN, "park-prepeel-ambient-unproven")
+RVTT_REFUSAL (PC_BUF_WRITE_UNPROVEN, "pc-buf-write-unproven")
+RVTT_REFUSAL (PEEL_TRIP_COUNT_UNPROVEN, "peel-trip-count-unproven")
+RVTT_REFUSAL (POSTCC_PHI_USE, "postcc-phi-use")
+RVTT_REFUSAL (PRGM_EXHAUSTED, "prgm-exhausted")
+RVTT_REFUSAL (RECORD_HOIST_COMPLETION_RUNTIME_TRIPS_UNPROVEN, "record-hoist-completion-runtime-trips-unproven")
+RVTT_REFUSAL (RECORD_HOIST_DOWNSTREAM_FALLBACK_UNPROFITABLE, "record-hoist-downstream-fallback-unprofitable")
+RVTT_REFUSAL (RECORD_HOIST_RUNTIME_TRIPS_BREAK_EVEN, "record-hoist-runtime-trips-break-even")
+RVTT_REFUSAL (RECORD_HOIST_VARIANT_ENCODING, "record-hoist-variant-encoding")
+RVTT_REFUSAL (REPLAY_REISSUE_LATENCY_UNPROVED, "replay-reissue-latency-unproved")
+RVTT_REFUSAL (STRIDE_NOT_ABSORBED, "stride-not-absorbed")
+RVTT_REFUSAL (TARGET_MACRO_ENCODING_UNPROVEN, "target-macro-encoding-unproven")
+RVTT_REFUSAL (TRIP_COUNT_SINGLE_TRIP, "trip-count-single-trip")
+RVTT_REFUSAL (TRIPS_UNPROVEN, "trips-unproven")
+RVTT_REFUSAL (WINDOW_PAIRING_DELAY_UNPROVEN, "window-pairing-delay-unproven")
+RVTT_REFUSAL (WINDOW_PAIRING_STRIDE_UNPROVEN, "window-pairing-stride-unproven")
+RVTT_REFUSAL (ZERO_LENGTH, "zero-length")
