@@ -1312,6 +1312,7 @@ See RS/6000 and PowerPC Options.
 -mtt-tensix-optimize-round-interleave
 -mtt-tensix-optimize-invariant-loadi
 -mtt-tensix-optimize-prgm-const
+-mtt-tensix-optimize-const-remat
 -mtt-tensix-optimize-madpair-vocabulary
 -mtt-tensix-optimize-crosscall-hoist
 -mtt-tensix-optimize-crosscall-config-prefix
@@ -32077,6 +32078,12 @@ before register allocation.
 Allocate programmable constant registers to loop-invariant SFPU
 immediates, replacing an in-loop materialization with a one-time
 @code{SFPCONFIG} programming and a constant-register read.
+
+@opindex mtt-tensix-optimize-const-remat
+@item -mtt-tensix-optimize-const-remat
+Rematerialize proven-constant SFPU values at their uses when vector
+register pressure exceeds the eight-register file, instead of keeping
+them live across the region.
 
 @opindex mtt-tensix-optimize-madpair-vocabulary
 @item -mtt-tensix-optimize-madpair-vocabulary
