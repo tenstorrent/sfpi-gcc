@@ -1,0 +1,12 @@
+// Check that face_transpose on a face row beyond Dst is rejected.
+// { dg-options "-mcpu=tt-bh-tensix -O2 -std=c++17 -I [SFPI]/include -fno-exceptions -fno-rtti" }
+
+namespace ckernel { volatile unsigned long *instrn_buffer; }
+#include <sfpi.h>
+
+void out_of_dst ()
+{
+  sfpi::face_transpose_dst_32b<1024> ();
+}
+
+// { dg-error "crosslane-facetranspose-row-unaligned" "" { target *-*-* } 0 }
