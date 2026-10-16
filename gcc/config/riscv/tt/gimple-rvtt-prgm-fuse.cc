@@ -58,6 +58,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt-effects.h"
 #include "rvtt-pressure.h"
 #include "rvtt-delivery-cost.h"
+#include "rvtt-placement.h"
 #include "rvtt-macro-ownership.h"
 #include "rvtt-mop-tables.h"
 #include "rvtt-mop-derive.h"
@@ -675,11 +676,13 @@ transform (function *fn, prgm_state *st)
     {
       unsigned prgm = 0;
       basic_block prior_bb = nullptr;
+      bool prior_at_end = false;
       for (prgm_alloc &a : allocs)
 	if (a.value == c.value)
 	  {
 	    prgm = a.reg;
 	    prior_bb = a.bb;
+	    prior_at_end = a.at_end;
 	    break;
 	  }
       if (!prgm)
@@ -702,7 +705,11 @@ transform (function *fn, prgm_state *st)
       tree vec_type = TREE_TYPE (gimple_call_lhs (c.addi));
       bool reprogram
 	= !prior_bb
-	  || !dominated_by_p (CDI_DOMINATORS, c.entry->dest, prior_bb);
+	  || (prior_at_end
+	      ? (c.loop->header == prior_bb
+		 || !dominated_by_p (CDI_DOMINATORS, c.loop->header,
+				     prior_bb))
+	      : !dominated_by_p (CDI_DOMINATORS, c.entry->dest, prior_bb));
       if (reprogram)
 	{
 	  /* Program the constant on the loop entry edge.  */
@@ -727,7 +734,8 @@ transform (function *fn, prgm_state *st)
 		gsi_insert_before (&phg, ld, GSI_SAME_STMT);
 	    }
 	  if (!prior_bb)
-	    allocs.safe_push (prgm_alloc { c.value, prgm, c.entry->dest });
+	    allocs.safe_push (prgm_alloc { c.value, prgm, preheader, false,
+					   true });
 	}
       else if (dump_file)
 	fprintf (dump_file,

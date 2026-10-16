@@ -87,6 +87,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt.h"
 #include "rvtt-pressure.h"
 #include "rvtt-delivery-cost.h"
+#include "rvtt-placement.h"
 #include "rvtt-macro-ownership.h"
 #include "rvtt-mop-tables.h"
 #include "rvtt-mop-derive.h"
@@ -724,6 +725,7 @@ public:
   {
     return TARGET_XTT_TENSIX
       && (riscv_tt_opt_prgm_const
+	  || riscv_tt_opt_const_residency
 	  || riscv_tt_opt_const_remat);
   }
 
@@ -737,13 +739,15 @@ public:
       }
     /* Compute the TU facts on the first function, while every body in
        the TU is still in gimple.  Remat does not need them.  */
-    if (riscv_tt_opt_prgm_const)
+    if (riscv_tt_opt_prgm_const || riscv_tt_opt_const_residency)
       tu_prgm_facts ();
     loop_optimizer_init (AVOID_CFG_MODIFICATIONS);
     prgm_state st;
     bool changed = false;
     if (riscv_tt_opt_prgm_const)
       changed |= transform (fn, &st);
+    if (riscv_tt_opt_const_residency)
+      changed |= residency_transform (fn, &st);
     if (riscv_tt_opt_const_remat)
       changed |= remat_transform (fn);
     loop_optimizer_finalize ();

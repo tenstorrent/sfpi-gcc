@@ -42,6 +42,8 @@ extern unsigned rvtt_pressure_capacity ();
    allocatable LREG (constant-register-file reads are excluded).  */
 extern bool rvtt_pressure_tracked_p (tree name);
 
+/* True when NAME feeds a LUT table slot, which reads a fixed LREG.  */
+extern bool rvtt_pressure_lut_slot_use_p (tree name);
 
 /* Declared per-insn CC-transient LREG charges (the RTL-only
    temporaries CC lowering materializes at STMT's position).  */
