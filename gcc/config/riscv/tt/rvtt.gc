@@ -70,22 +70,8 @@ combine () {
   res = sfpassign_lv (lv2, negated_cst);
 }
 
-// a * 1 -> a
-combine () {
-  one|OU|SA = sfpreadlreg (CREG_IDX_1);
-  res = sfpmul_lv (lv, %a, one, 0);
-  {}
-  res = sfpassign_lv (lv, a);
-}
-
-// a * -1 -> -a
-combine () {
-  { return HAVE_CREG_NEG_1; }
-  neg|OU|SA = sfpreadlreg (CREG_IDX_NEG_1);
-  res = sfpmul_lv (lv, %a, neg, 0);
-  {}
-  res = sfpmov_lv (lv, a, SFPMOV_MOD1_COMPL);
-}
+// Do not elide floating-point arithmetic against 1 or -1.  SFPMUL
+// flushes denormals and canonicalizes NaNs; assignment and SFPMOV do not.
 combine () {
   { return HAVE_CREG_NEG_1; }
   neg|OU|SA = sfpreadlreg (CREG_IDX_NEG_1);
@@ -104,14 +90,8 @@ combine () {
   res = sfpassign_lv (lv, zero);
 }
 
-// a + 0 -> a
-combine () {
-  { return !flag_signed_zeros; }
-  zero|OU|SA = sfpreadlreg (CREG_IDX_0);
-  res = sfpadd_lv (lv, %a, zero, 0);
-  {}
-  res = sfpassign_lv (lv, a);
-}
+// Likewise, !flag_signed_zeros alone does not license eliding SFPADD:
+// denormal flushing and NaN canonicalization remain observable.
 
 // These are deferred because we (a) don't want to interrupt a muladd combiner,
 // and (b) we need information about all runtime sfploadi uses before
