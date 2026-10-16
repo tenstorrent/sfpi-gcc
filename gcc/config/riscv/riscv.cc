@@ -1899,8 +1899,20 @@ riscv_float_const_rtx_index_for_fli (rtx x)
 /* Implement TARGET_LEGITIMATE_CONSTANT_P.  */
 
 static bool
-riscv_legitimate_constant_p (machine_mode mode ATTRIBUTE_UNUSED, rtx x)
+riscv_legitimate_constant_p (machine_mode mode, rtx x)
 {
+  /* The SFPU can materialise exactly one vector constant: zero, which
+     lives in a constant LREG and costs no register (movxtt32si turns it
+     into that read).  Anything else has no move form -- rvtt_sfpassign
+     accepts only a register, memory or a constant LREG -- and would
+     reach recog as an unrecognizable insn, so keep the middle end from
+     forming one.  */
+  if (TARGET_XTT_TENSIX
+      && GET_CODE (x) == CONST_VECTOR
+      && (mode == XTT32SImode || mode == XTT64SImode
+	  || mode == XTT128SImode || mode == XTT256SImode))
+    return x == CONST0_RTX (mode);
+
   /* With the post-reload usage, it seems best to just pass in FALSE
      rather than pass ALLOW_NEW_PSEUDOS through the call chain.  */
   return riscv_const_insns (x, false) > 0;
