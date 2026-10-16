@@ -601,6 +601,10 @@ mtt-tensix-optimize-dce
 Target Var(riscv_tt_opt_dce) Init(1)
 Remove dead Tensix instructions.
 
+mtt-tensix-optimize-pressure-schedule
+Target Var(riscv_tt_opt_pressure_schedule) Init(0)
+Schedule straight-line SFPU regions to reduce vector register pressure.
+
 mtt-tensix-optimize-latency-schedule
 Target Var(riscv_tt_opt_latency_schedule) Init(0)
 Fill Tensix result-latency bubbles with independent ready SFPU instructions.
@@ -746,6 +750,10 @@ Unroll counted Tensix Dst row loops by two and interleave the independent rows.
 mtt-tensix-optimize-dst-row-lookahead
 Target Var(riscv_tt_opt_dst_row_lookahead) Init(0)
 Issue each Tensix Dst row's leading loads, and the work fed only by them, in the previous row's stall slots.
+
+mtt-tensix-pressure-schedule-use-milp
+Target Var(riscv_tt_pressure_schedule_use_milp) Init(0)
+Use the exact branch-and-bound solver when the pressure-scheduling list heuristic cannot satisfy capacity.
 
 mtt-tensix-optimize-replay
 Target Var(riscv_tt_opt_replay) Init(1)
