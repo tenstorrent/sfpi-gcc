@@ -1308,6 +1308,7 @@ See RS/6000 and PowerPC Options.
 -mtt-tensix-optimize-ccmask
 -mtt-tensix-optimize-int-abs
 -mtt-tensix-optimize-int-not
+-mtt-tensix-optimize-repr-prop
 -mtt-tensix-optimize-store-fold
 -mtt-tensix-optimize-store-source-tier
 -mtt-tensix-optimize-transp-involution
@@ -32036,6 +32037,15 @@ decline.
 Select the single @code{SFPNOT} instruction for the
 all-ones-minus-@var{x} spelling of one's complement, backed by an
 exhaustive equivalence check; other subtract shapes decline.
+
+@opindex mtt-tensix-optimize-repr-prop
+@item -mtt-tensix-optimize-repr-prop
+Cancel pairs of representation-conversion instructions that are proven
+bit-level involutions (for example the Blackhole
+sign-magnitude/two's-complement cast) when they face each other across
+a web of operations that only choose bits lane-wise (copies, control
+joins, predicated merges).  Any unproven conversion or non-transparent
+intermediate operation declines.
 
 @opindex mtt-tensix-optimize-store-fold
 @item -mtt-tensix-optimize-store-fold
