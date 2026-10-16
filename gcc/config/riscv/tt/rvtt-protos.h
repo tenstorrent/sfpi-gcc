@@ -189,10 +189,31 @@ extern gimple_opt_pass *make_pass_rvtt_vif (gcc::context *ctxt);
    audited window, so that every distance refuses.  */
 extern unsigned rvtt_modwrite_drained_frontend_window (void);
 
+/* Fallback-composition check for record-hoist pricing (rvtt-cost.md
+   "RECORD-HOIST x MOD-WRITE COMPOSITION"): true when a no-exec replay
+   capture hoisted into PREHEADER would lie within the drained-frontend
+   window of a row that Dst auto-increment would otherwise turn into a
+   mod-write -- the placement that makes the group guard refuse and fall
+   back to explicit increments, which invalidates the hoist pricing's
+   identical-streams premise.  *DIST reports the refuting frontend
+   issue-word distance.  A true return only makes the hoist refuse; it never
+   enables anything.  */
+extern bool rvtt_dst_autoincr_hoist_capture_composition_p
+  (struct basic_block_def *preheader, unsigned *dist);
 
+/* Exported to the post-auto-increment window re-formation:
+   is INSN a typed Dst access the Dst auto-increment pass has retargeted
+   to the compiler-owned auto-increment scratch modifier (a CARRIED
+   access -- its execution advances the Dst RWC through the owned
+   ADDR_MOD program)?  Classification is the pass's own classify_access
+   over the static modifier operand; only the pass ever writes the
+   scratch modifier (the SFPI programming-model contract), so the
+   static operand is authoritative.  */
+extern bool rvtt_dst_autoincr_carried_access_p (rtx_insn *insn);
 
 /* RTL passes */
 class rtl_opt_pass;
+extern rtl_opt_pass *make_pass_rvtt_dst_autoincr (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_dst_ownership (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_fix_ebreak (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_fix_raw (gcc::context *ctxt);
@@ -446,7 +467,21 @@ extern const char *rvtt_crosscall_init_hoist (function *callee,
    per call, so ANY possible owned-row (or watch-row) write in the scanned
    epoch refuses.  Any refusal returns its stable name and inserts nothing.  */
 
+struct rvtt_addrmod_hoist_program
+{
+  unsigned n_setc16;
+  struct { unsigned reg; unsigned value; } setc16[4];
+  /* Refuse-only watched configuration rows: a SETC16-class write to one
+     of these anywhere in the scanned epoch refuses outright (the
+     Wormhole ADDR_MOD_SET_Base bank-select row; empty on Blackhole,
+     whose modifier field selects the physical slot directly).  */
+  unsigned n_watch;
+  unsigned watch[2];
+  unsigned lift_levels;		/* out: residency-walk levels lifted */
+};
 
+extern const char *rvtt_crosscall_addrmod_hoist (function *callee,
+						 rvtt_addrmod_hoist_program *);
 
 /* Defined in gimple-rvtt-crosscall.cc: move CALLEE's own-entry programming
    of the constant registers in REGS (residency allocations) to its proven
