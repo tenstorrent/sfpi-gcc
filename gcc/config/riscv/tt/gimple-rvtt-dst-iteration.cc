@@ -58,6 +58,7 @@ along with GCC; see the file COPYING3.  If not see
    apply: there is no loop nest, and the only shared resource is the Dst
    RWC, which GCC's dependence analysis cannot see.  */
 
+#define INCLUDE_MAP
 #define INCLUDE_UNORDERED_MAP
 #define INCLUDE_UNORDERED_SET
 #define INCLUDE_VECTOR
@@ -78,6 +79,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "gimple-range.h"
 #include "dominance.h"
 #include "cfgloop.h"
+#include "cfghooks.h"
 #include "tree-ssa-loop-niter.h"
 #include "tree-into-ssa.h"
 #include "rvtt.h"
@@ -2306,17 +2308,335 @@ enum la_kind
    For the runtime form WORD is the synthesized instruction word that
    carries the address.  */
 
+struct la_addr
+{
+  tree base = NULL_TREE;
+  tree word = NULL_TREE;
+  HOST_WIDE_INT offset = 0;
+  int view = 0;
+};
 
+struct la_stmt
+{
+  gimple *stmt;
+  la_kind kind;
+  la_addr addr;
+  int words = 0;
+  int latency = 0;
+};
 
 /* One row: its statements and the TTINCRWC closing it (null for the last,
    open row of a run).  */
 
+struct la_row
+{
+  std::vector<la_stmt> stmts;
+  gcall *separator = nullptr;
+  HOST_WIDE_INT step = 0;
+  int run = 0;
+};
+
+/* The Dst view selected by a typed access's Mod0, as in dst_access_view;
+   false for the formats with effects beyond the addressed rows.  */
+
+static bool
+la_view (unsigned HOST_WIDE_INT mod, bool store, int *view)
+{
+  switch (mod)
+    {
+    case 0:
+      *view = 0;
+      return true;
+    case 1: case 2: case 5: case 6: case 8: case 11: case 13:
+      *view = 16;
+      return true;
+    case 3: case 4: case 12:
+      *view = 32;
+      return true;
+    case 7: case 9:
+      *view = store ? 32 : 16;
+      return true;
+    case 14: case 15:
+      *view = 16;
+      return store;
+    default:
+      return false;
+    }
+}
+
+/* Parse the address of typed access CALL.  The literal form has a null
+   instruction buffer and a literal address; the runtime form names the
+   raw address and the synthesized word (raw & mask) + opcode.  */
+
+static bool
+la_parse_address (gcall *call, bool store, la_addr *out)
+{
+  unsigned addr_arg = store ? 2 : 1;
+  unsigned word_arg = addr_arg + 1;
+  unsigned mod_arg = store ? 5 : 4;
+  tree addr = gimple_call_arg (call, addr_arg);
+  tree mod = gimple_call_arg (call, mod_arg);
+  tree mode = gimple_call_arg (call, mod_arg + 1);
+  if (!tree_fits_uhwi_p (mod) || !tree_fits_shwi_p (mode)
+      || tree_to_shwi (mode) != rvtt_no_increment_address_mode ()
+      || !la_view (tree_to_uhwi (mod), store, &out->view))
+    return false;
+  if (tree_fits_shwi_p (addr) && tree_to_shwi (addr) >= 0
+      && integer_zerop (gimple_call_arg (call, 0)))
+    {
+      out->offset = tree_to_shwi (addr);
+      return true;
+    }
+  if (TREE_CODE (addr) != SSA_NAME)
+    return false;
+  tree word = gimple_call_arg (call, word_arg);
+  if (TREE_CODE (word) != SSA_NAME)
+    return false;
+  out->base = addr;
+  out->word = word;
+  out->view = 0;
+  return true;
+}
+
+/* Every SFPSTOCHRND form advances the per-lane PRNG.  */
+
+static bool
+la_prng_p (const rvtt_insn_data *insnd)
+{
+  switch (insnd->id)
+    {
+    case rvtt_insn_data::sfpstochrnd:
+    case rvtt_insn_data::sfpstochrnd_lv:
+    case rvtt_insn_data::sfpstochrnd_descale_i:
+    case rvtt_insn_data::sfpstochrnd_descale_i_lv:
+    case rvtt_insn_data::sfpstochrnd_descale_v:
+    case rvtt_insn_data::sfpstochrnd_descale_v_lv:
+      return true;
+    default:
+      return false;
+    }
+}
+
+/* Is CALL a TTINCRWC advancing only the Dst counter by a positive
+   constant?  Sets *STEP.  */
+
+static bool
+la_separator_p (gcall *call, HOST_WIDE_INT *step)
+{
+  const rvtt_insn_data *insnd = rvtt_get_insn_data (call);
+  if (!insnd || insnd->id != rvtt_insn_data::ttincrwc
+      || gimple_call_num_args (call) != 4)
+    return false;
+  for (unsigned i : { 0u, 2u, 3u })
+    if (!integer_zerop (gimple_call_arg (call, i)))
+      return false;
+  tree dst = gimple_call_arg (call, 1);
+  if (!tree_fits_shwi_p (dst) || tree_to_shwi (dst) <= 0)
+    return false;
+  *step = tree_to_shwi (dst);
+  return true;
+}
+
+/* Result latency of INSND for the issue model: the latency table, plus
+   the immediate and LUT forms of the MAD sub-unit, which share its
+   one-slot result latency (rvtt-cost.md) but are not in the table.  */
+
+static int
+la_latency (const rvtt_insn_data *insnd)
+{
+  int lat = rvtt_builtin_result_latency (insnd);
+  if (lat >= 0)
+    return lat;
+  switch (insnd->id)
+    {
+    case rvtt_insn_data::sfpaddi:
+    case rvtt_insn_data::sfpaddi_lv:
+    case rvtt_insn_data::sfpmuli:
+    case rvtt_insn_data::sfpmuli_lv:
+    case rvtt_insn_data::sfplut:
+    case rvtt_insn_data::sfplutfp32:
+    case rvtt_insn_data::sfplutfp32_3r:
+    case rvtt_insn_data::sfplutfp32_6r:
+      return 1;
+    default:
+      return 0;
+    }
+}
+
+/* The LUT words read their table from fixed LREGs and the allocator
+   places their operands around them; the pressure models here do not see
+   that, so such a word never moves.  */
+
+static bool
+la_fixed_registers_p (const rvtt_insn_data *insnd)
+{
+  switch (insnd->id)
+    {
+    case rvtt_insn_data::sfplut:
+    case rvtt_insn_data::sfplutfp32:
+    case rvtt_insn_data::sfplutfp32_3r:
+    case rvtt_insn_data::sfplutfp32_6r:
+      return true;
+    default:
+      return false;
+    }
+}
+
+/* Classify STMT.  Returns false for a statement no row may contain.  */
+
+static bool
+la_classify (gimple *stmt, la_stmt *out)
+{
+  out->stmt = stmt;
+  out->words = 0;
+  out->latency = 0;
+  out->addr = la_addr ();
+  if (gassign *as = dyn_cast <gassign *> (stmt))
+    {
+      tree lhs = gimple_assign_lhs (as);
+      if (TREE_CODE (lhs) != SSA_NAME || VECTOR_TYPE_P (TREE_TYPE (lhs))
+	  || gimple_vuse (as))
+	return false;
+      out->kind = LA_SCALAR;
+      return true;
+    }
+  gcall *call = dyn_cast <gcall *> (stmt);
+  const rvtt_insn_data *insnd = call ? rvtt_get_insn_data (call) : nullptr;
+  if (!insnd)
+    return false;
+  int words = rvtt_replay_unroll_row_words (insnd);
+  out->words = words < 0 ? 1 : words;
+  out->latency = la_latency (insnd);
+  if (insnd->id == rvtt_insn_data::sfpload
+      || insnd->id == rvtt_insn_data::sfpstore)
+    {
+      bool store = insnd->id == rvtt_insn_data::sfpstore;
+      out->kind = store ? LA_STORE : LA_LOAD;
+      if (!la_parse_address (call, store, &out->addr))
+	out->kind = LA_BARRIER;
+      return true;
+    }
+  if (insnd->id == rvtt_insn_data::synth_opcode)
+    {
+      out->kind = LA_SCALAR;
+      out->words = 0;
+      return true;
+    }
+  if (rvtt_cc_writer_id_p (insnd->id) || insnd->sets_cc (call)
+      || !rvtt_dst_inert_compute_id_p (insnd->id))
+    {
+      out->kind = LA_BARRIER;
+      return true;
+    }
+  if (insnd->id == rvtt_insn_data::sfpreadlreg)
+    {
+      tree lhs = gimple_call_lhs (call);
+      if (!lhs || rvtt_pressure_tracked_p (lhs))
+	{
+	  out->kind = LA_BARRIER;
+	  return true;
+	}
+    }
+  out->kind = la_prng_p (insnd) ? LA_PRNG : LA_PURE;
+  return true;
+}
+
+/* Are a load at LOAD and a store at STORE, both seen in the same counter
+   frame, disjoint?  Opposite column parity (address bit 1) separates
+   them in either Dst view; two literal addresses of one known view in
+   different four-row groups are separate too.  */
+
+static bool
+la_disjoint_p (const la_addr &load, const la_addr &store)
+{
+  HOST_WIDE_INT delta = load.offset - store.offset;
+  bool exact = load.base == store.base;
+  if (!exact)
+    {
+      for (tree base : { load.base, store.base })
+	if (base && (TREE_CODE (base) != SSA_NAME
+		     || !INTEGRAL_TYPE_P (TREE_TYPE (base))
+		     || wi::extract_uhwi (get_nonzero_bits (base), 0, 2) != 0))
+	  return false;
+    }
+  if (((delta % 4) + 4) % 4 == 2)
+    return true;
+  return exact && !load.base && load.view && load.view == store.view
+	 && (delta <= -4 || delta >= 4);
+}
+
+/* Does raising the literal or runtime address A by STEP keep it in the
+   encoding?  A runtime address is masked into the word, so the raise
+   must not carry out of the masked field: its known-zero low bits must
+   cover STEP.  */
+
+static bool
+la_raise_ok_p (const la_addr &a, gcall *call, HOST_WIDE_INT step)
+{
+  const rvtt_insn_data *insnd = rvtt_get_insn_data (call);
+  unsigned bits = dst_address_bits (insnd);
+  if (!a.base)
+    return a.offset + step <= (HOST_WIDE_INT_1 << bits) - 1;
+  if (a.offset)
+    return false;
+  if (!INTEGRAL_TYPE_P (TREE_TYPE (a.base)))
+    return false;
+  wide_int nz = get_nonzero_bits (a.base);
+  unsigned zeros = wi::ctz (nz);
+  if (nz == 0)
+    zeros = bits;
+  return zeros < HOST_BITS_PER_WIDE_INT && step < (HOST_WIDE_INT_1 << zeros)
+	 && zeros < bits;
+}
 
 /* One statement of a modeled sequence.  The pipelined loop is modeled as
    consecutive trips, so a value is keyed by its SSA name and the trip it
    belongs to: the statement defines DEF_TAG's copy and reads USE_TAG's,
    except that reads of PREFIX_DEFS take PREFIX_TAG's copy.  */
 
+struct la_item
+{
+  const la_stmt *st;
+  int def_tag;
+  int use_tag;
+  const std::unordered_set<tree> *prefix_defs;
+  int prefix_tag;
+};
+
+/* Issue-cycle model of SEQ, as in row_interleave::cycles: a word issues
+   once its vector operands are ready and makes its result ready LATENCY
+   slots after its last word.  */
+
+static int
+la_cycles (const std::vector<la_item> &seq)
+{
+  std::map<std::pair<tree, int>, int> ready;
+  int t = 0;
+  for (const la_item &it : seq)
+    {
+      gcall *call = dyn_cast <gcall *> (it.st->stmt);
+      if (!call)
+	continue;
+      int start = t;
+      for (unsigned i = 0; i != gimple_call_num_args (call); ++i)
+	{
+	  tree arg = gimple_call_arg (call, i);
+	  if (TREE_CODE (arg) != SSA_NAME)
+	    continue;
+	  int tag = it.use_tag;
+	  if (it.prefix_defs && it.prefix_defs->count (arg))
+	    tag = it.prefix_tag;
+	  auto r = ready.find ({ arg, tag });
+	  if (r != ready.end ())
+	    start = MAX (start, r->second);
+	}
+      t = start + it.st->words;
+      if (tree lhs = gimple_call_lhs (call))
+	ready[{ lhs, it.def_tag }]
+	  = it.st->words ? t + it.st->latency : start;
+    }
+  return t;
+}
 
 class row_lookahead
 {
@@ -3299,3 +3619,12 @@ public:
 };
 
 } /* anonymous namespace */
+
+/* Pass factory for rvtt_dst_row_lookahead, referenced from
+   rvtt-passes.def.  */
+
+gimple_opt_pass *
+make_pass_rvtt_dst_row_lookahead (gcc::context *ctxt)
+{
+  return new pass_rvtt_dst_row_lookahead (ctxt);
+}

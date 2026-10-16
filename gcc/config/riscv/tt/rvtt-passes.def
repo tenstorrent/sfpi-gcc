@@ -96,6 +96,10 @@ INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_attrib);
    formed the final SFPMAD chains, before the fused-group interleave and
    before LREG allocation sees the doubled live set.  */
 INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_dst_row_interleave);
+/* Issue each row's leading loads and the work fed only by them in the
+   previous row's stall slots; after the row-pair interleave, which owns
+   the loops it can pair.  */
+INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_dst_row_lookahead);
 /* Interleave phase-2 fused Dst groups after RVTT lowering has exposed final
    opcode dependencies, but before RTL expansion and LREG allocation.  */
 INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_dst_interleave);
