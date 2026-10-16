@@ -629,9 +629,21 @@ mtt-tensix-optimize-invariant-loadi
 Target Var(riscv_tt_opt_invariant_loadi) Init(0)
 Hoist loop-invariant Tensix immediate-vector materializations before register allocation.
 
+mtt-tensix-optimize-reassoc
+Target Var(riscv_tt_opt_reassoc) Init(0)
+Allow value-changing floating-point reassociation in the Tensix SFPU passes; requires -fassociative-math to take effect.
+
+mtt-tensix-optimize-reassoc-mad-restructure
+Target Var(riscv_tt_opt_reassoc_mad_restructure) Init(0)
+Allow fusing separate multiply and add instructions into one fused multiply-add; requires -fassociative-math to take effect.
+
 mtt-tensix-optimize-cc-region-general
 Target Var(riscv_tt_opt_cc_region_general) Init(0)
 Accept any CC layout that is proven equivalent to a recognized shape.
+
+mtt-tensix-optimize-setexp-fold
+Target Var(riscv_tt_opt_setexp_fold) Init(1)
+Fold a biased Tensix SFPU exponent extract feeding SFPSETEXP into the exponent-copy addressing mode.
 
 mtt-tensix-macro-planner-replay
 Target Var(riscv_tt_macro_planner_replay) Init(0)

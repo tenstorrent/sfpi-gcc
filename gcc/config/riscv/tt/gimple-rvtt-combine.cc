@@ -1,4 +1,4 @@
-/* Pass to issue diagnostics for SFPU operations
+/* Pass to combine SFPU intrinsic sequences via generated patterns
    Copyright (C) 2022-2026 Tenstorrent Inc.
    Originated by Paul Keller (pkeller@tenstorrent.com).
    Rewritten by Nathan Sidwell (nsidwell@tenstorrent.com, nathan@acm.org).
@@ -22,6 +22,8 @@ along with GCC; see the file COPYING3.  If not see
 #define INCLUDE_ALGORITHM
 #define INCLUDE_MAP
 #define INCLUDE_SET
+#define INCLUDE_UNORDERED_MAP
+#define INCLUDE_UNORDERED_SET
 #define INCLUDE_VECTOR
 #include "config.h"
 #include "system.h"
@@ -41,38 +43,44 @@ along with GCC; see the file COPYING3.  If not see
 #include "diagnostic-core.h"
 #include "rvtt.h"
 #include <deque>
+#include "rvtt-pressure.h"
+#include "rvtt-refuse.h"
+#include "rvtt-delivery-cost.h"
 #include <unordered_map>
 #include <unordered_set>
 
-// A pattern-driven combiner.  We iterate until no changes happen -- this
-// allows combine patterns to enable other patterns, or overlap and be executed
-// in some order. The patterns are described in a GimpleCombine (.gc) file,
-// processed by genrvtt-combine whose output is #included above. Each combiner
-// is a list of patterns to match, a list of replacements to substitute, a set of
-// bespoke predicates & init functions and a few extraneous flags.
+/* A pattern-driven combiner over SFPU intrinsic calls.
 
-// The matcher is pretty simplistic -- it doesn't try and minimize searches
-// beyond recording possible starting points.  We do order the checks to do the
-// simplest ones first and only do the complicated ones when those all
-// pass. The starting point for a match is the last pattern in a sequence, and
-// once found we search backwards to calls producing inputs to that pattern.
+   The patterns are described in a GimpleCombine (.gc) file (rvtt.gc),
+   processed by genrvtt-combine, whose generated tables are #included
+   below.  Each combiner rule is a list of call shapes to match, a list
+   of replacement templates, optional bespoke predicates and init/fini
+   hooks, and flags.  Rules can be gated (per architecture or per
+   option); a fired rule is identified in the dump by its stable tag.
 
-// A single pass finds all the combines that match, and then throws out matches
-// that overlap the end(s) of other combines (the intention is that the
-// later-matching combination iwll match (part-of) the output on the next pass. If two combines
-// overlap differently, the longer combine is selected.
+   Matching: the matcher records possible starting points and orders its
+   checks cheapest-first.  A match is anchored at the last pattern of a
+   sequence and searched backwards through the calls producing that
+   pattern's inputs.  Iteration continues until no rule fires, so one
+   rule's output can enable another's match.
 
-// We (currently) have a simplistic model of CC-regions -- every CC-setting
-// builtin separates two regions. Regions are also separated by basic
-// blocks. All non-SetAnywhere patterns are treated as SameRegion. It would be
-// nicer to have better information, but that's a task for another day.
+   Overlap resolution: rules anchored on one statement are tried in
+   priority (.gc line) order and the first match is applied
+   immediately; a rule whose input was consumed by an earlier rewrite
+   simply re-matches against the rewritten output on a later
+   iteration.
+
+   CC regions are modelled coarsely: every CC-setting builtin separates
+   two regions, and block boundaries separate regions too.  All
+   non-SetAnywhere patterns are treated as SameRegion.  */
 
 namespace {
   constexpr unsigned args_hwm = 10;
 
   // pattern possibilities
   enum class Flags : uint8_t {
-    OtherUses = 1 << 0, // Other uses are permissable (do not delete)
+    OtherUses = 1 << 0, // Other uses are permissible (do not delete)
+    MaybeUnused = 1 << 1, // There might be no uses of this (it could be null)
     SetAnywhere = 1 << 2, // It may be set anywhere, (not in the same live region)
     SameRegion = 1 << 3, // It must be in the same CC region
   };
@@ -113,13 +121,15 @@ namespace {
     uint8_t pat_var_hwm;
     uint8_t rep_var_hwm;
 
-    uint8_t replace_mask; // patterns whos output is a replacement output
-    uint8_t rep_use_mask; // patterns whos output is used in a replacement
+    uint8_t replace_mask; // patterns whose output is a replacement output
+    uint8_t rep_use_mask; // patterns whose output is used in a replacement
     int8_t commute_bits;  // number of bits in the commute mask
 
     unsigned lineno; // line in rvtt.gc file
     bool is_deferred;
     Tags label;
+    const char *tag; // the rule's gate ident ("" when ungated), printed in
+		     // the dump as a stable rule tag
 
     bool (*enable_hook) (); // combiner-specific emablement
     int (*pred_hook) (gcall *[], tree [], unsigned); // combiner-specific checks
@@ -152,6 +162,158 @@ static bool combiner_enable_WH_BH () { return TARGET_XTT_TENSIX_WH_BH; }
 static bool combiner_enable_BH () { return TARGET_XTT_TENSIX_BH; }
 static bool combiner_enable_BH_QSR () { return TARGET_XTT_TENSIX_BH_QSR; }
 static bool combiner_enable_QSR () { return TARGET_XTT_TENSIX_QSR; }
+static bool combiner_enable_SETEXP_FOLD () { return riscv_tt_opt_setexp_fold; }
+/* The reassociation opt-in: -fassociative-math (the generic opt-in to
+   value-changing FP reassociation) together with the default-off
+   -mtt-tensix-optimize-reassoc.  Gates the multi-use mul+add->mad fusion
+   pattern; with either flag absent the pattern is disabled and code
+   generation is unchanged.  */
+static bool combiner_enable_REASSOC_FP () { return rvtt_reassoc_fp_licensed_p (); }
+
+/* Used by the multi-use mad-fuse pattern in rvtt.gc (defined below the
+   generated include).  */
+static bool has_other_use (tree var, gcall *allowed[], unsigned num_allowed);
+
+/* Mad restructure (-mtt-tensix-optimize-reassoc-mad-restructure).
+
+   The immediate-fold rules in rvtt.gc (loadi+mul -> SFPMULI, loadi+add ->
+   SFPADDI) run in preference to mul,add->mad because absorbing the SFPLOADI
+   frees a register.  The folded pair is two dependent MAD-subunit
+   roundings, round (round (x*imm) + c), where SFPMAD would give one,
+   round (x*imm + c); in a recurrence-bound loop the extra hop lies on the
+   critical path.
+
+   With this option and -fassociative-math, the two immediate-fold guards
+   below veto the fold when the pair would instead fuse through the mad
+   rule, and the combiner then forms the SFPMAD.  The word count is
+   unchanged, one dependent hop is removed, and the loadi's live range is
+   extended (so pressure is checked).
+
+   -fassociative-math is required because the value changes: one rounding
+   instead of two, and SFPMULI's embedded "+0" flushes a -0 product to +0
+   while SFPMAD does not.  Without it every candidate is refused by
+   name.  */
+
+static bool
+madr_licensed_pair_p (gcall *mul_call, gcall *add_call, const char *arm)
+{
+  basic_block bb = gimple_bb (mul_call);
+  if (!bb || gimple_bb (add_call) != bb)
+    return false;
+
+  /* The pair must be exactly what the a*b+c rule consumes: the mul is a
+     feed shape of the mad rule per the generated tables, and it dies into
+     the add.  */
+  if (!rvtt_combine_will_fuse_p (mul_call, rvtt_insn_data::sfpmul_lv,
+				 rvtt_insn_data::sfpadd_lv))
+    return false;
+  gcall *allowed[1] = { add_call };
+  if (has_other_use (gimple_call_lhs (mul_call), allowed, 1))
+    return false;
+
+  /* Without -fassociative-math refuse by name; the fold then proceeds
+     unchanged.  */
+  if (!flag_associative_math)
+    {
+      rvtt_refuse (RVTT_REF_ASSOCIATIVE_MATH_LICENSE_ABSENT, dump_file,
+		   "reassoc: refusing mad restructure (%s immediate-fold "
+		   "kept, bb %d) (associative-math-license-absent: re-"
+		   "offering the pair to the singly-rounded SFPMAD contract "
+		   "rule is value-changing; needs -fassociative-math AND "
+		   "-mtt-tensix-optimize-reassoc-mad-restructure)\n",
+		   arm, bb->index);
+      return false;
+    }
+
+  /* Suppressing the fold adds exactly one live value at the points
+     strictly between the pair members and leaves the live sets unchanged
+     elsewhere, so the budget is the peak over (product, add] plus one;
+     LREGs cannot be spilled.  The whole-block peak would refuse every
+     candidate in a block that reaches capacity anywhere else.  */
+  unsigned peak = rvtt_pressure_window_peak (mul_call, add_call);
+  if (peak + 1 > rvtt_pressure_capacity ())
+    {
+      rvtt_refuse (RVTT_REF_REASSOC_PRESSURE_BUDGET_EXCEEDED, dump_file,
+		   "reassoc: refusing mad restructure (%s immediate-fold "
+		   "kept, bb %d) (reassoc-pressure-budget-exceeded: "
+		   "conservative pair-window peak %u + the kept loadi live "
+		   "range > 8 LREGs)\n",
+		   arm, bb->index, peak);
+      return false;
+    }
+
+  if (dump_file)
+    fprintf (dump_file,
+	     "reassoc: licensed mad restructure (%s immediate-fold "
+	     "suppressed, bb %d): pair re-offered to the single-use "
+	     "mul+add->SFPMAD contract rule -- double->single rounding on "
+	     "the fused product, one dependent MAD-subunit result-latency "
+	     "hop removed, word-neutral (loadi kept: %+" PRId64
+	     " centislots, mul+add fused: %+" PRId64 " centislots) "
+	     "(flag_associative_math && "
+	     "-mtt-tensix-optimize-reassoc-mad-restructure)\n",
+	     arm, bb->index,
+	     rvtt_dcost_words_to_centislots
+	       (1, rvtt_delivery_cost::PLANE_RISC_PUSH),
+	     rvtt_dcost_words_to_centislots
+	       (-1, rvtt_delivery_cost::PLANE_RISC_PUSH));
+  return true;
+}
+
+/* Guard hook for the loadi+mul -> SFPMULI fold: MUL_CALL is the matched
+   product statement.  Return true to veto the fold, because the pair fuses
+   through the mad rule later in this iteration.  */
+
+static bool
+madr_suppress_mul_fold_p (gcall *mul_call)
+{
+  if (riscv_tt_opt_reassoc_mad_restructure <= 0)
+    return false;
+  tree lhs = gimple_call_lhs (mul_call);
+  if (!lhs || TREE_CODE (lhs) != SSA_NAME)
+    return false;
+  use_operand_p use_p;
+  gimple *use_stmt;
+  if (!single_imm_use (lhs, &use_p, &use_stmt))
+    return false;
+  gcall *add_call = dyn_cast<gcall *> (use_stmt);
+  if (!add_call)
+    return false;
+  const rvtt_insn_data *insnd = rvtt_get_insn_data (add_call);
+  if (!insnd
+      || (insnd->id != rvtt_insn_data::sfpadd
+	  && insnd->id != rvtt_insn_data::sfpadd_lv))
+    return false;
+  /* The product must feed a VALUE operand, not an _lv lane victim.  */
+  unsigned base = insnd->id == rvtt_insn_data::sfpadd_lv ? 1 : 0;
+  if (gimple_call_arg (add_call, base) != lhs
+      && gimple_call_arg (add_call, base + 1) != lhs)
+    return false;
+  return madr_licensed_pair_p (mul_call, add_call, "muli");
+}
+
+/* Guard hook for the loadi+add -> SFPADDI fold: OTHER is the add's
+   non-immediate operand, ADD_CALL the matched add.  Return true to veto
+   the fold, because the pair fuses through the mad rule with the loadi as
+   the mad's addend.  */
+
+static bool
+madr_suppress_add_fold_p (tree other, gcall *add_call)
+{
+  if (riscv_tt_opt_reassoc_mad_restructure <= 0)
+    return false;
+  if (TREE_CODE (other) != SSA_NAME)
+    return false;
+  gcall *mul_call = dyn_cast<gcall *> (SSA_NAME_DEF_STMT (other));
+  if (!mul_call)
+    return false;
+  const rvtt_insn_data *insnd = rvtt_get_insn_data (mul_call);
+  if (!insnd
+      || (insnd->id != rvtt_insn_data::sfpmul
+	  && insnd->id != rvtt_insn_data::sfpmul_lv))
+    return false;
+  return madr_licensed_pair_p (mul_call, add_call, "addi");
+}
 
 #define OU unsigned (Flags::OtherUses)
 #define SA unsigned (Flags::SetAnywhere)
@@ -177,6 +339,66 @@ Shape::is_match (const rvtt_insn_data *insnd) const
   return false;
 }
 
+/* Return true if DEF matches the FEED_ID interior pattern (one whose LHS
+   feeds a later pattern) of some combiner rule whose final pattern id is
+   CONSUMER_ID, including the rule's constant operands.  Passes that need to
+   know what the combiner will fuse ask here instead of duplicating rvtt.gc.
+   Enable gates and rule predicates are not consulted, so the answer is the
+   union over targets and options; placement, use-count and CC checks are
+   left to the caller.  */
+
+bool
+rvtt_combine_will_fuse_p (gcall *def, rvtt_insn_data::insn_id feed_id,
+			  rvtt_insn_data::insn_id consumer_id)
+{
+  const rvtt_insn_data *insnd = rvtt_get_insn_data (def);
+  if (!insnd)
+    return false;
+
+  for (const Combiner &comb : combiners)
+    {
+      if (comb.shapes[comb.pats_hwm - 1].id != consumer_id)
+	continue;
+      for (unsigned ix = 0; ix + 1 < comb.pats_hwm; ix++)
+	{
+	  const Shape &pat = comb.shapes[ix];
+	  if (pat.id != feed_id || !pat.used_by_mask
+	      || !pat.is_match (insnd))
+	    continue;
+
+	  bool ok = true;
+	  for (unsigned argno = 0; ok && argno != pat.num_args; argno++)
+	    {
+	      /* Seat the arguments as Combiner::match_arg does.  */
+	      unsigned lv_delta = 0;
+	      if (insnd->id == pat.id)
+		;
+	      else if ((int) argno == insnd->live_arg ())
+		continue;	/* the absent lane-carrier slot */
+	      else if (argno)
+		lv_delta = 1;
+
+	      if (pat.args[argno].is_var)
+		continue;
+	      if (argno - lv_delta >= gimple_call_num_args (def))
+		ok = false;
+	      else
+		{
+		  tree arg = gimple_call_arg (def, argno - lv_delta);
+		  ok = (TREE_CODE (arg) == INTEGER_CST
+			&& TREE_INT_CST_LOW (arg) == pat.args[argno].val);
+		}
+	    }
+	  if (ok)
+	    return true;
+	}
+    }
+  return false;
+}
+
+/* Is there a CC-setting intrinsic strictly between FIRST and LAST
+   (same block)?  The coarse region test of the file comment.  */
+
 static bool
 has_cc_insn_between (gcall *first, gcall *last)
 {
@@ -187,6 +409,9 @@ has_cc_insn_between (gcall *first, gcall *last)
 
   return false;
 }
+
+/* Does VAR have any non-debug use outside the NUM_ALLOWED statements
+   of ALLOWED (the matched calls)?  */
 
 static bool
 has_other_use (tree var, gcall *allowed[], unsigned num_allowed)
@@ -208,6 +433,9 @@ has_other_use (tree var, gcall *allowed[], unsigned num_allowed)
     }
   return false;
 }
+
+/* Is VAR referenced by a statement strictly between BEGIN and END that
+   is not one of the NUM_ALLOWED statements of ALLOWED?  */
 
 static bool
 has_use_between (tree var, gcall *begin, gcall *end,
@@ -530,6 +758,18 @@ Combiner::match_check (matched_data &matched, match_masks const &masks) const
 int
 Combiner::match (gcall *call, const rvtt_insn_data *insnd, matched_data &matched) const
 {
+  /* Evaluate enablement per call rather than when the dispatch table is
+     built: a hook can read per-function state (combiner_enable_REASSOC_FP
+     reads flag_associative_math, which can differ between functions),
+     while the table is built once per compilation.
+
+     It must happen before match_shape, because a rule disabled on this
+     target may name an arity this target's builtin does not have (the QSR
+     sfpsetcc patterns pass a third argument that BH's sfpsetcc lacks), and
+     walking those arguments would read past the end of the call.  */
+  if (enable_hook && !enable_hook ())
+    return 0;
+
   for (; matched.commute_mask < (1u << commute_bits);
        matched.commute_mask++)
     {
@@ -555,7 +795,10 @@ Combiner::match (gcall *call, const rvtt_insn_data *insnd, matched_data &matched
 
       if (dump_file)
 	{
-	  fprintf (dump_file, "Found pattern %u:\n", lineno);
+	  /* The gate tag, unlike the line number, identifies the rule
+	     stably; dump scans should key on it, e.g. "(SETEXP_FOLD)".  */
+	  fprintf (dump_file, "Found pattern %u%s%s%s:\n", lineno,
+		   *tag ? " (" : "", tag, *tag ? ")" : "");
 	  for (unsigned ix = 0; ix != pats_hwm; ix++)
 	    {
 	      char c = 'K';
@@ -716,6 +959,10 @@ static std::vector<const Combiner *> combiner_map;
 // This maps builtin ids to points in the combiner_map array.
 static std::map<rvtt_insn_data::insn_id, std::vector<const Combiner *>::iterator> starting_ids;
 
+/* Build the dispatch tables once: instantiate every enabled combiner
+   rule, keyed (and prioritized by .gc line order) on the insn id of
+   its anchor (last) pattern -- under both the _lv and non-_lv id.  */
+
 static void
 init ()
 {
@@ -728,11 +975,15 @@ init ()
   };
   std::map<unsigned, const Combiner *> tmp;
 
+  /* Register every rule regardless of its enable_hook, which is
+     per-function and evaluated in Combiner::match.  */
   for (auto &combiner : combiners)
-    if (!combiner.enable_hook || combiner.enable_hook ())
       {
+	/* Only check the arities of rules this target enables: the QSR
+	   sfpsetcc patterns carry three arguments against BH's two.  */
+	bool admitted = !combiner.enable_hook || combiner.enable_hook ();
 	// Check all patterns and replacements have decls and correct number of arguments
-	for (unsigned ix = combiner.reps_hwm; ix--;) {
+	for (unsigned ix = admitted ? combiner.reps_hwm : 0; ix--;) {
 	  auto const *insnd = rvtt_get_insn_data (combiner.shapes[ix].id);
 	  gcc_checking_assert (insnd->decl && insnd->get_non_live ()->decl);
 	  gcc_checking_assert (insnd->num_args () == combiner.shapes[ix].num_args);
@@ -882,6 +1133,12 @@ Deferred::postprocess_muli_addi ()
     }
 }
 
+/* Run one matching iteration over BB: at each statement try the rules
+   anchored on its insn id in priority order, applying the first that
+   matches and rescanning from the replacement.  Also records
+   SYNTH_OPCODEs for the dynamic muli/addi bookkeeping.  Returns true
+   if anything changed.  */
+
 static bool
 combine_block (Deferred &deferred, basic_block bb)
 {
@@ -946,7 +1203,7 @@ const pass_data pass_data_rvtt_combine =
 {
   GIMPLE_PASS, /* type */
   "rvtt_combine", /* name */
-  OPTGROUP_NONE, /* optinfo_flags */
+  OPTGROUP_OTHER, /* optinfo_flags */
   TV_NONE, /* tv_id */
   PROP_ssa, /* properties_required */
   0, /* properties_provided */
@@ -1069,6 +1326,7 @@ public:
       }
 
     deferred.postprocess_muli_addi ();
+
 
     return changed ? TODO_update_ssa : 0;
   }
