@@ -539,6 +539,160 @@ rvtt_lreg_marker (rtx_insn *insn, uint32_t *lreg_mask)
   return true;
 }
 
+/* Recording-epoch closure proof.  See rvtt-effects.h for the contract.
+   Word accounting uses the machine description's typed instruction
+   lengths -- the delivered-word count of a recognized Tensix instruction
+   is a typed fact independent of its effect audit -- while anything
+   without a typed length (asm, calls, unrecognized insns) refuses.  */
+
+xtt_replay_epoch
+rvtt_replay_epoch_close (rtx_insn *capture, unsigned payload_words)
+{
+  xtt_replay_epoch epoch = { xtt_replay_epoch::CROSSES_BLOCK,
+			     nullptr, nullptr, 0 };
+  basic_block bb = BLOCK_FOR_INSN (capture);
+  rtx_insn *stop = NEXT_INSN (BB_END (bb));
+  unsigned remaining = payload_words;
+
+  if (!remaining)
+    {
+      /* A zero-length capture records nothing; trivially closed.  */
+      epoch.status = xtt_replay_epoch::CLOSED;
+      epoch.close_at = capture;
+      return epoch;
+    }
+
+  for (rtx_insn *cur = NEXT_INSN (capture); cur && cur != stop && remaining;
+       cur = NEXT_INSN (cur))
+    {
+      if (!NONDEBUG_INSN_P (cur))
+	continue;
+      if (CALL_P (cur))
+	{
+	  epoch.status = xtt_replay_epoch::OPAQUE_PAYLOAD;
+	  epoch.blocker = cur;
+	  return epoch;
+	}
+      if (GET_CODE (cur) != INSN)
+	/* A jump delivers no Tensix word; the block boundary itself is
+	   handled by the loop bound.  */
+	continue;
+      rtx pattern = PATTERN (cur);
+      if (GET_CODE (pattern) == USE || GET_CODE (pattern) == CLOBBER)
+	continue;
+      if (asm_noperands (pattern) >= 0 || recog_memoized (cur) < 0)
+	{
+	  /* Canonical raw `.ttinsn' constant words (the TTI_ macro shape of
+	     the LLK library, rvtt-raw-boundary extraction) deliver exactly
+	     one 32-bit instruction word each -- a typed-length fact of the
+	     canonical shape itself, independent of the word's effect audit.
+	     The recording swallows payload words without executing them, so
+	     only the word count matters here; the one exception
+	     is a raw word of the architectural replay-control opcode (the
+	     REPLAY encoding of the target's encoding table), which stays
+	     refused so the typed OWNER_DURING_CAPTURE refusal cannot be
+	     bypassed by spelling the REPLAY instruction as a raw word.
+	     Multi-word or otherwise non-canonical asm keeps the refusing
+	     default.  */
+	  uint32_t raw_word;
+	  if (asm_noperands (pattern) >= 0
+	      && rvtt_raw_ttinsn_word (cur, &raw_word)
+	      && !rvtt_raw_replay_owner_word_p (raw_word))
+	    {
+	      remaining -= 1;
+	      epoch.close_at = cur;
+	      continue;
+	    }
+	  epoch.status = xtt_replay_epoch::OPAQUE_PAYLOAD;
+	  epoch.blocker = cur;
+	  return epoch;
+	}
+      if (get_attr_type (cur) != TYPE_TENSIX)
+	/* Scalar RISC work pushes no Tensix word.  */
+	continue;
+      if (get_attr_xtt_replay (cur) == XTT_REPLAY_OWNER)
+	{
+	  epoch.status = xtt_replay_epoch::OWNER_DURING_CAPTURE;
+	  epoch.blocker = cur;
+	  return epoch;
+	}
+      unsigned words = get_attr_length (cur) / 4;
+      if (!words)
+	continue;
+      if (words > remaining)
+	{
+	  /* The declared capture length would split this instruction's
+	     words: broken user code; refuse.  */
+	  epoch.status = xtt_replay_epoch::OPAQUE_PAYLOAD;
+	  epoch.blocker = cur;
+	  return epoch;
+	}
+      xtt_effect_set e = rvtt_insn_effects (cur);
+      xtt_multiresult_group group;
+      if (rvtt_multiresult_group (cur, e, &group))
+	epoch.multiresult_members++;
+      remaining -= words;
+      epoch.close_at = cur;
+    }
+
+  if (remaining || !epoch.close_at)
+    {
+      epoch.status = xtt_replay_epoch::CROSSES_BLOCK;
+      return epoch;
+    }
+
+  /* Extend the closure across immediately following zero-length LREG
+     interface markers: they carry the payload's fixed-LREG protocol
+     (companion-group integrity) and deliver no word.  */
+  for (rtx_insn *cur = NEXT_INSN (epoch.close_at); cur && cur != stop;
+       cur = NEXT_INSN (cur))
+    {
+      if (!NONDEBUG_INSN_P (cur))
+	continue;
+      uint32_t mask;
+      if (!rvtt_lreg_marker (cur, &mask))
+	break;
+      epoch.close_at = cur;
+    }
+
+  epoch.status = xtt_replay_epoch::CLOSED;
+  return epoch;
+}
+
+/* Function-sticky shadow-coupling possibility.  See rvtt-effects.h.  */
+
+bool
+rvtt_shadow_coupling_possible (function *fn)
+{
+  basic_block bb;
+  FOR_EACH_BB_FN (bb, fn)
+    {
+      rtx_insn *insn;
+      FOR_BB_INSNS (bb, insn)
+	{
+	  if (!NONDEBUG_INSN_P (insn) || GET_CODE (insn) != INSN)
+	    continue;
+	  if (recog_memoized (insn) < 0)
+	    continue;
+	  if (get_attr_type (insn) != TYPE_TENSIX)
+	    continue;
+	  xtt_effect_set e = rvtt_insn_effects (insn);
+	  if (e.opaque)
+	    continue;
+	  /* The indexed SFPSWAP only exists to move indices along with
+	     values, so it implies the coupling is on.  SFPTRANSP writes
+	     both banks whether or not it is, and implies nothing.  */
+	  xtt_multiresult_group group;
+	  if (rvtt_multiresult_group (insn, e, &group)
+	      && recog_memoized (insn) != CODE_FOR_rvtt_sfptransp_int)
+	    return true;
+	  if (e.config_dests_written & (1u << 15))
+	    return true;
+	}
+    }
+  return false;
+}
+
 /* Debug/self-check annotation of the effect set, emitted as an assembler
    comment after each Tensix or asm instruction under
    -mtt-tensix-dump-effects.  DejaGnu golden tests pin these lines.  */
@@ -609,6 +763,96 @@ rvtt_dump_insn_effects (FILE *file, rtx_insn *insn)
 	   ? "yes" : "no");
 }
 
+/* ---- Planner emission records: launch issue-plane effects (see the
+   contract block in rvtt-effects.h).  The store keeps no GC pointers:
+   each record holds the emitted insn's UID, the emitting function's
+   DECL_UID, the encoded launch word, and the launch VD hard register,
+   and a lookup succeeds only when every one of them still matches the
+   recognized SFPLOADMACRO pattern instance.  The planner pass
+   resets the store at entry for every function it visits; functions the
+   planner never visits can hold no records (the store starts empty and
+   only the planner writes it).  */
+
+struct planner_launch_record
+{
+  int uid;
+  unsigned fn_uid;
+  uint64_t word;
+  unsigned vd_regno;
+  xtt_effect_set fx;
+};
+
+static vec<planner_launch_record> planner_launch_records;
+
+/* Drop every planner emission record.  The planner pass calls this at
+   entry for each function it visits, so records never leak across
+   functions.  */
+
+void
+rvtt_planner_launch_effects_reset ()
+{
+  planner_launch_records.truncate (0);
+}
+
+/* Record the effect interface FX the planner derived for the launch
+   INSN it just emitted, keyed by INSN's UID, the current function's
+   DECL_UID, the encoded launch WORD, and the launch VD_REGNO -- the
+   integrity facts rvtt_planner_launch_effects re-verifies at
+   lookup.  */
+
+void
+rvtt_planner_launch_effects_record (rtx_insn *insn, uint64_t word,
+				    unsigned vd_regno,
+				    const xtt_effect_set &fx)
+{
+  gcc_assert (insn && cfun);
+  planner_launch_record rec;
+  rec.uid = INSN_UID (insn);
+  rec.fn_uid = DECL_UID (cfun->decl);
+  rec.word = word;
+  rec.vd_regno = vd_regno;
+  rec.fx = fx;
+  planner_launch_records.safe_push (rec);
+}
+
+/* Look up the planner emission record for INSN (see rvtt-effects.h
+   and the block comment above).  Succeeds only for a recognized
+   SFPLOADMACRO pattern whose UID, containing function, encoded launch
+   word, and VD hard register all still match a record written at
+   emission; *OUT then receives the recorded effect set.  Otherwise
+   return false.  */
+
+bool
+rvtt_planner_launch_effects (rtx_insn *insn, xtt_effect_set *out)
+{
+  if (planner_launch_records.is_empty ()
+      || !insn || !NONDEBUG_INSN_P (insn) || !cfun)
+    return false;
+  int code = recog_memoized (insn);
+  if (code != CODE_FOR_rvtt_sfploadmacro_int
+      && code != CODE_FOR_rvtt_sfploadmacro_hidden_int)
+    return false;
+  unsigned fn_uid = DECL_UID (cfun->decl);
+  int uid = INSN_UID (insn);
+  for (const planner_launch_record &rec : planner_launch_records)
+    {
+      if (rec.uid != uid || rec.fn_uid != fn_uid)
+	continue;
+      /* The recognized instance must still carry the recorded launch word
+	 and VD.  */
+      extract_insn (insn);
+      if (recog_data.n_operands < 7
+	  || !REG_P (recog_data.operand[0])
+	  || !HARD_REGISTER_P (recog_data.operand[0])
+	  || REGNO (recog_data.operand[0]) != rec.vd_regno
+	  || !CONST_INT_P (recog_data.operand[6])
+	  || UINTVAL (recog_data.operand[6]) != rec.word)
+	return false;
+      *out = rec.fx;
+      return true;
+    }
+  return false;
+}
 
 /* ------------------------------------------------------------------ */
 /* Typed-effect attribute queries.
