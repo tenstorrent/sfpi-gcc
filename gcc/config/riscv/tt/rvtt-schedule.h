@@ -1,0 +1,210 @@
+/* Canonical scheduling model for Tensix SFPU regions.
+   Copyright (C) 2026 Tenstorrent Inc.
+
+This file is part of GCC.
+
+GCC is free software; you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free
+Software Foundation; either version 3, or (at your option) any later
+version.
+
+GCC is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or
+FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+for more details.
+
+You should have received a copy of the GNU General Public License
+along with GCC; see the file COPYING3.  If not see
+<http://www.gnu.org/licenses/>.  */
+
+#ifndef GCC_RVTT_SCHEDULE_H
+#define GCC_RVTT_SCHEDULE_H
+
+#include <cstdint>
+#include <utility>
+#include <vector>
+
+#include "rvtt-delivery-cost-core.h"
+
+/* This representation intentionally contains no GIMPLE or RTL pointers.
+   Stable integer IDs make solver output independently checkable and allow
+   the same small model to be exercised outside a compiler pass.  */
+struct rvtt_sched_value
+{
+  /* -1 denotes a value live on entry to the region.  */
+  int def = -1;
+  std::vector<unsigned> uses;
+  bool live_out = false;
+};
+
+struct rvtt_sched_problem
+{
+  unsigned operation_count = 0;
+  unsigned register_capacity = 8;
+  std::vector<std::pair<unsigned, unsigned>> dependencies;
+  std::vector<rvtt_sched_value> values;
+  /* Preferred issue slot for each operation.  The deterministic list
+     scheduler supplies a known-good incumbent when it found one; the
+     solver may deviate from it to satisfy capacity.  */
+  std::vector<unsigned> preferred_slot;
+  bool preferred_feasible = false;
+};
+
+enum class rvtt_solver_status
+{
+  unavailable,
+  capped,
+  optimal,
+  infeasible,
+  nonoptimal,
+  invalid_model,
+  internal_error
+};
+
+struct rvtt_solver_solution
+{
+  rvtt_solver_status status = rvtt_solver_status::unavailable;
+  std::vector<unsigned> order;
+  unsigned solver_nodes = 0;
+  const char *diagnostic = "none";
+};
+
+/* The built-in exact branch-and-bound solver (rvtt-bnb.cc).  Always
+   compiled; dependency-free; deterministic.  */
+extern rvtt_solver_solution
+rvtt_bnb_schedule (const rvtt_sched_problem &);
+
+/* Solver entry points for passes.  */
+extern bool rvtt_solver_available ();
+extern rvtt_solver_solution
+rvtt_solve_schedule (const rvtt_sched_problem &);
+
+extern const char *rvtt_solver_status_name (rvtt_solver_status);
+
+/* ---------------------------------------------------------------------
+   Delivery-shape arbitration model.
+
+   One proven-trip counted single-block SFPU row loop; the solver picks the
+   unroll factor U over the whole candidate lattice by exact minimization
+   of modeled cycles.  For each U it first predicts which delivery shape
+   the downstream machinery will produce (the replay former groups textual
+   copies into re-record + launches; the replay pass's counted-loop
+   re-record hoist may lift the record out of the loop), using that hoist
+   decision's own model (rvtt-cost.md constants), then prices the
+   predicted shape with the delivery table below.
+
+   Like the scheduling model above, this representation carries no GIMPLE
+   pointers, so it can be checked outside a compiler pass.  All costs are
+   centislots (hundredths of a Tensix issue slot), int64.
+
+   Delivery table (calibrated on hardware):
+     - an issue-bound leg costs ~1.0 cycle per delivered word (WORD = 100 cs;
+       partial dual-issue of scalar loop-control pairs is not credited);
+     - a replay-delivered leg costs its payload slots at 1.0 each, plus its
+       record passes at (1 + slots) words (record delivery is exposed),
+       plus a per-launch boundary cost of 1.3..1.8 cycles on serial-chain
+       windows (exposed re-issue; the interval is carried, not averaged);
+       its loop-control delivery is hidden under the execution backlog;
+     - execution of a row costs its slot count: the mad-family latency-1
+       stalls are absorbed (exec == slots), while the SFPSWAP next-slot
+       acceptance stall is architectural and is charged one extra slot per
+       occurrence.
+
+   A non-rolled shape is requested only when its modeled benefit clears
+   the threshold at both ends of the boundary interval; rows containing a
+   producer with no known latency refuse by name upstream
+   (delivery-shape-exec-term-unaudited).  */
+
+struct rvtt_delivery_problem
+{
+  unsigned trips = 0;		/* proven constant trip count, >= 2 */
+  unsigned row_words = 0;	/* estimated delivered words per row */
+  unsigned row_exec = 0;	/* slots per row incl. acceptance stalls
+				   (latency-1 stalls absorbed) */
+  unsigned ds_exec = 0;		/* slots per row as the downstream RTL
+				   hoist estimates them (latency-1
+				   producers charged one slot) */
+  unsigned barrier_words = 0;	/* replay-barrier words per row (typed Dst
+				   steps: TTINCRWC/TTDSTFACE are
+				   xtt_replay=barrier, so a window can never
+				   span them) */
+  unsigned control_words = 2;	/* delivered loop-control words/trip */
+  unsigned max_factor = 8;	/* XTT_REPLAY_LOOP_UNROLL_FACTOR */
+  unsigned min_sequence = 4;	/* replay former's MIN_SEQUENCE */
+  unsigned capture_slots = 32;	/* replay buffer slots */
+  unsigned max_words = 256;	/* XTT_REPLAY_LOOP_UNROLL_MAX_WORDS */
+  /* Delivery rates calibrated on hardware (centislots).  */
+  unsigned word = 100;		/* XTT_DELIVERY_WORD_X100 */
+  unsigned boundary_lb = 130;	/* XTT_DELIVERY_BOUNDARY_{LB,UB}_X100 */
+  unsigned boundary_ub = 180;
+  unsigned min_benefit = 60;	/* XTT_DELIVERY_SHAPE_MIN_BENEFIT */
+  /* Downstream cost table (rvtt-cost.md, carried through the
+     delivery-cost API; used only to predict whether the replay hoist
+     lifts a record out of the loop).  It prices with the same
+     rvtt-timing.h hoist forms as the RTL hoist, so the two cannot
+     disagree.  The defaults repeat the rvtt-cost.md values for
+     standalone checking.  */
+  rvtt_delivery_cost::cost_table dcost = { 123, 100, 70, 300 };
+  int ds_hoist_min_benefit = 60;
+  bool hoist_enabled = false;	/* replay hoist enabled */
+  bool record_hoist_enabled = false; /* re-record hoist enabled */
+  bool completion_guard = false; /* drain-inclusive completion pricing of the
+				    hoisted record */
+  bool autoincr_enabled = false; /* Dst auto-increment enabled: launch
+				    separators absorbed, so the predicted
+				    saturation run counts the contiguous
+				    siblings */
+  /* Once-per-entry Dst-auto-increment setup charge of a window shape
+     (rvtt-cost.md XTT_AUTOINCR_SETUP_COST_X100 via the delivery-cost
+     module).  It is 0: the SETC16 setup program is absorbed in the
+     once-per-group record delivery.  */
+  int64_t autoincr_setup_x100 = 0;
+};
+
+enum class rvtt_delivery_mode
+{
+  rolled_explicit,	/* U = 1, per-trip RISC-pushed words */
+  rolled_hoisted,	/* U = 1, record-once + one launch per trip */
+  group_rerecord,	/* U >= 2, re-record + launches per group */
+  group_hoisted,	/* U >= 2, record-once + launches per group */
+  unrolled_explicit	/* U >= 2, straight-pushed copies: the row's
+			   replay-safe span is below the former's MIN_SEQUENCE
+			   (or above the buffer), so the copies deliver
+			   explicitly and the request buys only loop-control
+			   amortization (the profitable shape for tiny rows) */
+};
+
+struct rvtt_delivery_candidate
+{
+  unsigned factor = 1;		/* U; 1 = rolled */
+  unsigned payload_rows = 0;	/* R (window shapes only) */
+  rvtt_delivery_mode mode = rvtt_delivery_mode::rolled_explicit;
+  int64_t cost_blb = 0;		/* total modeled cs at boundary_lb */
+  int64_t cost_bub = 0;		/* total modeled cs at boundary_ub */
+};
+
+struct rvtt_delivery_solution
+{
+  rvtt_solver_status status = rvtt_solver_status::unavailable;
+  const char *diagnostic = "none";
+  rvtt_delivery_candidate selected;
+  /* The U = 1 reference (its predicted materialization).  */
+  rvtt_delivery_candidate rolled;
+  /* Benefit of the selected candidate versus the rolled reference,
+     minimized over the boundary interval; the request criterion.  */
+  int64_t benefit_min = 0;
+  /* True when no (U, R) window fits the former's minimum sequence and
+     the capture-slot budget.  */
+  bool window_infeasible = false;
+  unsigned solver_nodes = 0;
+  /* Every enumerated candidate, for the dump.  */
+  std::vector<rvtt_delivery_candidate> candidates;
+};
+
+/* Exact delivery-shape solver (rvtt-bnb.cc): deterministic exhaustive
+   branch-and-bound over the candidate lattice with an admissible
+   incumbent prune; always compiled; no external dependency.  */
+extern rvtt_delivery_solution
+rvtt_bnb_delivery_shape (const rvtt_delivery_problem &);
+
+#endif /* GCC_RVTT_SCHEDULE_H */
