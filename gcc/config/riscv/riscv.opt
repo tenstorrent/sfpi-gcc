@@ -919,9 +919,23 @@ mtt-tensix-optimize-setexp-fold
 Target Var(riscv_tt_opt_setexp_fold) Init(1)
 Fold a biased Tensix SFPU exponent extract feeding SFPSETEXP into the exponent-copy addressing mode.
 
+; Testing knob: corrupts only the verifier-local copy, so that a test
+; can check that a verification mismatch refuses formation.
+mtt-tensix-macro-planner-verify-corrupt-template
+Target Undocumented Var(riscv_tt_macro_planner_verify_corrupt_template) Init(0)
+Testing only: corrupt the verifier's local copy of one template word to check that a mismatch refuses formation.
+
 mtt-tensix-macro-planner-replay
 Target Var(riscv_tt_macro_planner_replay) Init(0)
 Admit planner-formed SFPLOADMACRO launches into automatic replay recording.
+
+mtt-tensix-macro-planner-residency
+Target Var(riscv_tt_macro_planner_residency) Init(0)
+Extend proven macro descriptor programming outward across enclosing loops and share identical descriptor programs.
+
+mtt-tensix-macro-ims
+Target Var(riscv_tt_macro_ims) Init(0)
+Retry refused macro-calendar proposals with reduced hosted sets and arbitrate formation against the replay alternative.
 
 mtt-tensix-dump-effects
 Target Var(riscv_tt_dump_effects) Init(0)
