@@ -1320,6 +1320,7 @@ See RS/6000 and PowerPC Options.
 -mtt-tensix-optimize-madpair-vocabulary
 -mtt-tensix-optimize-hoisted-prgm-reuse
 -mtt-tensix-optimize-loop-prgm-reclaim
+-mtt-tensix-optimize-repeat-residency
 -mtt-tensix-optimize-crosscall-prgm
 -mtt-tensix-optimize-priced-placement
 -mtt-tensix-optimize-crosscall-hoist
@@ -32163,6 +32164,16 @@ programming point, provided the window from the programming to the last
 in-loop read is free of calls and assembler statements that could
 interpose.  Effective only with
 @option{-mtt-tensix-optimize-const-residency}.
+
+@opindex mtt-tensix-optimize-repeat-residency
+@item -mtt-tensix-optimize-repeat-residency
+Program a constant that a loop-free function without calls or assembler
+statements materializes several times into a programmable constant
+register once, at the function entry, and read it at every
+materialization.  This covers row loops that are fully unrolled before
+the residency pass sees them.  Materializations under a partial lane
+mask are replaced only when their consumers are lane-local.  Effective
+only with @option{-mtt-tensix-optimize-const-residency}.
 
 @opindex mtt-tensix-optimize-crosscall-prgm
 @item -mtt-tensix-optimize-crosscall-prgm
