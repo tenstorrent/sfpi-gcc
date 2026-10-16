@@ -67,6 +67,8 @@ RVTT_OBJS := rvtt.o \
 	gimple-rvtt-invariant.o \
 	gimple-rvtt-live.o \
 	gimple-rvtt-lut-select.o \
+	gimple-rvtt-crosscall.o \
+	gimple-rvtt-crosscall-words.o \
 	gimple-rvtt-replay-unroll.o \
 	rvtt-lut-tables.o \
 	gimple-rvtt-noval.o \
@@ -86,6 +88,7 @@ RVTT_OBJS := rvtt.o \
 	rvtt-cc-region.o \
 	rvtt-delivery-cost.o \
 	rvtt-timing.o \
+	rvtt-ipa-summary.o \
 
 OBJS += $(RVTT_OBJS)
 
