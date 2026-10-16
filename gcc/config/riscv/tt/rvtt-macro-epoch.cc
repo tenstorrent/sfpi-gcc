@@ -543,6 +543,26 @@ epoch_volatile_check (epoch_resolver *ctx, rtx_insn *insn, rtx pat,
   return nullptr;
 }
 
+/* The raw-LREG effect marker is compiler-only metadata (length 0, no
+   issued word) describing the raw instruction before it, which the
+   walks classify on its own.  A marker that declares no LREG read and
+   no LREG write adds nothing to that instruction's effects, so under
+   -mtt-tensix-optimize-epoch-metadata it is stepped over instead of
+   refusing as an unaudited Tensix instruction.  */
+
+static bool
+epoch_inert_lreg_marker_p (rtx_insn *insn)
+{
+  if (!riscv_tt_opt_epoch_metadata
+      || recog_memoized (insn) != CODE_FOR_rvtt_sfprawlreg_effect)
+    return false;
+  rtx pat = PATTERN (insn);
+  return GET_CODE (pat) == UNSPEC_VOLATILE
+    && XVECLEN (pat, 0) == 2
+    && XVECEXP (pat, 0, 0) == const0_rtx
+    && XVECEXP (pat, 0, 1) == const0_rtx;
+}
+
 /* Classify one instruction of the enclosing loop.  Returns null when
    provably inert for the hoisted state.  */
 
@@ -557,6 +577,8 @@ epoch_insn_check (epoch_resolver *ctx, rtx_insn *insn,
     return nullptr;
   if (CALL_P (insn))
     return macro_epoch_refusal_unproven;
+  if (epoch_inert_lreg_marker_p (insn))
+    return nullptr;
   if (GET_CODE (PATTERN (insn)) == USE || GET_CODE (PATTERN (insn)) == CLOBBER)
     return nullptr;
   if (asm_noperands (PATTERN (insn)) >= 0)
@@ -701,6 +723,8 @@ resid_insn_check (epoch_resolver *ctx, rtx_insn *insn,
     return nullptr;
   if (CALL_P (insn))
     return macro_epoch_refusal_unproven;
+  if (epoch_inert_lreg_marker_p (insn))
+    return nullptr;
   if (GET_CODE (PATTERN (insn)) == USE || GET_CODE (PATTERN (insn)) == CLOBBER)
     return nullptr;
   if (asm_noperands (PATTERN (insn)) >= 0)
