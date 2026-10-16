@@ -649,6 +649,10 @@ mtt-tensix-optimize-priced-placement
 Target Var(riscv_tt_opt_priced_placement) Init(0)
 Arbitrate the competing invariant-constant placement tiers through one priced authority.
 
+mtt-tensix-optimize-transp-involution
+Target Var(riscv_tt_opt_transp_involution) Init(0)
+Fuse an SFPTRANSP with the full-bank loads defining its operands into one companion-preserving bundle.
+
 mtt-tensix-optimize-crosslane
 Target Var(riscv_tt_opt_crosslane) Init(0)
 Optimize recognized cross-lane instruction sequences through their proven permutation algebra.
