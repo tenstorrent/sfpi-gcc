@@ -39,7 +39,24 @@ extern int64_t rvtt_dcost_words_to_centislots (int64_t words,
 /* SFPLOADI issue-word count of materializing the 32-bit value W.  */
 extern unsigned rvtt_dcost_loadi_issue_words (uint32_t w);
 
+/* The replay-hoist minimum modeled benefit: the
+   -mtt-tensix-replay-hoist-min-benefit= override when given, else
+   XTT_REPLAY_HOIST_MIN_BENEFIT.  */
+extern int64_t rvtt_dcost_replay_hoist_min_benefit (void);
+
+/* Replay window pricing (the core's replay_pricing over
+   rvtt_dcost_table).  */
+extern rvtt_delivery_cost::replay_price
+rvtt_dcost_replay_pricing (rvtt_delivery_cost::replay_shape shape,
+			   int64_t trips, int64_t words, int64_t exec_slots,
+			   int64_t launch_run, bool drain_contract,
+			   int64_t min_benefit);
+
 #ifdef RTX_CODE
+/* Word-exact replay comparator: PATTERN equality of two delivered
+   Tensix words under the scratch-operand tolerance (compiler GPR scratch
+   and synthesized-word MEMs do not reach the delivered word).  */
+extern bool rvtt_dcost_replay_word_equal_p (rtx_insn *a, rtx_insn *b);
 #endif
 
 #endif /* GCC_RVTT_DELIVERY_COST_H */

@@ -286,6 +286,66 @@ extern bool rvtt_lreg_marker (rtx_insn *, uint32_t *lreg_mask);
    multiresult_members counts the payload's multi-result
    instructions.  */
 
+struct xtt_replay_epoch {
+  enum status_t { CLOSED, OPAQUE_PAYLOAD, CROSSES_BLOCK,
+		  OWNER_DURING_CAPTURE } status;
+  rtx_insn *close_at;
+  rtx_insn *blocker;
+  unsigned multiresult_members;
+};
+
+extern xtt_replay_epoch rvtt_replay_epoch_close (rtx_insn *capture,
+						 unsigned payload_words);
+
+/* Whether index-tracking shadow coupling (LaneConfig.ENABLE_DEST_INDEX,
+   written through SFPCONFIG destination 15) may be enabled anywhere in
+   FN: true when FN contains a typed indexed SFPSWAP or any typed
+   configuration write that can reach destination 15.  SFPTRANSP does
+   not depend on the coupling and does not count.  The reset state is
+   disabled; an enable through a raw TTI word is not visible here.
+   There is no disabling transition, so one enable covers the whole
+   function.  */
+extern bool rvtt_shadow_coupling_possible (function *);
+
+/* Effects of SFPLOADMACRO launches emitted by the macro planner.
+
+   A launch's effects depend on its macro descriptor, so
+   rvtt_insn_effects treats every SFPLOADMACRO as opaque.  When the
+   planner emits a launch it knows the descriptor, and records the
+   launch's effects here, keyed by the insn.  The records are used by
+   exec_interlocked_slots (rtl-rvtt-replay.cc) for pricing only;
+   rvtt_insn_effects itself is unchanged.  All facts come from the
+   descriptor:
+
+     - lreg_read = 0: SFPLOADMACRO issue never waits on operands.
+       SFPLOADMACRO.md schedules each sub-unit event for a fixed later
+       cycle (issue + 1 + delay) with no issue-time register rule.
+       Every register an event reads is the launch's own VD, a
+       resident constant set up by the planner, or a schedule member
+       whose readiness the schedule's delays already guarantee.
+     - lreg_write = launch VD | the descriptor's template writes: the
+       complete LREG write set of the launch.
+     - result_latency = the launch's settle distance: the latest event
+       completion after the launch's own slot, from the descriptor's
+       SequenceBits delays and the subunit result latencies, so a
+       consumer of a launch-written register waits for the macro to
+       finish.
+     - Writes cover all lanes: records exist only for schedules with
+       no CC writes, which run with all lanes enabled, so a later full
+       overwrite of a launch-written register is not a dependence.
+       The pricing code may drop the write-side dependence edge.
+
+   No record is made for CC-writing schedules or undecodable sequence
+   bytes.  Lookup fails unless the insn is a recognized SFPLOADMACRO
+   pattern whose INSN_UID, function, launch word and VD all match the
+   record.  User-written launches (raw `.ttinsn' words) are asm and
+   never have records.  */
+
+extern void rvtt_planner_launch_effects_reset ();
+extern void rvtt_planner_launch_effects_record (rtx_insn *, uint64_t word,
+						unsigned vd_regno,
+						const xtt_effect_set &);
+extern bool rvtt_planner_launch_effects (rtx_insn *, xtt_effect_set *);
 
 /* CC lane-state lattice shared by the Dst dataflow passes: all lanes
    enabled, some other known state, or unknown, with a bounded stack of
