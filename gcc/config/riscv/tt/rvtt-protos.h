@@ -275,6 +275,7 @@ extern bool rvtt_lreg_rename_chain (struct basic_block_def *bb,
 				    enum rvtt_lreg_rename_pricing pricing
 				      = RVTT_RENAME_PRICE_TEMPORAL);
 extern void rvtt_lreg_rename_web_undo (const rvtt_lreg_rename_web &web);
+extern rtl_opt_pass *make_pass_rvtt_lp_alloc (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_spill_diag (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_macro_planner (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_replay (gcc::context *ctxt);
