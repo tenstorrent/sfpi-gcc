@@ -112,5 +112,6 @@ extern bool constant_chain_value_p (const remat_chain &c, unsigned *value);
 extern bool single_issue_constant_image_p (gcall *load, unsigned *value);
 extern bool staged_config_value (tree staged, unsigned *value);
 extern bool remat_consumer_audited_p (gimple *stmt, tree name);
+extern bool remat_transform (function *fn);
 
 #endif /* GCC_GIMPLE_RVTT_PRGM_INT_H */

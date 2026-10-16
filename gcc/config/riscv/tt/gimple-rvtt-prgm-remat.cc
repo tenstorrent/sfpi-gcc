@@ -395,3 +395,202 @@ remat_consumer_audited_p (gimple *stmt, tree name)
       return false;
     }
 }
+
+/* Clone CHAIN immediately before the statement at *GSI and return the
+   fresh SSA value.  Scalar arguments are reused (their definitions
+   dominate the chain's, which dominates every use); virtual operands
+   are renumbered by the pass-level TODO_update_ssa_only_virtuals.  */
+
+static tree
+clone_chain_before (const remat_chain &c, gimple_stmt_iterator *gsi)
+{
+  tree link_value = NULL_TREE;
+  if (c.root != c.tail)
+    {
+      gcall *root = as_a <gcall *> (gimple_copy (c.root));
+      tree fresh = make_ssa_name (TREE_TYPE (gimple_call_lhs (c.root)));
+      gimple_call_set_lhs (root, fresh);
+      gimple_set_vdef (root, NULL_TREE);
+      gimple_set_vuse (root, NULL_TREE);
+      gsi_insert_before (gsi, root, GSI_SAME_STMT);
+      link_value = fresh;
+    }
+  gcall *tail = as_a <gcall *> (gimple_copy (c.tail));
+  tree fresh = make_ssa_name (TREE_TYPE (gimple_call_lhs (c.tail)));
+  gimple_call_set_lhs (tail, fresh);
+  gimple_set_vdef (tail, NULL_TREE);
+  gimple_set_vuse (tail, NULL_TREE);
+  if (link_value)
+    gimple_call_set_arg (tail, 1, link_value);
+  gsi_insert_before (gsi, tail, GSI_SAME_STMT);
+  return fresh;
+}
+
+/* Delete an original chain whose value has been fully rematerialized.  */
+
+static void
+delete_chain (const remat_chain &c)
+{
+  reset_debug_uses (c.tail);
+  if (c.root != c.tail)
+    reset_debug_uses (c.root);
+  gimple_stmt_iterator tgsi = gsi_for_stmt (c.tail);
+  unlink_stmt_vdef (c.tail);
+  gsi_remove (&tgsi, true);
+  release_defs (c.tail);
+  if (c.root != c.tail)
+    {
+      gimple_stmt_iterator rgsi = gsi_for_stmt (c.root);
+      unlink_stmt_vdef (c.root);
+      gsi_remove (&rgsi, true);
+      release_defs (c.root);
+    }
+}
+
+/* Rematerialize loadi-chain values at their admissible uses in FN while
+   the pressure model exceeds the LREG file.  Only values live through an
+   over-pressure block are considered, in SSA version order.  Return true
+   if anything changed.  */
+
+bool
+remat_transform (function *fn)
+{
+  const unsigned capacity = rvtt_pressure_capacity ();
+  rvtt_pressure_model model;
+  rvtt_pressure_compute (fn, capacity, &model);
+  if (model.peak <= capacity)
+    {
+      if (dump_file)
+	fprintf (dump_file,
+		 "const-remat: pressure %u within the %u-LREG file; "
+		 "nothing to do\n", model.peak, capacity);
+      return false;
+    }
+  if (dump_file)
+    fprintf (dump_file, "const-remat: pressure %u exceeds the %u-LREG "
+	     "file\n", model.peak, capacity);
+
+  /* Candidates in SSA version order.  A two-issue chain's first-load
+     name is itself a well-formed single-issue chain; it is the tail's
+     private link, not a candidate (deleting the tail's chain releases
+     it).  */
+  auto_vec<tree> names;
+  hash_set<tree> chain_links;
+  unsigned version;
+  tree name;
+  FOR_EACH_SSA_NAME (version, name, fn)
+    {
+      remat_chain chain;
+      if (!rvtt_pressure_tracked_p (name) || !remat_chain_p (name, &chain))
+	continue;
+      if (chain.root != chain.tail)
+	chain_links.add (gimple_call_lhs (chain.root));
+      /* Live through (or defined in) an over-pressure block?  */
+      bool relevant = bitmap_bit_p (model.over_bbs,
+				    gimple_bb (chain.tail)->index);
+      if (!relevant)
+	{
+	  bitmap_iterator bi;
+	  unsigned bbi;
+	  EXECUTE_IF_SET_IN_BITMAP (model.over_bbs, 0, bbi, bi)
+	    if (bbi < model.live_in.length ()
+		&& model.live_in[bbi]
+		&& bitmap_bit_p (model.live_in[bbi], SSA_NAME_VERSION (name)))
+	      {
+		relevant = true;
+		break;
+	      }
+	}
+      if (!relevant)
+	continue;
+      names.safe_push (name);
+    }
+
+  bool changed = false;
+  unsigned last_peak = model.peak;
+  for (tree cand : names)
+    {
+      /* Re-validate: an earlier candidate's chain deletion may have
+	 released this name (its version is then in the free list and
+	 its definition statement cleared).  */
+      if (TREE_CODE (cand) != SSA_NAME
+	  || SSA_NAME_IN_FREE_LIST (cand)
+	  || !SSA_NAME_DEF_STMT (cand)
+	  || chain_links.contains (cand))
+	continue;
+      remat_chain chain;
+      if (!remat_chain_p (cand, &chain))
+	continue;
+
+      /* Gather the real uses first: cloning mutates the use list.  */
+      auto_vec<gimple *> uses;
+      bool kept_any = false;
+      imm_use_iterator iter;
+      gimple *use_stmt;
+      FOR_EACH_IMM_USE_STMT (use_stmt, iter, cand)
+	{
+	  if (is_gimple_debug (use_stmt))
+	    continue;
+	  if (gimple_code (use_stmt) == GIMPLE_PHI)
+	    {
+	      rvtt_refuse (RVTT_REF_PHI_USE_UNCLONABLE, dump_file,
+			   "const-remat: use refused (phi-use-unclonable): ");
+	      if (dump_file)
+		print_gimple_stmt (dump_file, use_stmt, 0);
+	      kept_any = true;
+	      continue;
+	    }
+	  if (!remat_consumer_audited_p (use_stmt, cand))
+	    {
+	      rvtt_refuse (RVTT_REF_CONSUMER_LANE_DISCIPLINE_UNAUDITED,
+			   dump_file,
+			   "const-remat: use refused "
+			   "(consumer-lane-discipline-unaudited): ");
+	      if (dump_file)
+		print_gimple_stmt (dump_file, use_stmt, 0);
+	      kept_any = true;
+	      continue;
+	    }
+	  uses.safe_push (use_stmt);
+	}
+      if (uses.is_empty ())
+	continue;
+
+      for (gimple *u : uses)
+	{
+	  gimple_stmt_iterator ugsi = gsi_for_stmt (u);
+	  tree fresh = clone_chain_before (chain, &ugsi);
+	  gcall *ucall = as_a <gcall *> (u);
+	  for (unsigned ix = 0; ix != gimple_call_num_args (ucall); ++ix)
+	    if (gimple_call_arg (ucall, ix) == cand)
+	      gimple_call_set_arg (ucall, ix, fresh);
+	  update_stmt (u);
+	  if (dump_file)
+	    {
+	      fprintf (dump_file, "const-remat: rematerialized %s before ",
+		       print_generic_expr_to_str (cand));
+	      print_gimple_stmt (dump_file, u, 0);
+	    }
+	}
+      if (!kept_any)
+	delete_chain (chain);
+      changed = true;
+
+      rvtt_pressure_model next;
+      rvtt_pressure_compute (fn, capacity, &next);
+      last_peak = next.peak;
+      if (next.peak <= capacity)
+	break;
+    }
+
+  if (dump_file)
+    {
+      if (last_peak > capacity)
+	fprintf (dump_file, "const-remat: residual pressure %u exceeds %u "
+		 "(lreg-pressure-unresolvable)\n", last_peak, capacity);
+      else
+	fprintf (dump_file, "const-remat: pressure resolved: %u -> %u\n",
+		 model.peak, last_peak);
+    }
+  return changed;
+}

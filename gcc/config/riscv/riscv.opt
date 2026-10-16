@@ -605,6 +605,10 @@ mtt-tensix-optimize-prgm-const
 Target Var(riscv_tt_opt_prgm_const) Init(0)
 Allocate programmable constant registers to loop-invariant SFPU immediates.
 
+mtt-tensix-optimize-const-remat
+Target Var(riscv_tt_opt_const_remat) Init(0)
+Rematerialize proven-constant SFPU values at their uses when vector register pressure exceeds the register file.
+
 mtt-tensix-optimize-opaque-replay-record
 Target Var(riscv_tt_opt_opaque_replay_record) Init(0)
 Analyze raw replay record regions for the constant-register freedom proof instead of treating the whole translation unit as opaque.
