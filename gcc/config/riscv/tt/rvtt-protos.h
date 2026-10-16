@@ -228,6 +228,47 @@ extern rtl_opt_pass *make_pass_rvtt_fix_ebreak (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_fix_raw (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_fix_rocc (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_hll (gcc::context *ctxt);
+extern rtl_opt_pass *make_pass_rvtt_lreg_rename_chains (gcc::context *ctxt);
+/* Register rename service: rename the du-chain of DEF_INSN's single-LREG
+   definition inside its block onto TARGET_LREG (L index; -1 = lowest
+   proven-free), with a full legality proof and post-commit structural
+   re-verification; refuses by name and changes nothing when any clause is
+   unproven.  DF must be current.  WEB, when non-null, receives the
+   committed web so that the caller can undo the rename exactly (a web too
+   large to record refuses by name, regrename-web-record-overflow, before
+   any edit).  */
+#define RVTT_LREG_RENAME_WEB_MAX 32
+struct rvtt_lreg_rename_web
+{
+  int old_l, new_l;		/* L indices, source -> target */
+  unsigned n_insns;		/* edited members (writer, readers,
+				   reading close)  */
+  rtx_insn *insns[RVTT_LREG_RENAME_WEB_MAX];
+};
+/* How a service-requested rename's TEMPORAL tier is priced.  A temporally
+   scoped target is borrowed from a register with a live downstream use, and
+   the borrow carries externalities (the claimed interlock-fill hole, the
+   risked replay-window identity) that no consumer's local acceptance can
+   see -- so by default the tier self-prices under the strict-gain
+   acceptance and the request refuses by name when the borrow does not pay.
+   A consumer that OWNS the row's delivery shape end to end -- it replaces
+   the row's schedule under its own strict acceptance, preserves the counted
+   replay-capture shape explicitly, and undoes exactly on any refusal (such
+   as kernel unrolling under modulo variable expansion) -- internalizes
+   those externalities and may declare so.  Whole-block-free targets are
+   never priced here either way.  */
+enum rvtt_lreg_rename_pricing
+{
+  RVTT_RENAME_PRICE_TEMPORAL,	/* default: the temporal tier self-prices */
+  RVTT_RENAME_SHAPE_OWNED	/* requester owns the row's delivery shape
+				   and prices the whole composition  */
+};
+extern bool rvtt_lreg_rename_chain (struct basic_block_def *bb,
+				    rtx_insn *def_insn, int target_lreg,
+				    rvtt_lreg_rename_web *web = nullptr,
+				    enum rvtt_lreg_rename_pricing pricing
+				      = RVTT_RENAME_PRICE_TEMPORAL);
+extern void rvtt_lreg_rename_web_undo (const rvtt_lreg_rename_web &web);
 extern rtl_opt_pass *make_pass_rvtt_replay (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_rmext (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_schedule (gcc::context *ctxt);
