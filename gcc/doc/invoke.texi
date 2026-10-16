@@ -1307,6 +1307,7 @@ See RS/6000 and PowerPC Options.
 -mtt-tensix-optimize-replay-hoist
 -mtt-tensix-optimize-replay-loop-unroll
 -mtt-tensix-optimize-launch-flatten
+-mtt-tensix-optimize-launch-flatten-bounded
 -mtt-tensix-macro-planner-replay
 -mtt-tensix-dump-effects}
 
@@ -32039,6 +32040,12 @@ loop-control instructions leave the timed issue path and the flattened
 word stream reaches replay formation.  The trip count must be proven,
 the flattened size is bounded per loop and per function, and the body
 must contain at least one Tensix vector operation.
+
+@opindex mtt-tensix-optimize-launch-flatten-bounded
+@item -mtt-tensix-optimize-launch-flatten-bounded
+Let @option{-mtt-tensix-optimize-launch-flatten} also request loops whose
+trip count is only bounded, checking the word budget against the bound,
+and nests of requested loops.
 
 @end table
 
