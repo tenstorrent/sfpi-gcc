@@ -1559,6 +1559,10 @@ block_lane_state (basic_block bb)
 	return LANES_KILL;
       if (rvtt_cc_writer_id_p (insnd->id) || insnd->sets_cc (call))
 	return LANES_DIRTY;
+      /* Raw-LREG metadata emits no instruction.  */
+      if (insnd->id == rvtt_insn_data::sfprawlreg_access
+	  || insnd->id == rvtt_insn_data::sfprawlreg_effect)
+	continue;
       /* Counter and address-modifier words, and SFPCONFIG programming of
 	 the constant registers (dests 12-14; LaneConfig is dest 15), leave
 	 lane state alone.  */
