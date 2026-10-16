@@ -186,6 +186,12 @@ INSERT_PASS_AFTER (pass_late_combine, 1, pass_rvtt_rmext);
    proven-identity Dst reload changes SFPU liveness, which the raw-LREG live-in
    reservation below and register allocation must observe in final form.  */
 INSERT_PASS_BEFORE (pass_ira, 1, pass_rvtt_dst_ownership);
+/* Pre-allocation pressure-cost list scheduling (default off) runs after the
+   Dst/RWC ownership folds have settled final SFPU pseudo liveness and before
+   the raw-LREG live-in reservation and the LREG allocator observe the stream:
+   reordering over pseudos is the seam where a ten-simultaneously-live
+   instruction order can still become an eight-register-schedulable one.  */
+INSERT_PASS_BEFORE (pass_ira, 1, pass_rvtt_lp_schedule_prera);
 /* Named SFPU spill diagnosis runs first after allocation, before any other
    Tensix RTL pass consumes the stream: an allocated XTT32SI memory move
    becomes the named user error lreg-pressure-exceeded rather than the
