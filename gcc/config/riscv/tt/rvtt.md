@@ -98,6 +98,7 @@
 
   UNSPECV_SFPSWAP
   UNSPECV_SFPTRANSP
+  UNSPECV_SFPTRANSP_GATHER
   UNSPECV_SFPSHFT2_COPY4
   UNSPECV_SFPSHFT2_SUBVEC_COPY4
   UNSPECV_SFPSHFT2_SUBVEC_SHFL1_COPY4
@@ -3869,6 +3870,120 @@
      operands[5], operands[6], operands[7], operands[8]));
   emit_insn (gen_rvtt_sfpconcat4
     (operands[0], result[0], result[1], result[2], result[3]));
+  DONE;
+})
+
+;; Companion-preserving transpose bundle, formed only by the transp-involution
+;; pass (-mtt-tensix-optimize-transp-involution) from an SFPTRANSP of four
+;; freshly and fully loaded L0-L3 operands.  Emitted as one multi-word
+;; instruction:
+;;
+;;   [SFPENCC all-lanes]   (operand 10 != 0 only: forced lane state)
+;;   SFPTRANSP             (scrambles both banks; L0-L3 are dead here)
+;;   SFPLOAD  L0, mod0, addr_mode, addr0
+;;   SFPLOAD  L1, mod0, addr_mode, addr1
+;;   SFPLOAD  L2, mod0, addr_mode, addr2
+;;   SFPLOAD  L3, mod0, addr_mode, addr3
+;;   SFPTRANSP             (transposes the fresh loads; descrambles L4-L7)
+;;
+;; Claiming only four SETs is correct (SFPTRANSP.md Transpose4, SFPLOAD.md):
+;; with all lanes enabled, which the pass proves or the leading SFPENCC
+;; forces, two transposes are the identity on the L4-L7 bank (element (reg
+;; B+i, lane j*8+c) swaps with (reg B+j, lane i*8+c) and back), while the
+;; loads overwrite L0-L3.  Afterwards L0-L3 hold the transposed rows and L4-L7
+;; their incoming values.  With only some lanes enabled the pair is not an
+;; involution, hence the all-lanes requirement.  Because the bundle is a
+;; single insn, the intermediate state of L4-L7 cannot be observed.
+;;
+;; The loads use the no-increment address mode (checked by the pass), so the
+;; bundle has no RWC effect.
+(define_insn "rvtt_sfptransp_gather_int"
+  [(set (match_operand:XTT32SI 0 "register_operand" "=x0")
+        (unspec_volatile:XTT32SI [
+          (match_operand:SI 4 "const_int_operand" "n")
+          (match_operand:SI 5 "const_int_operand" "n")
+          (match_operand:SI 6 "const_int_operand" "n")
+          (match_operand:SI 7 "const_int_operand" "n")
+          (match_operand:SI 8 "const_int_operand" "n")
+          (match_operand:SI 9 "const_int_operand" "n")
+          (match_operand:SI 10 "const_int_operand" "n")
+        ] UNSPECV_SFPTRANSP_GATHER))
+   (set (match_operand:XTT32SI 1 "register_operand" "=x1")
+        (unspec_volatile:XTT32SI [(match_dup 4) (match_dup 5) (match_dup 6)
+                                  (match_dup 7) (match_dup 8) (match_dup 9)
+                                  (match_dup 10)] UNSPECV_SFPTRANSP_GATHER))
+   (set (match_operand:XTT32SI 2 "register_operand" "=x2")
+        (unspec_volatile:XTT32SI [(match_dup 4) (match_dup 5) (match_dup 6)
+                                  (match_dup 7) (match_dup 8) (match_dup 9)
+                                  (match_dup 10)] UNSPECV_SFPTRANSP_GATHER))
+   (set (match_operand:XTT32SI 3 "register_operand" "=x3")
+        (unspec_volatile:XTT32SI [(match_dup 4) (match_dup 5) (match_dup 6)
+                                  (match_dup 7) (match_dup 8) (match_dup 9)
+                                  (match_dup 10)] UNSPECV_SFPTRANSP_GATHER))]
+  "TARGET_XTT_TENSIX_BH || TARGET_XTT_TENSIX_WH"
+{
+  static char buffer[256];
+  char *p = buffer;
+  if (INTVAL (operands[10]) != 0)
+    /* The architectural all-lanes enable word from the capability table
+       (the same word the cc_write_all_lanes derivation proves against),
+       emitted verbatim.  */
+    p += sprintf (p, ".ttinsn\t%u\n\t",
+		  (unsigned) rvtt_macro::sfpencc_all_lanes_word ());
+  sprintf (p,
+	   "SFPTRANSP\n\t"
+	   "SFPLOAD\t%%x0, %%4, %%8, %%9\n\t"
+	   "SFPLOAD\t%%x1, %%5, %%8, %%9\n\t"
+	   "SFPLOAD\t%%x2, %%6, %%8, %%9\n\t"
+	   "SFPLOAD\t%%x3, %%7, %%8, %%9\n\t"
+	   "SFPTRANSP");
+  return buffer;
+}
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "safe")
+   ;; Effects: writes exactly the four results (the companion bank is
+   ;; unchanged, see above); reads no LREG; reads CC (every write is
+   ;; lane-gated); the form with SFPENCC also writes CC (enabling all lanes).
+   ;; No configuration or RWC effect.  Load-class result latency.
+   (set_attr "xtt_subunit" "load")
+   (set_attr "xtt_lreg_read_ops" "1")
+   (set_attr "xtt_lreg_write_ops" "16")
+   (set (attr "xtt_cc_effect")
+	(if_then_else (match_test "INTVAL (operands[10]) != 0")
+		      (const_string "readwrite") (const_string "read")))
+   (set_attr "xtt_config_effect" "none")
+   (set_attr "xtt_rwc_effect" "none")
+   (set (attr "xtt_result_latency")
+	(if_then_else (match_test "TARGET_XTT_TENSIX_BH
+				   || TARGET_XTT_TENSIX_WH")
+		      (const_int 1) (const_int 0)))
+   (set (attr "length")
+	(if_then_else (match_test "INTVAL (operands[10]) != 0")
+		      (const_int 28) (const_int 24)))])
+
+(define_expand "rvtt_sfptransp_gather"
+  [(set (match_operand:XTT128SI 0 "register_operand")
+        (unspec_volatile:XTT128SI [
+          (match_operand:SI 1 "const_int_operand")
+          (match_operand:SI 2 "const_int_operand")
+          (match_operand:SI 3 "const_int_operand")
+          (match_operand:SI 4 "const_int_operand")
+          (match_operand:SI 5 "const_int_operand")
+          (match_operand:SI 6 "const_int_operand")
+        ] UNSPECV_SFPTRANSP_GATHER))]
+  "TARGET_XTT_TENSIX_BH || TARGET_XTT_TENSIX_WH"
+{
+  rtx a = gen_reg_rtx (XTT32SImode);
+  rtx b = gen_reg_rtx (XTT32SImode);
+  rtx c = gen_reg_rtx (XTT32SImode);
+  rtx d = gen_reg_rtx (XTT32SImode);
+  /* The leading-enable operand is 0 from the builtin path: the forming
+     pass materializes any needed all-lanes enable as a separate typed
+     SFPENCC covering the whole formation group.  */
+  emit_insn (gen_rvtt_sfptransp_gather_int
+    (a, b, c, d, operands[1], operands[2], operands[3], operands[4],
+     operands[5], operands[6], const0_rtx));
+  emit_insn (gen_rvtt_sfpconcat4 (operands[0], a, b, c, d));
   DONE;
 })
 
