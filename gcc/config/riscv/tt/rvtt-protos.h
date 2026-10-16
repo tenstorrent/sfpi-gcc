@@ -542,6 +542,9 @@ extern const char *rvtt_crosscall_addrmod_hoist (function *callee,
    callers' loop entries.  Returns the mask of registers moved.  */
 extern unsigned rvtt_crosscall_prgm_hoist (function *callee, unsigned regs);
 
+/* Defined in rtl-rvtt-schedule.cc; exported for the other Tensix scheduling
+   passes.  */
+extern bool issued_tensix_p (rtx_insn *insn);
 extern int audited_latency (rtx_insn *insn);
 
 #endif /* ! GCC_RVTT_PROTOS_H */

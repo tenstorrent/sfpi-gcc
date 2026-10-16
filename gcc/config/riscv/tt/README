@@ -58,6 +58,9 @@ a recorded reason (see section 5).
 			     of a loop, first-trip peel, outward lift across
 			     enclosing loops, window sizing.
   MOP                        Hardware zero-overhead loop formation.
+  scheduling                 Post-RA list scheduling over a typed-effect DAG,
+			     hazard interlock filling, and Rau-style iterative
+			     modulo scheduling.
 
 Supporting infrastructure that is not a pass: rvtt-cost / rvtt-delivery-cost
 / rvtt-timing / rvtt-trips (pricing engines), rvtt-bnb (an exact
