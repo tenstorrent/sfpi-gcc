@@ -37,6 +37,12 @@ INSERT_PASS_BEFORE (pass_all_optimizations, 1, pass_rvtt_int_abs);
    into the single SFPNOT.  It runs before the invariant
    pass so the dead all-ones immediate is deleted instead of hoisted.  */
 INSERT_PASS_BEFORE (pass_all_optimizations, 1, pass_rvtt_int_not);
+/* The store fold forwards single-use lane merges into their consuming
+   Dst stores (same-mask forwarding, and region sinks for format pairs
+   whose Dst round trip is exact).  Same placement rationale as the
+   folds above: run while the canonical structured forms are intact and
+   before the invariant pass sees the shortened bodies.  */
+INSERT_PASS_BEFORE (pass_all_optimizations, 1, pass_rvtt_store_fold);
 /* Place semantic SFPU constants outside counted loops while values are still
    SSA pseudos.  Doing this after allocation would extend hard-LREG lifetimes.  */
 INSERT_PASS_BEFORE (pass_all_optimizations, 1, pass_rvtt_invariant);
