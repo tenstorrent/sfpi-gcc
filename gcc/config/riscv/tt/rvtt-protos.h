@@ -137,9 +137,12 @@ extern gimple_opt_pass *make_pass_rvtt_dce (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_immload_combine (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_immload_shorten (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_immvar_expand (gcc::context *ctxt);
+extern gimple_opt_pass *make_pass_rvtt_invariant (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_noval_elide (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_live (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_schedule_ssa (gcc::context *ctxt);
+extern gimple_opt_pass *make_pass_rvtt_replay_unroll (gcc::context *ctxt);
+extern gimple_opt_pass *make_pass_rvtt_launch_flatten (gcc::context *ctxt);
 
 /* Typed-scan helpers of the replay-window loop-unroll pass, exported so
    that other passes classify rows identically: the estimated delivered
@@ -147,6 +150,9 @@ extern gimple_opt_pass *make_pass_rvtt_schedule_ssa (gcc::context *ctxt);
    bounded-forward-evaluation trip-count proof.  */
 struct rvtt_insn_data;
 extern int rvtt_replay_unroll_row_words (const rvtt_insn_data *insnd);
+extern bool rvtt_replay_unroll_counted_trips (class loop *loop,
+					      unsigned HOST_WIDE_INT *trips);
+extern gimple_opt_pass *make_pass_rvtt_round_interleave (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_synth_cse (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_synth_renumber (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_synth_split (gcc::context *ctxt);
@@ -238,6 +244,7 @@ constexpr unsigned int SFPPUSHCC_MOD1_PUSH = 0;
 constexpr unsigned int SFPPUSHCC_MOD1_REPLACE = 1;
 
 extern tree rvtt_build_loadimm32 (uint32_t, vec<gcall *> *);
+extern gcall *rvtt_chained_loadi_root (gcall *);
 
 constexpr unsigned int SFPPOPCC_MOD1_POP = 0;
 

@@ -35,6 +35,8 @@ a recorded reason (see section 5).
 			     also holds the shared builtin-call helpers
 			     (argument readers, id predicates); add a new
 			     shared helper there rather than in a pass.
+  invariant hoisting         Loop-invariant SFPU immediate loads, and the
+			     replay-window loop unroll and launch flattening.
 
 Supporting infrastructure that is not a pass: rvtt-cost / rvtt-delivery-cost
 / rvtt-timing / rvtt-trips (pricing engines), rvtt-bnb (an exact
