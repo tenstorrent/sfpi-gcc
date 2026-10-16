@@ -1300,6 +1300,7 @@ See RS/6000 and PowerPC Options.
 -mtt-tensix-optimize-cc  -mno-tt-tensix-optimize-cc
 -mtt-tensix-optimize-dce  -mno-tt-tensix-optimize-dce
 -mtt-tensix-optimize-setexp-fold  -mno-tt-tensix-optimize-setexp-fold
+-mtt-tensix-optimize-addi-register-form
 -mtt-tensix-optimize-cc-region-general
 -mtt-tensix-optimize-round-interleave
 -mtt-tensix-optimize-invariant-loadi
@@ -31940,6 +31941,12 @@ by default.
 @itemx -mno-tt-tensix-optimize-setexp-fold
 Fold an exponent extract that feeds @code{SFPSETEXP} into the
 instruction's exponent-copy addressing mode.  Enabled by default.
+
+@opindex mtt-tensix-optimize-addi-register-form
+@item -mtt-tensix-optimize-addi-register-form
+When an SFPADDI would need a copy of its source because the source stays
+live, and the block later loads the same constant into a register, issue
+the add as an SFPADD with that register instead.
 
 @opindex mtt-tensix-optimize-cc-region-general
 @item -mtt-tensix-optimize-cc-region-general
