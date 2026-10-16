@@ -4589,6 +4589,11 @@ collect_fn_hard_reg_usage (void)
   /* Be conservative - mark fixed and global registers as used.  */
   function_used_regs = fixed_reg_set;
 
+#ifdef IPA_RA_CONSERVATIVE_REGS
+  /* Registers the target cannot account for insn by insn.  */
+  IPA_RA_CONSERVATIVE_REGS (function_used_regs);
+#endif
+
 #ifdef STACK_REGS
   /* Handle STACK_REGS conservatively, since the df-framework does not
      provide accurate information for them.  */

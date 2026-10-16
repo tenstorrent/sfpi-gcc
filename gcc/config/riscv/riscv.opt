@@ -649,6 +649,10 @@ mtt-tensix-optimize-crosscall-config-prefix
 Target Var(riscv_tt_opt_crosscall_config_prefix) Init(0)
 Extend the cross-call hoist to a callee's constant SFPCONFIG programming prefix.
 
+mtt-tensix-optimize-ipa-ra
+Target Var(riscv_tt_opt_ipa_ra) Init(0)
+Let callers keep integer values in caller-saved registers across calls to functions that leave them alone.
+
 mtt-tensix-optimize-reassoc
 Target Var(riscv_tt_opt_reassoc) Init(0)
 Allow value-changing floating-point reassociation in the Tensix SFPU passes; requires -fassociative-math to take effect.
