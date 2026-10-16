@@ -43,6 +43,8 @@ a recorded reason (see section 5).
 			     SFPLUTFP32 table selection, including the FP16
 			     six-entry form.
   crosscall                  Interprocedural LICM across noinline boundaries.
+  prgm constants             Constant-register promotion and the priced
+			     residency walk that keeps invariants resident.
 
 Supporting infrastructure that is not a pass: rvtt-cost / rvtt-delivery-cost
 / rvtt-timing / rvtt-trips (pricing engines), rvtt-bnb (an exact

@@ -1311,10 +1311,13 @@ See RS/6000 and PowerPC Options.
 -mtt-tensix-optimize-cc-region-general
 -mtt-tensix-optimize-round-interleave
 -mtt-tensix-optimize-invariant-loadi
+-mtt-tensix-optimize-prgm-const
+-mtt-tensix-optimize-madpair-vocabulary
 -mtt-tensix-optimize-crosscall-hoist
 -mtt-tensix-optimize-crosscall-config-prefix
 -mtt-tensix-optimize-ipa-ra
 -mtt-tensix-optimize-crossloop-hoist
+-mtt-tensix-optimize-opaque-replay-record
 -mtt-tensix-optimize-replay  -mno-tt-tensix-optimize-replay
 -mtt-tensix-replay-buffer-size=@var{words}
 -mtt-tensix-optimize-replay-hoist
@@ -32069,6 +32072,20 @@ are placed.  All are disabled by default.
 Hoist loop-invariant immediate-vector materializations out of loops
 before register allocation.
 
+@opindex mtt-tensix-optimize-prgm-const
+@item -mtt-tensix-optimize-prgm-const
+Allocate programmable constant registers to loop-invariant SFPU
+immediates, replacing an in-loop materialization with a one-time
+@code{SFPCONFIG} programming and a constant-register read.
+
+@opindex mtt-tensix-optimize-madpair-vocabulary
+@item -mtt-tensix-optimize-madpair-vocabulary
+Recognize additional multiply-add operand spellings when collecting
+constant-residency candidates, so that a multiply and add pair the
+instruction combiner will later fuse is treated as one candidate pair.
+Discovery only: admission checks and pricing are unchanged.  Effective
+only with @option{-mtt-tensix-optimize-const-residency}.
+
 @opindex mtt-tensix-optimize-crosscall-hoist
 @item -mtt-tensix-optimize-crosscall-hoist
 Hoist a non-inlined callee's call-invariant immediate materializations
@@ -32099,6 +32116,17 @@ enclosing loops whose bodies deliver only instruction words proven free
 of interfering effects.  Every unanalyzable word or statement class
 declines.
 
+@opindex mtt-tensix-optimize-opaque-replay-record
+@item -mtt-tensix-optimize-opaque-replay-record
+Derive the translation-unit-wide constant-register freedom proof
+through raw replay record regions instead of declining the whole
+translation unit as unanalyzable.  Recorded words that are statically
+identified constant words and provably never delivered contribute no
+configuration effect; recorded words that could write configuration
+state, and regions whose extent or trip count is unproven, still
+decline.  Effective only where the freedom proof's consumers
+(@option{-mtt-tensix-optimize-prgm-const},
+@option{-mtt-tensix-optimize-const-residency}) run.
 @end table
 @node Tensix Register Allocation Options
 @subsubsection Tensix Register Allocation Options
