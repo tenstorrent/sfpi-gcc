@@ -67,6 +67,8 @@ a recorded reason (see section 5).
 			     rtl-rvtt-macro-planner.cc plus
 			     rvtt-macro-{desc,sched,epoch,tables,region,
 			     ownership,verify}.
+  pressure scheduling        Reordering of SFPU regions, on GIMPLE and before
+			     IRA, so that live values fit the eight LREGs.
 
 Supporting infrastructure that is not a pass: rvtt-cost / rvtt-delivery-cost
 / rvtt-timing / rvtt-trips (pricing engines), rvtt-bnb (an exact
