@@ -899,7 +899,8 @@ public:
   bool gate (function *) final override
   {
     return TARGET_XTT_TENSIX
-      && (riscv_tt_opt_prgm_const);
+      && (riscv_tt_opt_prgm_const
+	  || riscv_tt_opt_const_remat);
   }
 
   unsigned execute (function *fn) final override
@@ -922,6 +923,8 @@ public:
     bool changed = false;
     if (riscv_tt_opt_prgm_const)
       changed |= transform (fn, &st);
+    if (riscv_tt_opt_const_remat)
+      changed |= remat_transform (fn);
     loop_optimizer_finalize ();
     return changed ? TODO_update_ssa_only_virtuals : 0;
   }
