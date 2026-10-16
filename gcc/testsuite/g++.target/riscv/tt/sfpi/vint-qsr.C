@@ -263,14 +263,14 @@ void logic1 ()
 **_Z6logic1v:
 **	# READ L0
 **	# READ L7
-**	SFPMOV	L1, L0, 2
-**	SFPAND	L1, L7
+**	SFPMOV	L1, L7, 2
+**	SFPAND	L1, L0
 **	# WRITE L1
-**	SFPMOV	L2, L0, 2
-**	SFPOR	L2, L7
+**	SFPMOV	L2, L7, 2
+**	SFPOR	L2, L0
 **	# WRITE L2
-**	SFPMOV	L3, L0, 2
-**	SFPXOR	L3, L7
+**	SFPMOV	L3, L7, 2
+**	SFPXOR	L3, L0
 **	# WRITE L3
 **	SFPMOV	L4, L7, 2
 **	SFPAND	L4, L0
@@ -299,5 +299,31 @@ void logic2 ()
 }
 /*
 **_Z6logic2v:
-**	tail	_Z6logic0v
+**	# READ L0
+**	# READ L7
+**	SFPLOADI	L2, 1, 2
+**	SFPMOV	L1, L0, 2
+**	SFPAND	L1, L2
+**	# WRITE L1
+**	SFPLOADI	L1, 2, 2
+**	SFPMOV	L2, L0, 2
+**	SFPOR	L2, L1
+**	# WRITE L2
+**	SFPLOADI	L1, 3, 2
+**	SFPXOR	L0, L1
+**	SFPMOV	L3, L0, 2
+**	# WRITE L3
+**	SFPLOADI	L0, 1, 2
+**	SFPMOV	L4, L7, 2
+**	SFPAND	L4, L0
+**	# WRITE L4
+**	SFPLOADI	L0, 2, 2
+**	SFPMOV	L5, L7, 2
+**	SFPOR	L5, L0
+**	# WRITE L5
+**	SFPLOADI	L0, 3, 2
+**	SFPMOV	L6, L7, 2
+**	SFPXOR	L6, L0
+**	# WRITE L6
+**	ret
 */
