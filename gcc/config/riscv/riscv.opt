@@ -601,6 +601,18 @@ mtt-tensix-optimize-dce
 Target Var(riscv_tt_opt_dce) Init(1)
 Remove dead Tensix instructions.
 
+mtt-tensix-optimize-prgm-const
+Target Var(riscv_tt_opt_prgm_const) Init(0)
+Allocate programmable constant registers to loop-invariant SFPU immediates.
+
+mtt-tensix-optimize-opaque-replay-record
+Target Var(riscv_tt_opt_opaque_replay_record) Init(0)
+Analyze raw replay record regions for the constant-register freedom proof instead of treating the whole translation unit as opaque.
+
+mtt-tensix-optimize-madpair-vocabulary
+Target Var(riscv_tt_opt_madpair_vocabulary) Init(0)
+Recognize additional multiply-add operand spellings when collecting constant-residency candidates.
+
 mtt-tensix-optimize-replay
 Target Var(riscv_tt_opt_replay) Init(1)
 Generate Tensix replay instructions.

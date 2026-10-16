@@ -1505,30 +1505,6 @@ early_cch_stmt_direct_p (function *fn, gimple *stmt)
       tree lhs = gimple_assign_lhs (stmt);
       if (TREE_CODE (lhs) == SSA_NAME)
 	return !gimple_has_volatile_ops (stmt);
-      /* Chronology-only crossloop support.  The delivery decoder proves
-	 an actual full-word FIFO push, not an arbitrary DATA/MMIO store.
-	 NON_MOP alone says nothing about REPLAY or hidden template effects:
-	 every possible bounded word must independently pass all inert faces. */
-      if (gimple_store_p (stmt)
-	  && rvtt_mop_gimple_delivery (stmt) == RVTT_MOP_PROVEN_NON_MOP)
-	{
-	  uint32_t lo, hi;
-	  if (!rvtt_gimple_word_bounds (gimple_assign_rhs1 (stmt), &lo, &hi)
-	      || hi < lo || (uint64_t) hi - lo > 511)
-	    return false;
-	  for (uint64_t word = lo; word <= hi; ++word)
-	    {
-	      rvtt_word_facts facts;
-	      rvtt_word_facts_classify ((uint32_t) word, &facts);
-	      if (facts.row == RVTT_WF_UNAUDITED || facts.is_mop
-		  || facts.is_mop_cfg || facts.is_replay
-		  || facts.cc != RVTT_RAW_CC_INERT || !facts.lreg_inert
-		  || !facts.prgm_ok || !facts.init_ok
-		  || !early_cch_word_direct_p (fn, (uint32_t) word))
-		return false;
-	    }
-	  return true;
-	}
       unsigned HOST_WIDE_INT address;
       tree size = TYPE_SIZE_UNIT (TREE_TYPE (lhs));
       /* These exact stores program future MOP words; they issue none.
