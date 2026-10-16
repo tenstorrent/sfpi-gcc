@@ -263,14 +263,14 @@ void logic1 ()
 **_Z6logic1v:
 **	# READ L0
 **	# READ L7
-**	SFPMOV	L1, L0, 2
-**	SFPAND	L1, L7
+**	SFPMOV	L1, L7, 2
+**	SFPAND	L1, L0
 **	# WRITE L1
-**	SFPMOV	L2, L0, 2
-**	SFPOR	L2, L7
+**	SFPMOV	L2, L7, 2
+**	SFPOR	L2, L0
 **	# WRITE L2
-**	SFPMOV	L3, L0, 2
-**	SFPXOR	L3, L7
+**	SFPMOV	L3, L7, 2
+**	SFPXOR	L3, L0
 **	# WRITE L3
 **	SFPMOV	L4, L7, 2
 **	SFPAND	L4, L0
