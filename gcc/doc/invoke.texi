@@ -1369,6 +1369,7 @@ See RS/6000 and PowerPC Options.
 -mtt-tensix-optimize-dst-autoincr
 -mtt-tensix-optimize-dst-autoincr-load-carrier
 -mtt-tensix-optimize-post-autoincr-window
+-mtt-tensix-optimize-window-pairing-stride
 -mtt-tensix-optimize-crossrow-pairing
 -mtt-tensix-optimize-crossrow-pairing-stall-words
 -mtt-tensix-optimize-crossrow-pairing-seed
@@ -32640,6 +32641,13 @@ windows once the fold has made them word-uniform, and one post-fold
 allocation prices every candidate against the single replay buffer.
 The deferral loses no opportunity: every window capturable before the
 fold is capturable verbatim after it.
+
+@opindex mtt-tensix-optimize-window-pairing-stride
+@item -mtt-tensix-optimize-window-pairing-stride
+Generalize the window-pairing proof to rows whose Dst addresses advance
+with any issued word of the row, rebasing each access footprint by the
+stride phase of its carrying word.  Effective only where
+@option{-mtt-tensix-optimize-window-pairing} reaches the tuner.
 
 @opindex mtt-tensix-optimize-crossrow-pairing
 @item -mtt-tensix-optimize-crossrow-pairing

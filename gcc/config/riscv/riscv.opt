@@ -633,6 +633,10 @@ mtt-tensix-optimize-repeat-residency
 Target Var(riscv_tt_opt_repeat_residency) Init(0)
 Park a constant that a loop-free, call-free function materializes repeatedly in a PRGM register programmed once at the function entry.
 
+mtt-tensix-optimize-window-pairing-stride
+Target Var(riscv_tt_opt_window_pairing_stride) Init(0)
+Extend window-pairing proofs to rows whose addresses advance with any issued word of the row.
+
 mtt-tensix-optimize-crossrow-pairing
 Target Var(riscv_tt_opt_crossrow_pairing) Init(0)
 Pair consecutive iterations of eligible single-row Dst loops into one doubled row (Blackhole only).
