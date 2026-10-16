@@ -30,6 +30,7 @@ along with GCC; see the file COPYING3.  If not see
    as register-pressure errors (rvtt_spill_diag_reported), it returns
    without a further diagnostic.  */
 extern void rvtt_mov_error (const rtx_insn *) ATTRIBUTE_COLD;
+extern bool rvtt_spill_diag_reported;
 
 /* Capability-table architectural all-lanes SFPENCC word (defined in
    rvtt-macro-tables.cc; redeclared here so instruction output templates
@@ -271,6 +272,7 @@ extern bool rvtt_lreg_rename_chain (struct basic_block_def *bb,
 				    enum rvtt_lreg_rename_pricing pricing
 				      = RVTT_RENAME_PRICE_TEMPORAL);
 extern void rvtt_lreg_rename_web_undo (const rvtt_lreg_rename_web &web);
+extern rtl_opt_pass *make_pass_rvtt_spill_diag (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_macro_planner (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_replay (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_replay_reform (gcc::context *ctxt);
