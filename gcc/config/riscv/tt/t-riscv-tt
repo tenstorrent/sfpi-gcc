@@ -51,6 +51,8 @@ RVTT_OBJS := rvtt.o \
 	rvtt-effects.o \
 	rvtt-raw-boundary.o \
 	rvtt-macro-ownership.o \
+	rvtt-macro-region.o \
+	rvtt-macro-epoch.o \
 	rvtt-macro-tables.o \
 	rvtt-mop-derive.o \
 	gimple-rvtt-attrib.o \
