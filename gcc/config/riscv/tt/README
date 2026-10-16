@@ -61,6 +61,12 @@ a recorded reason (see section 5).
   scheduling                 Post-RA list scheduling over a typed-effect DAG,
 			     hazard interlock filling, and Rau-style iterative
 			     modulo scheduling.
+  macro planner              SFPLOADMACRO descriptor synthesis, verification,
+			     region scheduling against a resource reservation
+			     table, and drain placement.
+			     rtl-rvtt-macro-planner.cc plus
+			     rvtt-macro-{desc,sched,epoch,tables,region,
+			     ownership,verify}.
 
 Supporting infrastructure that is not a pass: rvtt-cost / rvtt-delivery-cost
 / rvtt-timing / rvtt-trips (pricing engines), rvtt-bnb (an exact
