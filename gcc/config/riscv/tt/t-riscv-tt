@@ -56,6 +56,7 @@ RVTT_OBJS := rvtt.o \
 	rvtt-mop-derive.o \
 	gimple-rvtt-attrib.o \
 	gimple-rvtt-cc.o \
+	gimple-rvtt-ccmask.o \
 	gimple-rvtt-check.o \
 	gimple-rvtt-combine.o \
 	gimple-rvtt-dce.o \
@@ -78,6 +79,7 @@ RVTT_OBJS := rvtt.o \
 	rtl-rvtt-synth.o \
 	rtl-rvtt-unspec.o \
 	rvtt-trips.o \
+	rvtt-cc-region.o \
 	rvtt-delivery-cost.o \
 	rvtt-timing.o \
 

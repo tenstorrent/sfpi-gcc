@@ -1301,6 +1301,7 @@ See RS/6000 and PowerPC Options.
 -mtt-tensix-optimize-dce  -mno-tt-tensix-optimize-dce
 -mtt-tensix-optimize-setexp-fold  -mno-tt-tensix-optimize-setexp-fold
 -mtt-tensix-optimize-addi-register-form
+-mtt-tensix-optimize-ccmask
 -mtt-tensix-optimize-cc-region-general
 -mtt-tensix-optimize-round-interleave
 -mtt-tensix-optimize-invariant-loadi
@@ -31947,6 +31948,13 @@ instruction's exponent-copy addressing mode.  Enabled by default.
 When an SFPADDI would need a copy of its source because the source stays
 live, and the block later loads the same constant into a register, issue
 the add as an SFPADD with that register instead.
+
+@opindex mtt-tensix-optimize-ccmask
+@item -mtt-tensix-optimize-ccmask
+Fold a predicated region whose only effect is zeroing selected lanes
+under a floating-point ordering test against @code{+0.0} into an
+unpredicated compare and bitwise AND, removing the CC save/restore
+pair.  Non-matching regions decline.
 
 @opindex mtt-tensix-optimize-cc-region-general
 @item -mtt-tensix-optimize-cc-region-general
