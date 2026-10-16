@@ -6639,6 +6639,22 @@ get_riscv_cc (const rtx use)
   return cc;
 }
 
+/* Add to SET the registers that IPA-RA must treat as clobbered by every
+   function, whatever its body shows.  Only the integer registers are
+   tracked: tensix words can write SFPU registers through effects the
+   RTL does not spell out (replay launches, multi-result words), so every
+   other register stays clobbered.  t0-t2 are kept too: the assembler
+   expands "tail" through t1 and the save/restore millicode uses t0.  */
+
+void
+riscv_ipa_ra_conservative_regs (HARD_REG_SET *set)
+{
+  for (unsigned int regno = 0; regno < FIRST_PSEUDO_REGISTER; regno++)
+    if (!GP_REG_P (regno)
+	|| regno == T0_REGNUM || regno == T1_REGNUM || regno == T1_REGNUM + 1)
+      SET_HARD_REG_BIT (*set, regno);
+}
+
 /* Implement TARGET_INSN_CALLEE_ABI.  */
 
 const predefined_function_abi &
@@ -10894,6 +10910,13 @@ riscv_option_override (void)
   SUBTARGET_OVERRIDE_OPTIONS;
 #endif
 
+  /* IPA-RA records which registers a function really clobbers, so its
+     callers need not save the rest around the call.  RISC-V leaves it off
+     because its call sequences are not described register by register;
+     the TT tensix target links statically (no PLT stubs) and
+     riscv_ipa_ra_conservative_regs covers the rest.  */
+  if (TARGET_XTT_TENSIX && riscv_tt_opt_ipa_ra && !flag_pic)
+    targetm.call_fusage_contains_non_callee_clobbers = true;
 
   flag_pcc_struct_return = 0;
 
