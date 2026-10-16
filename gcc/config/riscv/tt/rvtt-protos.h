@@ -143,6 +143,7 @@ extern gimple_opt_pass *make_pass_rvtt_live (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_schedule_ssa (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_replay_unroll (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_launch_flatten (gcc::context *ctxt);
+extern gimple_opt_pass *make_pass_rvtt_launch_flatten_reset (gcc::context *ctxt);
 
 /* Typed-scan helpers of the replay-window loop-unroll pass, exported so
    that other passes classify rows identically: the estimated delivered

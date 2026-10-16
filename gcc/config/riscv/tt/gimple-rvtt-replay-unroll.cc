@@ -74,6 +74,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree-ssanames.h"
 #include "cfghooks.h"
 #include "cfgloop.h"
+#include "tree-ssa-loop-niter.h"
 #include "cfganal.h"
 #include "tree-cfg.h"
 #include "dominance.h"
@@ -774,6 +775,15 @@ launch_flatten_stmt_words (const rvtt_insn_data *insnd)
     }
 }
 
+/* The loop->unroll value of a request made against a proven iteration
+   bound rather than an exact count (-mtt-tensix-optimize-launch-flatten-
+   bounded): large enough that cunroll's `n_unroll <= loop->unroll' test
+   admits whatever count it later proves -- the word budget was already
+   checked against the bound -- and distinct from any exact request, so
+   the post-cunroll reset can recognize the requests (and their copies)
+   that cunroll did not act on.  */
+#define LAUNCH_FLATTEN_BOUNDED_REQUEST ((unsigned short) 0xfffe)
+
 class launch_flatten
 {
 public:
@@ -784,6 +794,10 @@ public:
      bounds one loop's straight-line run; this bounds the function, which
      could otherwise outgrow the TRISC code region and fail to link.  */
   unsigned HOST_WIDE_INT fn_words = 0;
+  /* Flattened words of each loop this pass requested, for the nest
+     scan of its enclosing loop (bounded mode).  */
+  hash_map<class loop *, unsigned HOST_WIDE_INT> flat_words;
+  hash_set<class loop *> requested;
 
   void refuse (class loop *loop, const char *name, const char *detail)
   {
@@ -813,20 +827,53 @@ public:
 	return false;
       }
 
-    /* Proven constant trip count from the latch-execution chrec.  */
+    /* Proven constant trip count from the latch-execution chrec.  Under
+       -mtt-tensix-optimize-launch-flatten-bounded a loop whose count is
+       not yet constant (it typically becomes constant only once cunroll
+       has flattened an enclosing loop) may instead be requested against
+       its proven iteration bound: the budget is checked against the
+       bound, cunroll unrolls only once it knows the count, and the
+       reset pass drops a request cunroll never acted on.  */
     tree niter = number_of_latch_executions (loop);
-    if (!niter || TREE_CODE (niter) != INTEGER_CST
-	|| !tree_fits_uhwi_p (niter))
+    bool bounded = false;
+    unsigned HOST_WIDE_INT trips;
+    if (niter && TREE_CODE (niter) == INTEGER_CST
+	&& tree_fits_uhwi_p (niter))
+      trips = tree_to_uhwi (niter) + 1;
+    else
       {
-	refuse (loop, "launch-flatten-trip-count-unproven", NULL);
-	return false;
+	HOST_WIDE_INT bound = riscv_tt_opt_launch_flatten_bounded > 0
+	  ? max_loop_iterations_int (loop) : -1;
+	if (bound < 0)
+	  {
+	    refuse (loop, "launch-flatten-trip-count-unproven", NULL);
+	    return false;
+	  }
+	trips = (unsigned HOST_WIDE_INT) bound + 1;
+	bounded = true;
       }
-    unsigned HOST_WIDE_INT trips = tree_to_uhwi (niter) + 1;
-    if (trips < 2)
+    if (trips < 2 && !(bounded || loop->inner))
       {
 	refuse (loop, "launch-flatten-trip-count-unproven",
 		"fewer than two trips");
 	return false;
+      }
+
+    /* A nest (bounded mode): every directly enclosed loop must itself
+       have been requested; its flattened words count once per trip of
+       this loop, and its statements are not scanned again here.  */
+    unsigned HOST_WIDE_INT inner_words = 0;
+    bool inner_requested = false;
+    for (class loop *c = loop->inner; c; c = c->next)
+      {
+	unsigned HOST_WIDE_INT *w = flat_words.get (c);
+	if (!w)
+	  {
+	    refuse (loop, "launch-flatten-inner-unrequested", NULL);
+	    return false;
+	  }
+	inner_words += *w;
+	inner_requested |= requested.contains (c);
       }
 
     /* Body scan over every block.  */
@@ -839,13 +886,16 @@ public:
        with no typed word already gets word-accurate size pricing, and
        bypassing it could overflow the TRISC code region.  A requested
        inner loop carries typed content of its own.  */
-    bool typed_word_seen = false;
+    bool typed_word_seen = inner_requested;
     basic_block *body = get_loop_body (loop);
     for (unsigned i = 0; i < loop->num_nodes; ++i)
       {
 	basic_block bb = body[i];
 	edge e;
 	edge_iterator ei;
+	if (bb->loop_father != loop)
+	  /* Owned by a requested inner loop: scanned there.  */
+	  continue;
 	FOR_EACH_EDGE (e, ei, bb->succs)
 	  if (e->flags & (EDGE_ABNORMAL | EDGE_EH))
 	    {
@@ -957,9 +1007,22 @@ public:
 	  }
       }
     free (body);
+    words += inner_words;
 
+    /* A scan-clean loop this pass does not request itself (too small,
+       or raw words only: the size model already prices it right and
+       cunroll unrolls it on its own) can still sit inside a requested
+       nest; record its words for the enclosing scan.  */
+    auto record_unrequested = [&] ()
+      {
+	if (riscv_tt_opt_launch_flatten_bounded > 0
+	    && (unsigned HOST_WIDE_INT) words * trips
+	       <= XTT_REPLAY_LOOP_UNROLL_MAX_WORDS)
+	  flat_words.put (loop, (unsigned HOST_WIDE_INT) words * trips);
+      };
     if (words < XTT_REPLAY_LOOP_UNROLL_MIN_WORDS)
       {
+	record_unrequested ();
 	refuse (loop, "launch-flatten-row-too-small", NULL);
 	return false;
       }
@@ -977,6 +1040,7 @@ public:
       }
     if (!typed_word_seen)
       {
+	record_unrequested ();
 	refuse (loop, "launch-flatten-no-typed-content", NULL);
 	return false;
       }
@@ -988,16 +1052,24 @@ public:
 	return false;
       }
 
-    loop->unroll = (unsigned short) trips;
+    /* A single-trip nest is requested like a bounded one: loop->unroll
+       of 1 would mean `do not unroll'.  */
+    loop->unroll = (bounded || trips < 2) ? LAUNCH_FLATTEN_BOUNDED_REQUEST
+					  : (unsigned short) trips;
     fun->has_unroll = true;
-    fn_words += (unsigned HOST_WIDE_INT) words * trips;
+    /* A nest's words already include its inner loops'; charge only this
+       level's own words against the function budget.  */
+    fn_words += (unsigned HOST_WIDE_INT) (words - inner_words) * trips;
+    flat_words.put (loop, (unsigned HOST_WIDE_INT) words * trips);
+    requested.add (loop);
     ++n_fired;
     if (dump_file)
       fprintf (dump_file,
 	       "launch-flatten: requested complete unroll of loop %d"
-	       " (~%u delivery words/trip, trips "
-	       HOST_WIDE_INT_PRINT_UNSIGNED ")\n",
-	       loop->num, words, trips);
+	       " (~%u delivery words/trip, trips %s"
+	       HOST_WIDE_INT_PRINT_UNSIGNED "%s)\n",
+	       loop->num, words, bounded ? "<= " : "", trips,
+	       loop->inner ? ", nest" : "");
     return true;
   }
 };
@@ -1046,8 +1118,11 @@ public:
     if (own_scev)
       scev_initialize ();
     launch_flatten ctx;
-    for (auto loop : loops_list (fun, LI_ONLY_INNERMOST))
-      ctx.process (fun, loop);
+    for (auto loop : loops_list (fun, riscv_tt_opt_launch_flatten_bounded > 0
+				      ? LI_FROM_INNERMOST
+				      : LI_ONLY_INNERMOST))
+      if (loop->num)
+	ctx.process (fun, loop);
     if (own_scev)
       scev_finalize ();
     if (own_loops)
@@ -1717,6 +1792,67 @@ gimple_opt_pass *
 make_pass_rvtt_launch_flatten (gcc::context *ctxt)
 {
   return new pass_rvtt_launch_flatten (ctxt);
+}
+
+/* ---- Launch-flatten bounded-request reset ----
+
+   Runs right after the GIMPLE complete unroller.  A bounded request
+   (LAUNCH_FLATTEN_BOUNDED_REQUEST) on a loop that is still a loop here
+   was never acted on -- its count stayed unknown -- and a duplicated
+   inner loop of a partially flattened nest carries a copy of it.  Clear
+   them: they only requested complete unrolling, and the RTL unroller
+   would otherwise treat them as a runtime unroll factor.  */
+
+namespace {
+
+const pass_data pass_data_rvtt_launch_flatten_reset =
+{
+  GIMPLE_PASS,
+  "rvtt_launch_flatten_reset",
+  OPTGROUP_LOOP,
+  TV_NONE,
+  ( PROP_cfg | PROP_ssa ),
+  0, 0, 0, 0
+};
+
+class pass_rvtt_launch_flatten_reset : public gimple_opt_pass
+{
+public:
+  pass_rvtt_launch_flatten_reset (gcc::context *ctxt)
+    : gimple_opt_pass (pass_data_rvtt_launch_flatten_reset, ctxt)
+  {}
+
+  bool gate (function *) final override
+  {
+    return TARGET_XTT_TENSIX && riscv_tt_opt_launch_flatten > 0
+      && riscv_tt_opt_launch_flatten_bounded > 0;
+  }
+
+  unsigned execute (function *fun) final override
+  {
+    if (!current_loops)
+      return 0;
+    unsigned reset = 0;
+    for (auto loop : loops_list (fun, 0))
+      if (loop->unroll == LAUNCH_FLATTEN_BOUNDED_REQUEST)
+	{
+	  loop->unroll = 0;
+	  ++reset;
+	}
+    if (dump_file)
+      fprintf (dump_file, "launch-flatten: %u bounded request%s left"
+	       " standing after cunroll, cleared\n", reset,
+	       reset == 1 ? "" : "s");
+    return 0;
+  }
+};
+
+} /* anonymous namespace */
+
+gimple_opt_pass *
+make_pass_rvtt_launch_flatten_reset (gcc::context *ctxt)
+{
+  return new pass_rvtt_launch_flatten_reset (ctxt);
 }
 
 /* Create the round-interleave annotation pass.  It runs after the
