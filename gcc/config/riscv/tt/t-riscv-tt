@@ -71,6 +71,7 @@ RVTT_OBJS := rvtt.o \
 	gimple-rvtt-crosscall.o \
 	gimple-rvtt-crosscall-words.o \
 	gimple-rvtt-crosscall-scan.o \
+	gimple-rvtt-crosscall-hoist.o \
 	gimple-rvtt-crossloop.o \
 	gimple-rvtt-replay-unroll.o \
 	rvtt-lut-tables.o \
@@ -82,6 +83,8 @@ RVTT_OBJS := rvtt.o \
 	gimple-rvtt-prgm-residency.o \
 	gimple-rvtt-synth.o \
 	gimple-rvtt-unspec.o \
+	rtl-rvtt-dst-autoincr.o \
+	rtl-rvtt-dst-autoincr-scan.o \
 	rtl-rvtt-dst-ownership.o \
 	rtl-rvtt-fix-ebreak.o \
 	rtl-rvtt-fix-raw.o \
