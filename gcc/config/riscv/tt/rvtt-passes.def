@@ -58,6 +58,13 @@ INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_attrib);
    GCC unroll' world has always given them.  */
 INSERT_PASS_BEFORE (pass_complete_unroll, 1, pass_rvtt_launch_flatten);
 
+/* Launch-flatten bounded-request cleanup: a request made against a
+   proven iteration BOUND (not an exact count) asks cunroll to unroll
+   once the count is known.  A loop whose count never became known
+   survives cunroll still carrying it; drop it here so the RTL unroller
+   never turns it into a runtime-unrolled loop.  */
+INSERT_PASS_AFTER (pass_complete_unroll, 1, pass_rvtt_launch_flatten_reset);
+
 /* Replay-window loop-unroll request: annotation only (loop->unroll on
    qualifying counted SFPU row loops, consumed by the generic RTL
    unroller so the always-on replay former can capture the row).  Runs
