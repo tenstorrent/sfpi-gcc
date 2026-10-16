@@ -1320,6 +1320,7 @@ See RS/6000 and PowerPC Options.
 -mtt-tensix-optimize-madpair-vocabulary
 -mtt-tensix-optimize-hoisted-prgm-reuse
 -mtt-tensix-optimize-loop-prgm-reclaim
+-mtt-tensix-optimize-crosscall-prgm
 -mtt-tensix-optimize-priced-placement
 -mtt-tensix-optimize-crosscall-hoist
 -mtt-tensix-optimize-crosscall-config-prefix
@@ -32162,6 +32163,15 @@ programming point, provided the window from the programming to the last
 in-loop read is free of calls and assembler statements that could
 interpose.  Effective only with
 @option{-mtt-tensix-optimize-const-residency}.
+
+@opindex mtt-tensix-optimize-crosscall-prgm
+@item -mtt-tensix-optimize-crosscall-prgm
+Move the programming of a @code{noinline} callee's resident constant
+registers from the callee's entry to the loop entries of its proven
+callers, so that a per-tile function does not reprogram them on every
+call.  The moved registers stay claimed for the whole translation unit.
+Effective only with @option{-mtt-tensix-optimize-const-residency} and
+@option{-mtt-tensix-optimize-crosscall-hoist}.
 
 @opindex mtt-tensix-optimize-priced-placement
 @item -mtt-tensix-optimize-priced-placement
