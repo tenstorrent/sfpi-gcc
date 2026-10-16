@@ -41,7 +41,9 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree-ssa.h"
 #include "tree-into-ssa.h"
 #include "diagnostic-core.h"
+#include "tree-dfa.h"
 #include "rvtt.h"
+#include "rvtt-effects.h"
 #include <deque>
 #include "rvtt-pressure.h"
 #include "rvtt-refuse.h"
@@ -1197,6 +1199,141 @@ combine_block (Deferred &deferred, basic_block bb)
   return changed;
 }
 
+/* -mtt-tensix-optimize-addi-register-form on FN.  SFPADDI adds its immediate
+   in place, so when its vector operand is still needed afterwards the
+   register allocator first copies it with an SFPMOV.  When the same
+   bf16 constant is materialized later in the block anyway -- typically
+   for a compare, which cannot take an immediate -- issue that load
+   before the add instead and use the three-operand SFPADD: the copy goes
+   away.  The load moves up at most across the opening of an if frame,
+   so it writes the same lanes or more, always with the same value.
+   SFPADD and SFPADDI round alike, so values are unchanged.  Return true
+   if anything changed.  */
+
+static bool
+addi_register_form (function *fn)
+{
+  const rvtt_insn_data *add_d = rvtt_get_insn_data (rvtt_insn_data::sfpadd);
+  bool changed = false;
+  basic_block bb;
+  FOR_EACH_BB_FN (bb, fn)
+    for (gimple_stmt_iterator gsi = gsi_start_bb (bb); !gsi_end_p (gsi);
+	 gsi_next (&gsi))
+      {
+	gcall *addi = dyn_cast <gcall *> (gsi_stmt (gsi));
+	const rvtt_insn_data *insnd = addi ? rvtt_get_insn_data (addi) : nullptr;
+	if (!insnd || insnd->id != rvtt_insn_data::sfpaddi
+	    || !gimple_call_lhs (addi)
+	    || TREE_CODE (gimple_call_lhs (addi)) != SSA_NAME
+	    || !rvtt_canonical_buffer_arg_p (gimple_call_arg (addi, 0)))
+	  continue;
+	/* Plain add of a static immediate: imm, var, id and mod.  */
+	bool plain = TREE_CODE (gimple_call_arg (addi, 2)) == INTEGER_CST;
+	for (unsigned ix = 3; plain && ix != gimple_call_num_args (addi); ++ix)
+	  plain = integer_zerop (gimple_call_arg (addi, ix));
+	tree src = gimple_call_arg (addi, 1);
+	if (!plain || TREE_CODE (src) != SSA_NAME)
+	  continue;
+	unsigned imm = TREE_INT_CST_LOW (gimple_call_arg (addi, 2)) & 0xffff;
+
+	/* The operand must stay live past the add, or the in-place form
+	   needs no copy.  */
+	bool live_after = false;
+	imm_use_iterator uit;
+	gimple *use;
+	FOR_EACH_IMM_USE_STMT (use, uit, src)
+	  if (use != addi && !is_gimple_debug (use)
+	      && (gimple_bb (use) != bb
+		  || gimple_uid (use) > gimple_uid (addi)))
+	    live_after = true;
+	if (!live_after)
+	  continue;
+
+	/* A later load of the same constant, with nothing between that
+	   changes the lane enables.  */
+	gcall *load = nullptr;
+	for (gimple_stmt_iterator it = gsi; !gsi_end_p (it); gsi_next (&it))
+	  {
+	    gimple *stmt = gsi_stmt (it);
+	    if (stmt == addi || is_gimple_debug (stmt))
+	      continue;
+	    if (gimple_code (stmt) == GIMPLE_ASM)
+	      break;
+	    gcall *call = dyn_cast <gcall *> (stmt);
+	    if (!call)
+	      continue;
+	    const rvtt_insn_data *d = rvtt_get_insn_data (call);
+	    if (!d)
+	      break;
+	    /* Opening an if frame only narrows the lanes, so the load may
+	       move up across it: it then writes a superset of the lanes it
+	       wrote before, with the same value.  */
+	    unsigned mod;
+	    if ((d->id == rvtt_insn_data::sfpxpred
+		 && rvtt_call_const_uarg (call, 0, &mod)
+		 && (mod & 3) == SFPXPRED_MOD1_IF)
+		|| d->id == rvtt_insn_data::sfppushc)
+	      continue;
+	    if (d->sets_cc (call) || rvtt_cc_writer_id_p (d->id))
+	      break;
+	    if (d->id == rvtt_insn_data::sfploadi
+		&& gimple_call_lhs (call)
+		&& TREE_CODE (gimple_call_lhs (call)) == SSA_NAME
+		&& rvtt_canonical_buffer_arg_p (gimple_call_arg (call, 0))
+		&& TREE_CODE (gimple_call_arg (call, 1)) == INTEGER_CST
+		&& (TREE_INT_CST_LOW (gimple_call_arg (call, 1)) & 0xffff) == imm
+		&& integer_zerop (gimple_call_arg (call, 2))
+		&& integer_zerop (gimple_call_arg (call, 3))
+		&& integer_zerop (gimple_call_arg (call, 4)))
+	      {
+		load = call;
+		break;
+	      }
+	  }
+	if (!load)
+	  continue;
+	if (rvtt_pressure_window_peak (addi, load) + 1
+	    > rvtt_pressure_capacity ())
+	  {
+	    if (dump_file)
+	      fprintf (dump_file, "addi-register-form: refused at bb %d "
+		       "(pressure)\n", bb->index);
+	    continue;
+	  }
+
+	/* The load touches no memory; its virtual operands are re-derived
+	   at the new position.  */
+	if (tree vdef = gimple_vdef (load))
+	  {
+	    if (TREE_CODE (vdef) == SSA_NAME)
+	      {
+		unlink_stmt_vdef (load);
+		release_ssa_name (vdef);
+	      }
+	    gimple_set_vdef (load, NULL_TREE);
+	  }
+	if (gimple_vuse (load))
+	  gimple_set_vuse (load, NULL_TREE);
+	update_stmt (load);
+	gimple_stmt_iterator lgsi = gsi_for_stmt (load);
+	gsi_move_before (&lgsi, &gsi);
+	gcall *add = gimple_build_call
+	  (add_d->decl, 3, src, gimple_call_lhs (load),
+	   build_int_cst (unsigned_type_node, 0));
+	gimple_call_set_lhs (add, gimple_call_lhs (addi));
+	gimple_set_location (add, gimple_location (addi));
+	gimple_set_uid (add, gimple_uid (addi));
+	if (dump_file)
+	  {
+	    fprintf (dump_file, "addi-register-form: ");
+	    print_gimple_stmt (dump_file, addi, 0);
+	  }
+	gsi_replace (&gsi, add, false);
+	changed = true;
+      }
+  return changed;
+}
+
 namespace {
 
 const pass_data pass_data_rvtt_combine =
@@ -1327,6 +1464,15 @@ public:
 
     deferred.postprocess_muli_addi ();
 
+    if (riscv_tt_opt_addi_register_form > 0)
+      {
+	renumber_gimple_stmt_uids (fn);
+	if (addi_register_form (fn))
+	  {
+	    mark_virtual_operands_for_renaming (fn);
+	    changed = true;
+	  }
+      }
 
     return changed ? TODO_update_ssa : 0;
   }
