@@ -167,14 +167,16 @@ extern bool rvtt_macro_drain_boundary_elidable
 /* Loop-backedge drain elision: prove that a loop-body region's final
    run may elide its in-body drain because the backedge follower stream
    -- the in-body tail, the loop-head prefix, and the region's own first
-   run [0, FIRST_RUN_END) in the next iteration -- provably orders every
-   access after every pending writeback.  The caller must emit the full
-   derived drain on the loop's exit path (the architectural exit
-   contract is preserved, only its placement moves from once-per-trip to
-   once-per-exit).  */
+   run [0, FIRST_RUN_END) in the next iteration -- orders every access
+   after every pending writeback.  The caller must emit the full derived
+   drain on the loop's exit path, so the drain moves from once per trip
+   to once per exit.  When EXIT_DRAIN is non-null it receives the decoded
+   pending horizon less the slot credit of the in-body tail, which the
+   exit path also executes: the fewest SFPNOPs the exit needs.  */
 extern bool rvtt_macro_drain_backedge_elidable
   (const macro_region &region, const macro_schedule &schedule,
-   const macro_descriptor &desc, unsigned first_run_end, FILE *dump);
+   const macro_descriptor &desc, unsigned first_run_end, FILE *dump,
+   int *exit_drain = nullptr);
 /* Window-pairing inter-row drain tuning (rtl-rvtt-schedule.cc, used by
    the planner's emission under -mtt-tensix-optimize-window-pairing): the
    minimal proven inter-row drain for a run of uniform rows with a
