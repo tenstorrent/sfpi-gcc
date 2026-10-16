@@ -653,6 +653,10 @@ mtt-tensix-optimize-ipa-ra
 Target Var(riscv_tt_opt_ipa_ra) Init(0)
 Let callers keep integer values in caller-saved registers across calls to functions that leave them alone.
 
+mtt-tensix-optimize-crossloop-hoist
+Target Var(riscv_tt_opt_crossloop_hoist) Init(0)
+Hoist loop-invariant SFPU immediate materializations across enclosing loops proven free of interfering effects.
+
 mtt-tensix-optimize-reassoc
 Target Var(riscv_tt_opt_reassoc) Init(0)
 Allow value-changing floating-point reassociation in the Tensix SFPU passes; requires -fassociative-math to take effect.

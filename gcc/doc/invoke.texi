@@ -1314,6 +1314,7 @@ See RS/6000 and PowerPC Options.
 -mtt-tensix-optimize-crosscall-hoist
 -mtt-tensix-optimize-crosscall-config-prefix
 -mtt-tensix-optimize-ipa-ra
+-mtt-tensix-optimize-crossloop-hoist
 -mtt-tensix-optimize-replay  -mno-tt-tensix-optimize-replay
 -mtt-tensix-replay-buffer-size=@var{words}
 -mtt-tensix-optimize-replay-hoist
@@ -32089,6 +32090,14 @@ deleted from the callee.  Effective only with
 Let interprocedural register allocation (@option{-fipa-ra}) see through
 calls to noinline SFPU functions, so that callers can keep integer values
 in caller-saved registers that the callee leaves alone.
+
+@opindex mtt-tensix-optimize-crossloop-hoist
+@item -mtt-tensix-optimize-crossloop-hoist
+Hoist loop-invariant SFPU immediate materializations (and, with the
+programmable-constant options, their programming points) across
+enclosing loops whose bodies deliver only instruction words proven free
+of interfering effects.  Every unanalyzable word or statement class
+declines.
 
 @end table
 @node Tensix Register Allocation Options
