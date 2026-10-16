@@ -2797,9 +2797,41 @@
           (match_operand:SI    3 "const_int_operand" "n,n")
 	  ] UNSPECV_SFPARECIP))]
   "TARGET_XTT_TENSIX_BH"
-  "@
-   SFPARECIP\t%x0, %x2, %3
-   SFPARECIP\t%x0, %x2, %3\t# LV:%x1"
+{
+  /* SFPARECIP_MOD1_COND_RECIP reads the condition sign from LReg[VB]
+     (ISA: BlackholeA0 SFPARECIP.md functional model), and VB is the
+     imm12 field's low nibble -- which the gas mnemonic forces to zero
+     (binutils riscv-opc-sfpu-insns.h: match mask 0xfff000).  The sfpi
+     surface's single-source approx_recip(src, RecipMode::IfNegative)
+     contract is "reciprocal where src is negative", i.e. VB == VC, so
+     the mnemonic cannot express it; emit the architecturally-encoded
+     raw word instead (TT_OP encoding: op 0x99, imm12<<12 | VC<<8 |
+     VD<<4 | Mod1, VB == imm12 low nibble).  Mod1 RECIP and EXP ignore
+     VB (functional model reads only LReg[VC]) and keep the mnemonic.  */
+  if (INTVAL (operands[3]) == (int) SFPARECIP_MOD1_COND_RECIP)
+    {
+      unsigned vd = REGNO (operands[0]) - SFPU_REG_FIRST;
+      unsigned vc;
+      if (REG_P (operands[2]))
+	vc = REGNO (operands[2]) - SFPU_REG_FIRST;
+      else
+	{
+	  gcc_assert (GET_CODE (operands[2]) == UNSPEC
+		      && XINT (operands[2], 1) == UNSPEC_SFPCSTLREG);
+	  vc = (unsigned) INTVAL (XVECEXP (operands[2], 0, 0));
+	}
+      unsigned word = (0x99u << 24) | (vc << 12) | (vc << 8) | (vd << 4)
+		      | SFPARECIP_MOD1_COND_RECIP;
+      static char buf[96];
+      snprintf (buf, sizeof (buf),
+		".ttinsn\t%u\t# SFPARECIP\tL%u, L%u, %u (VB=L%u)%s",
+		word, vd, vc, (unsigned) SFPARECIP_MOD1_COND_RECIP, vc,
+		which_alternative == 1 ? " LV" : "");
+      return buf;
+    }
+  return which_alternative == 0 ? "SFPARECIP\t%x0, %x2, %3"
+				: "SFPARECIP\t%x0, %x2, %3\t# LV:%x1";
+}
   [(set_attr "type" "tensix")])
 
 (define_expand "rvtt_sfpnonlinear"
