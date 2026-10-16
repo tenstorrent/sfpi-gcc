@@ -91,6 +91,7 @@ RVTT_FN (ttregion_end,       ,,VOID_FTYPE,                                      
 // The lreg-livein pass carries each use back to its reaching definition or
 // function entry; a written LREG is reserved only if a later read needs it,
 // and its old value is added as an input where disabled lanes keep it.
+RVTT_FN (sfprawlreg_effect,  ,,VOID_FTYPE_USI_USI,                                           VOL, ({R}, {R}))
 
 RVTT_FN (sfpnovalue,         ,,XTT_VEC_FTYPE,                                                0, ())
 RVTT_FN (sfpselect2,         ,,XTT_VEC_FTYPE_XTT_VEC2_USI,                                   0, ({CU, 1}))

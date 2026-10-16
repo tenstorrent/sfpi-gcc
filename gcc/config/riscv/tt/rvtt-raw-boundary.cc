@@ -392,6 +392,75 @@ rvtt_word_facts_classify (uint32_t word, rvtt_word_facts *f)
       return;
     }
 
+  /* Vector Unit value instructions.  According to VectorUnit.md, the
+     only writers of LaneFlags are SFPENCC, SFPSETCC, SFPLE, SFPGT,
+     SFPIADD, SFPLZ and SFPEXEXP; of the flag stack SFPPUSHC, SFPPOPC,
+     SFPCOMPC and some SFPLE/SFPGT modes; of UseLaneFlagsForLaneEnable
+     SFPENCC; and of ROW_MASK SFPCONFIG.  So the opcodes below leave the
+     lane state alone, the conditional ones when mod1 selects none of
+     their CC variants: SFPEXEXP without SET_CC_SGN_EXP (2) or
+     SET_CC_COMP_EXP (8); SFPIADD with CC_NONE (4) and without CC_GTE0
+     (8); SFPLZ without CC_NE0 (2) or CC_COMP (8); SFPLE/SFPGT without
+     SET_CC (1) or MUTATE_STACK (2).  A word stored into a LoadMacroConfig
+     template (VD >= 12) does not touch lane state either.  SFPLOADMACRO
+     is absent because it runs template instructions the word does not
+     show.  Only the CC question is answered: these words write LREGs.  */
+  {
+    unsigned mod1 = word & 0xf;
+    bool lanes_untouched;
+    switch (opcode)
+      {
+      case 0x70: /* SFPLOAD */
+      case 0x72: /* SFPSTORE */
+      case 0x73: /* SFPLUT */
+      case 0x74: /* SFPMULI */
+      case 0x75: /* SFPADDI */
+      case 0x76: /* SFPDIVP2 */
+      case 0x78: /* SFPEXMAN */
+      case 0x7A: /* SFPSHFT */
+      case 0x7C: /* SFPMOV */
+      case 0x7D: /* SFPABS */
+      case 0x7E: /* SFPAND */
+      case 0x7F: /* SFPOR */
+      case 0x80: /* SFPNOT */
+      case 0x82: /* SFPSETEXP */
+      case 0x83: /* SFPSETMAN */
+      case 0x84: /* SFPMAD */
+      case 0x85: /* SFPADD */
+      case 0x86: /* SFPMUL */
+      case 0x89: /* SFPSETSGN */
+      case 0x8C: /* SFPTRANSP */
+      case 0x8D: /* SFPXOR */
+      case 0x8F: /* SFPNOP */
+      case 0x92: /* SFPSWAP */
+      case 0x94: /* SFPSHFT2 */
+      case 0x95: /* SFPLUTFP32 */
+      case 0x98: /* SFPMUL24 */
+      case 0x99: /* SFPARECIP */
+	lanes_untouched = true;
+	break;
+      case 0x77: /* SFPEXEXP */
+      case 0x81: /* SFPLZ */
+	lanes_untouched = (mod1 & 0xa) == 0;
+	break;
+      case 0x79: /* SFPIADD */
+	lanes_untouched = (mod1 & 0xc) == 0x4;
+	break;
+      case 0x96: /* SFPLE */
+      case 0x97: /* SFPGT */
+	lanes_untouched = (mod1 & 0x3) == 0;
+	break;
+      default:
+	lanes_untouched = false;
+	break;
+      }
+    if (lanes_untouched)
+      {
+	f->row = RVTT_WF_SFPU_VALUE;
+	f->cc = RVTT_RAW_CC_INERT;
+	return;
+      }
+  }
 
   /* Synchronization instructions (0xA0..0xA7: ATGETM, ATRELM, SEMINIT,
      SEMPOST, SEMGET, SEMWAIT, STALLWAIT, ...) affect only semaphores,
