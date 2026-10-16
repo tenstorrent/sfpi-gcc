@@ -697,6 +697,10 @@ mtt-tensix-optimize-ipa-ra
 Target Var(riscv_tt_opt_ipa_ra) Init(0)
 Let callers keep integer values in caller-saved registers across calls to functions that leave them alone.
 
+mtt-tensix-optimize-crosscall-prgm
+Target Var(riscv_tt_opt_crosscall_prgm) Init(0)
+Program a callee's residency-claimed constant registers once in its proven callers' loop entries instead of on every call.
+
 mtt-tensix-optimize-crossloop-hoist
 Target Var(riscv_tt_opt_crossloop_hoist) Init(0)
 Hoist loop-invariant SFPU immediate materializations across enclosing loops proven free of interfering effects.
