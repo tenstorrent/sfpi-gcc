@@ -61,6 +61,7 @@ along with GCC; see the file COPYING3.  If not see
 #define INCLUDE_UNORDERED_MAP
 #define INCLUDE_UNORDERED_SET
 #define INCLUDE_VECTOR
+#define INCLUDE_ALGORITHM
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
@@ -76,8 +77,15 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree-ssa-operands.h"
 #include "gimple-range.h"
 #include "dominance.h"
+#include "cfgloop.h"
+#include "tree-ssa-loop-niter.h"
+#include "tree-into-ssa.h"
 #include "rvtt.h"
 #include "rvtt-effects.h"
+#include "rvtt-protos.h"
+#include "rvtt-trips.h"
+#include "rvtt-pressure.h"
+#include "rvtt-refuse.h"
 
 namespace {
 
@@ -1066,6 +1074,18 @@ enum row_kind
   ROW_CC	/* writes the lane-enable state */
 };
 
+struct row_stmt
+{
+  gcall *call;
+  row_kind kind;
+  bool prng = false;		/* advances the per-lane PRNG */
+  int atom = -1;		/* index of the CC atom holding it */
+  HOST_WIDE_INT address = 0;	/* ROW_DST: the literal Dst address */
+  bool store = false;		/* ROW_DST: SFPSTORE */
+  int view = 0;			/* ROW_DST: Dst view, 16 or 32 bits, 0 unknown */
+  int words = 0;		/* delivered words */
+  int latency = 0;		/* exposed result latency, in issue slots */
+};
 
 /* One scheduled statement of the pair: row A's original statement INDEX,
    row B's copy of it, or the in-loop materialization of evicted invariant
@@ -1073,10 +1093,22 @@ enum row_kind
 
 enum pair_kind { PAIR_A, PAIR_B, PAIR_REMAT };
 
+struct pair_item
+{
+  pair_kind kind;
+  unsigned index;
+};
 
 /* A loop-invariant vector value the row reads, with its literal
    materialization chain when it has one (empty otherwise).  */
 
+struct invariant_value
+{
+  tree name;
+  std::vector<gcall *> chain;
+  int words = 0;
+  bool evicted = false;
+};
 
 class row_interleave
 {
@@ -1214,6 +1246,126 @@ row_interleave::admit_shape ()
 	&& !is_gimple_debug (USE_STMT (use)))
       return refuse ("dst-row-interleave-scalar-dependence",
 		     "induction variable");
+  return true;
+}
+
+/* Is CALL the row separator: TTINCRWC advancing only the Dst counter by
+   a positive constant?  Sets *STEP.  */
+
+static bool
+row_separator_p (gcall *call, HOST_WIDE_INT *step)
+{
+  const rvtt_insn_data *insnd = rvtt_get_insn_data (call);
+  if (!insnd || insnd->id != rvtt_insn_data::ttincrwc
+      || gimple_call_num_args (call) != 4)
+    return false;
+  for (unsigned i : { 0u, 2u, 3u })
+    if (!integer_zerop (gimple_call_arg (call, i)))
+      return false;
+  tree dst = gimple_call_arg (call, 1);
+  if (!tree_fits_shwi_p (dst) || tree_to_shwi (dst) <= 0)
+    return false;
+  *step = tree_to_shwi (dst);
+  return true;
+}
+
+/* Every SFPSTOCHRND form advances the per-lane PRNG.  */
+
+static bool
+prng_advance_p (const rvtt_insn_data *insnd)
+{
+  switch (insnd->id)
+    {
+    case rvtt_insn_data::sfpstochrnd:
+    case rvtt_insn_data::sfpstochrnd_lv:
+    case rvtt_insn_data::sfpstochrnd_descale_i:
+    case rvtt_insn_data::sfpstochrnd_descale_i_lv:
+    case rvtt_insn_data::sfpstochrnd_descale_v:
+    case rvtt_insn_data::sfpstochrnd_descale_v_lv:
+      return true;
+    default:
+      return false;
+    }
+}
+
+/* Read the literal address and the Dst view of the typed access CALL (an
+   SFPSTORE when STORE).  The view follows the Mod0 data-type field
+   (SFPLOAD.md and SFPSTORE.md, "Functional model"): MOD0_FMT_SRCB
+   resolves from configuration and stays unknown.  Fails for the
+   no-increment-mode check, a runtime address or Mod0, and the formats
+   with effects beyond the addressed rows: INT32_ALL steps the stack
+   counter, and the LO16_ONLY/HI16_ONLY loads merge the old register.  */
+
+static bool
+dst_access_view (gcall *call, bool store, HOST_WIDE_INT *address,
+		 int *view)
+{
+  unsigned addr_arg = store ? 2 : 1;
+  unsigned mod_arg = store ? 5 : 4;
+  tree addr = gimple_call_arg (call, addr_arg);
+  tree mod = gimple_call_arg (call, mod_arg);
+  tree mode = gimple_call_arg (call, mod_arg + 1);
+  if (!tree_fits_shwi_p (addr) || tree_to_shwi (addr) < 0
+      || !tree_fits_uhwi_p (mod) || !tree_fits_shwi_p (mode)
+      || tree_to_shwi (mode) != rvtt_no_increment_address_mode ())
+    return false;
+  *address = tree_to_shwi (addr);
+  switch (tree_to_uhwi (mod))
+    {
+    case 0:
+      *view = 0;
+      return true;
+    case 1: case 2: case 5: case 6: case 8: case 13:
+      *view = 16;
+      return true;
+    case 3: case 4: case 12:
+      *view = 32;
+      return true;
+    case 7: case 9:
+      *view = store ? 32 : 16;
+      return true;
+    case 11:
+      *view = 16;
+      return true;
+    case 14: case 15:
+      *view = 16;
+      return store;
+    default:
+      return false;
+    }
+}
+
+/* Is LAST the end of a chain of SFPLOADI words whose operands are all
+   literals, each later word merging into its predecessor's value?  Fills
+   CHAIN in program order.  */
+
+static bool
+literal_chain_p (gcall *last, std::vector<gcall *> *chain)
+{
+  chain->clear ();
+  for (gcall *call = last; call; )
+    {
+      const rvtt_insn_data *insnd = rvtt_get_insn_data (call);
+      if (!insnd || (insnd->id != rvtt_insn_data::sfploadi
+		     && insnd->id != rvtt_insn_data::sfploadi_lv))
+	return false;
+      gcall *prev = nullptr;
+      for (unsigned i = 0; i != gimple_call_num_args (call); ++i)
+	{
+	  tree arg = gimple_call_arg (call, i);
+	  if (TREE_CODE (arg) == INTEGER_CST || rvtt_canonical_buffer_arg_p (arg))
+	    continue;
+	  if (TREE_CODE (arg) != SSA_NAME || !vector_value_p (arg) || prev
+	      || insnd->id != rvtt_insn_data::sfploadi_lv
+	      || !has_single_use (arg))
+	    return false;
+	  prev = dyn_cast <gcall *> (SSA_NAME_DEF_STMT (arg));
+	  if (!prev || gimple_bb (prev) != gimple_bb (call))
+	    return false;
+	}
+      chain->insert (chain->begin (), call);
+      call = prev;
+    }
   return true;
 }
 
@@ -1370,54 +1522,91 @@ row_interleave::admit_atoms ()
   return true;
 }
 
-/* The ambient lane state on the loop's entry edge is all-lanes: walking
-   back through single-predecessor blocks, the nearest CC writer is the
-   all-lanes SFPENCC, or the walk reaches the function entry (all-lanes by
-   the structured-CC lowering contract).  A call, an asm or an unaudited
-   word may hand back any state.  */
+/* How a block leaves the lane enables, scanning back from its end: an
+   all-lanes SFPENCC is the last lane-enable event (LANES_KILL), something
+   that could leave other lane enables comes after any such kill
+   (LANES_DIRTY), or the block does not touch them (LANES_QUIET).  A call
+   or an unrecognized word may leave any state.  An asm statement is
+   accepted only when the TU-wide scan found every opaque statement
+   lane-state preserving.  */
+
+enum lane_state { LANES_QUIET, LANES_KILL, LANES_DIRTY };
+
+static lane_state
+block_lane_state (basic_block bb)
+{
+  for (gimple_stmt_iterator gsi = gsi_last_bb (bb); !gsi_end_p (gsi);
+       gsi_prev (&gsi))
+    {
+      gimple *stmt = gsi_stmt (gsi);
+      if (gimple_code (stmt) == GIMPLE_ASM)
+	{
+	  const char *reason;
+	  if (rvtt_tu_opaque_cc_ambient_preserving_p (&reason))
+	    continue;
+	  return LANES_DIRTY;
+	}
+      gcall *call = dyn_cast <gcall *> (stmt);
+      if (!call)
+	continue;
+      const rvtt_insn_data *insnd = rvtt_get_insn_data (call);
+      if (!insnd)
+	return LANES_DIRTY;
+      if (rvtt_encc_all_lanes_call_p (call, insnd)
+	  || insnd->id == rvtt_insn_data::sfpencc_all_lanes)
+	return LANES_KILL;
+      if (rvtt_cc_writer_id_p (insnd->id) || insnd->sets_cc (call))
+	return LANES_DIRTY;
+      /* Counter and address-modifier words, and SFPCONFIG programming of
+	 the constant registers (dests 12-14; LaneConfig is dest 15), leave
+	 lane state alone.  */
+      if (insnd->id == rvtt_insn_data::sfpwriteconfig_v)
+	{
+	  unsigned mod, dest;
+	  if (rvtt_call_const_uarg (call, 1, &mod) && mod == 0
+	      && rvtt_call_const_uarg (call, 2, &dest)
+	      && dest >= 12 && dest <= 14)
+	    continue;
+	  return LANES_DIRTY;
+	}
+      if (!rvtt_cc_quiet_compute_id_p (insnd->id)
+	  && insnd->id != rvtt_insn_data::ttincrwc
+	  && insnd->id != rvtt_insn_data::ttsetc16)
+	return LANES_DIRTY;
+    }
+  return LANES_QUIET;
+}
+
+/* Return true if all lanes are enabled on the loop's entry edge: on
+   every path from the function entry (where all lanes are enabled) the
+   last lane-enable event is an all-lanes SFPENCC.  Walk back over the
+   predecessors until each path meets such a kill; a block seen again
+   adds no new path.  */
 
 bool
 row_interleave::entry_all_lanes_p () const
 {
-  for (basic_block cur = entry->src; cur != ENTRY_BLOCK_PTR_FOR_FN (cfun);
-       cur = single_pred (cur))
+  hash_set<basic_block> seen;
+  auto_vec<basic_block, 16> work;
+  work.safe_push (entry->src);
+  while (!work.is_empty ())
     {
-      for (gimple_stmt_iterator gsi = gsi_last_bb (cur); !gsi_end_p (gsi);
-	   gsi_prev (&gsi))
-	{
-	  gimple *stmt = gsi_stmt (gsi);
-	  if (gimple_code (stmt) == GIMPLE_ASM)
-	    return false;
-	  gcall *call = dyn_cast <gcall *> (stmt);
-	  if (!call)
-	    continue;
-	  const rvtt_insn_data *insnd = rvtt_get_insn_data (call);
-	  if (!insnd)
-	    return false;
-	  if (rvtt_encc_all_lanes_call_p (call, insnd)
-	      || insnd->id == rvtt_insn_data::sfpencc_all_lanes)
-	    return true;
-	  if (rvtt_cc_writer_id_p (insnd->id) || insnd->sets_cc (call))
-	    return false;
-	  /* Counter and address-modifier words, and SFPCONFIG programming of
-	     the constant registers (dests 12-14; LaneConfig is dest 15),
-	     leave lane state alone; anything else unaudited might not.  */
-	  if (insnd->id == rvtt_insn_data::sfpwriteconfig_v)
-	    {
-	      unsigned mod, dest;
-	      if (rvtt_call_const_uarg (call, 1, &mod) && mod == 0
-		  && rvtt_call_const_uarg (call, 2, &dest)
-		  && dest >= 12 && dest <= 14)
-		continue;
-	      return false;
-	    }
-	  if (!rvtt_cc_quiet_compute_id_p (insnd->id)
-	      && insnd->id != rvtt_insn_data::ttincrwc
-	      && insnd->id != rvtt_insn_data::ttsetc16)
-	    return false;
-	}
-      if (!single_pred_p (cur))
+      basic_block cur = work.pop ();
+      if (cur == ENTRY_BLOCK_PTR_FOR_FN (cfun) || seen.add (cur))
+	continue;
+      lane_state state = block_lane_state (cur);
+      if (state == LANES_DIRTY)
 	return false;
+      if (state == LANES_KILL)
+	continue;
+      edge e;
+      edge_iterator ei;
+      FOR_EACH_EDGE (e, ei, cur->preds)
+	{
+	  if (e->flags & EDGE_ABNORMAL)
+	    return false;
+	  work.safe_push (e->src);
+	}
     }
   return true;
 }
@@ -1528,6 +1717,33 @@ unsigned
 row_interleave::source (pair_kind kind, unsigned def) const
 {
   return kind == PAIR_B && !shared[def] ? 1 : 0;
+}
+
+/* LREGs NAME occupies while live: an SFPSWAP pair against a constant
+   register drops the constant half.  */
+
+static unsigned
+lreg_width (tree name)
+{
+  switch (TYPE_MODE (TREE_TYPE (name)))
+    {
+    case E_XTT32SImode:
+      return 1;
+    case E_XTT64SImode:
+      if (gcall *def = dyn_cast <gcall *> (SSA_NAME_DEF_STMT (name)))
+	{
+	  const rvtt_insn_data *insnd = rvtt_get_insn_data (def);
+	  if (insnd && insnd->id == rvtt_insn_data::sfpswap
+	      && (!rvtt_pressure_tracked_p (gimple_call_arg (def, 0))
+		  || !rvtt_pressure_tracked_p (gimple_call_arg (def, 1))))
+	    return 1;
+	}
+      return 2;
+    case E_XTT128SImode:
+      return 4;
+    default:
+      return SFPU_REG_NUM;
+    }
 }
 
 /* Peak simultaneously-live LREG demand of the body in ORDER, taken at
@@ -2014,6 +2230,15 @@ public:
 };
 
 } /* anonymous namespace */
+
+/* Pass factory for rvtt_dst_row_interleave, referenced from
+   rvtt-passes.def.  */
+
+gimple_opt_pass *
+make_pass_rvtt_dst_row_interleave (gcc::context *ctxt)
+{
+  return new pass_rvtt_dst_row_interleave (ctxt);
+}
 
 /* Row look-ahead of Dst row sequences.
 
