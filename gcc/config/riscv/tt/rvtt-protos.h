@@ -163,6 +163,7 @@ extern gimple_opt_pass *make_pass_rvtt_live (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_schedule_ssa (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_transp_involution (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_crosslane (gcc::context *ctxt);
+extern rtl_opt_pass *make_pass_rvtt_crosslane_window (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_replay_unroll (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_launch_flatten (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_launch_flatten_reset (gcc::context *ctxt);
