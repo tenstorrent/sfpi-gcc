@@ -1018,6 +1018,74 @@ enum init_lreg_event_kind
   INIT_LREG_TYPED_WRITE
 };
 
+struct init_lreg_event
+{
+  init_lreg_event_kind kind = INIT_LREG_NONE;
+  unsigned first = 0;
+  unsigned writes = 0;
+};
+
+/* Classify the GIMPLE forms that rtl-rvtt-lreg-livein later interprets.
+   Return false rather than inventing a transfer when a metadata operand is
+   not a compile-time mask/register: in particular, treating an unknown write
+   as 0xff could unsoundly manufacture a demand kill.  */
+
+static bool
+init_lreg_event_for_stmt (gimple *stmt, init_lreg_event *ev)
+{
+  *ev = init_lreg_event {};
+  gcall *call = dyn_cast <gcall *> (stmt);
+  const rvtt_insn_data *insnd = call ? rvtt_get_insn_data (call) : nullptr;
+  if (!insnd)
+    return true;
+
+  auto mask_arg = [&] (unsigned arg, unsigned *mask) -> bool
+    {
+      tree value = gimple_call_arg (call, arg);
+      if (TREE_CODE (value) != INTEGER_CST)
+	return false;
+      *mask = TREE_INT_CST_LOW (value) & 0xff;
+      return true;
+    };
+  auto lreg_arg = [&] (unsigned arg, unsigned *mask) -> bool
+    {
+      tree value = gimple_call_arg (call, arg);
+      if (TREE_CODE (value) != INTEGER_CST || !tree_fits_uhwi_p (value))
+	return false;
+      unsigned HOST_WIDE_INT regno = tree_to_uhwi (value);
+      if (regno >= 8)
+	return false;
+      *mask = 1u << regno;
+      return true;
+    };
+
+  switch (insnd->id)
+    {
+    case rvtt_insn_data::sfprawlreg_effect:
+      ev->kind = INIT_LREG_EFFECT;
+      return mask_arg (0, &ev->first) && mask_arg (1, &ev->writes);
+    case rvtt_insn_data::sfprawlreg_access:
+      ev->kind = INIT_LREG_ACCESS;
+      return mask_arg (0, &ev->first) && mask_arg (1, &ev->writes);
+    case rvtt_insn_data::sfpreadlreg:
+      {
+	tree value = gimple_call_arg (call, 0);
+	if (TREE_CODE (value) != INTEGER_CST || !tree_fits_uhwi_p (value))
+	  return false;
+	unsigned HOST_WIDE_INT regno = tree_to_uhwi (value);
+	/* Reads of programmable constant registers do not own L0..L7.  */
+	if (regno >= 8 && regno <= 15)
+	  return true;
+	ev->kind = INIT_LREG_TYPED_READ;
+	return lreg_arg (0, &ev->first);
+      }
+    case rvtt_insn_data::sfpwritelreg:
+      ev->kind = INIT_LREG_TYPED_WRITE;
+      return lreg_arg (1, &ev->writes);
+    default:
+      return true;
+    }
+}
 
 enum init_lreg_transfer_kind
 {
@@ -1027,9 +1095,433 @@ enum init_lreg_transfer_kind
   INIT_LREG_EFFECT_DEMAND
 };
 
+/* Return the one committed-inline edge represented by STMT in OWNER, or null
+   when STMT is an ordinary non-inline call.  Multiple matching edges are an
+   unprovable call-site mapping.  */
+
+static cgraph_edge *
+init_lreg_inline_edge (cgraph_node *owner, cgraph_node *ucaller, gimple *stmt,
+		       bool *known)
+{
+  cgraph_edge *found = nullptr;
+  for (cgraph_edge *e = owner->callees; e; e = e->next_callee)
+    if (e->call_stmt == stmt && e->callee->inlined_to == ucaller)
+      {
+	if (found)
+	  {
+	    *known = false;
+	    return nullptr;
+	  }
+	found = e;
+      }
+  return found;
+}
+
+static cgraph_node *
+init_lreg_body_node (cgraph_node *node)
+{
+  /* The origin is only a source of statements, never a source of invented
+     clone constants: init_lreg_event_for_stmt still requires every metadata
+     mask/register in that body to be an INTEGER_CST.  */
+  while (node && !gimple_has_body_p (node->decl) && node->clone_of)
+    node = node->clone_of;
+  return node;
+}
+
+/* Every committed edge that will later materialize into OWNER must already
+   name a statement in FN's body.  Without that accounting, a failed pointer
+   match below could silently turn an inline transfer into identity.  */
+
+static bool
+init_lreg_inline_edges_mapped_p (cgraph_node *owner, cgraph_node *ucaller,
+				 function *fn)
+{
+  for (cgraph_edge *e = owner->callees; e; e = e->next_callee)
+    if (e->callee->inlined_to == ucaller)
+      {
+	if (!e->call_stmt)
+	  return false;
+	bool found = false;
+	basic_block bb;
+	FOR_EACH_BB_FN (bb, fn)
+	  for (gimple_stmt_iterator gsi = gsi_start_bb (bb);
+	       !gsi_end_p (gsi); gsi_next (&gsi))
+	    if (gsi_stmt (gsi) == e->call_stmt)
+	      found = true;
+	if (!found)
+	  return false;
+      }
+  return true;
+}
+
+/* Whether NODE's eventual inline expansion contains a relevant raw/hard-LREG
+   event.  This recursive precheck lets an arbitrary raw-free CFG remain the
+   identity transfer; only a relevant body needs the bounded linear-CFG
+   summary below.  */
+
+static bool
+init_lreg_inline_has_events (cgraph_node *ucaller, cgraph_node *node,
+			     bool *has_events, bool *known,
+			     auto_vec<cgraph_node *, 8> *active)
+{
+  for (cgraph_node *seen : *active)
+    if (seen == node)
+      {
+	*known = false;
+	return false;
+      }
+  unsigned active_mark = active->length ();
+  active->safe_push (node);
+  cgraph_node *body_node = init_lreg_body_node (node);
+  function *fn = body_node
+    ? DECL_STRUCT_FUNCTION (body_node->decl) : nullptr;
+  if (!fn || !fn->cfg
+      || !init_lreg_inline_edges_mapped_p (node, ucaller, fn)
+      || (body_node != node
+	  && !init_lreg_inline_edges_mapped_p (body_node, ucaller, fn)))
+    {
+      *known = false;
+      active->truncate (active_mark);
+      return false;
+    }
+  basic_block bb;
+  FOR_EACH_BB_FN (bb, fn)
+    for (gimple_stmt_iterator gsi = gsi_start_bb (bb);
+	 !gsi_end_p (gsi); gsi_next (&gsi))
+      {
+	gimple *stmt = gsi_stmt (gsi);
+	init_lreg_event ev;
+	if (!init_lreg_event_for_stmt (stmt, &ev))
+	  {
+	    *known = false;
+	    active->truncate (active_mark);
+	    return false;
+	  }
+	if (ev.kind != INIT_LREG_NONE)
+	  *has_events = true;
+	bool edge_known = true;
+	cgraph_edge *e
+	  = init_lreg_inline_edge (node, ucaller, stmt, &edge_known);
+	if (!e && body_node != node && edge_known)
+	  e = init_lreg_inline_edge (body_node, ucaller, stmt, &edge_known);
+	if (!edge_known)
+	  {
+	    *known = false;
+	    active->truncate (active_mark);
+	    return false;
+	  }
+	if (e && !init_lreg_inline_has_events (ucaller, e->callee, has_events,
+					     known, active))
+	  {
+	    active->truncate (active_mark);
+	    return false;
+	  }
+      }
+  active->truncate (active_mark);
+  return true;
+}
+
+/* Record a body whose executable CFG is one straight entry-to-exit chain.
+   Relevant committed-inline bodies outside this bounded shape refuse rather
+   than receiving a flat, order-losing summary.  */
+
+static bool
+init_lreg_linear_body (function *fn, auto_vec<basic_block> *order)
+{
+  if (!single_succ_p (ENTRY_BLOCK_PTR_FOR_FN (fn)))
+    return false;
+  basic_block bb = single_succ (ENTRY_BLOCK_PTR_FOR_FN (fn));
+  while (bb != EXIT_BLOCK_PTR_FOR_FN (fn))
+    {
+      if (!single_pred_p (bb) || !single_succ_p (bb))
+	return false;
+      for (basic_block seen : *order)
+	if (seen == bb)
+	  return false;
+      order->safe_push (bb);
+      bb = single_succ (bb);
+    }
+  return true;
+}
+
 static bool init_lreg_apply_stmt (cgraph_node *, cgraph_node *, gimple *,
 				  init_lreg_transfer_kind, unsigned *,
 				  bool *, auto_vec<cgraph_node *, 8> *);
+
+static bool
+init_lreg_apply_inline (cgraph_node *ucaller, cgraph_node *node,
+			init_lreg_transfer_kind kind, unsigned *live,
+			bool *known, auto_vec<cgraph_node *, 8> *active)
+{
+  bool has_events = false;
+  auto_vec<cgraph_node *, 8> scan_active;
+  if (!init_lreg_inline_has_events (ucaller, node, &has_events, known,
+				    &scan_active)
+      || !*known)
+    return false;
+  if (!has_events)
+    return true;
+
+  for (cgraph_node *seen : *active)
+    if (seen == node)
+      {
+	*known = false;
+	return false;
+      }
+  unsigned active_mark = active->length ();
+  active->safe_push (node);
+
+  cgraph_node *body_node = init_lreg_body_node (node);
+  function *fn = body_node
+    ? DECL_STRUCT_FUNCTION (body_node->decl) : nullptr;
+  auto_vec<basic_block> order;
+  if (!fn || !fn->cfg || !init_lreg_linear_body (fn, &order))
+    {
+      *known = false;
+      active->truncate (active_mark);
+      return false;
+    }
+
+  bool backward = kind == INIT_LREG_DEMAND
+    || kind == INIT_LREG_EFFECT_DEMAND;
+  for (unsigned ix = 0; ix != order.length (); ++ix)
+    {
+      basic_block bb = order[backward ? order.length () - 1 - ix : ix];
+      if (backward)
+	for (gimple_stmt_iterator gsi = gsi_last_bb (bb);
+	     !gsi_end_p (gsi); gsi_prev (&gsi))
+	  if (!init_lreg_apply_stmt (ucaller, node, gsi_stmt (gsi), kind,
+				     live, known, active))
+	    {
+	      active->truncate (active_mark);
+	      return false;
+	    }
+      if (!backward)
+	for (gimple_stmt_iterator gsi = gsi_start_bb (bb);
+	     !gsi_end_p (gsi); gsi_next (&gsi))
+	  if (!init_lreg_apply_stmt (ucaller, node, gsi_stmt (gsi), kind,
+				     live, known, active))
+	    {
+	      active->truncate (active_mark);
+	      return false;
+	    }
+    }
+  active->truncate (active_mark);
+  return true;
+}
+
+/* Apply one direct event, or recursively substitute the site-aware transfer
+   of a committed-inline call.  */
+
+static bool
+init_lreg_apply_stmt (cgraph_node *ucaller, cgraph_node *owner, gimple *stmt,
+		      init_lreg_transfer_kind kind, unsigned *live,
+		      bool *known, auto_vec<cgraph_node *, 8> *active)
+{
+  init_lreg_event ev;
+  if (!init_lreg_event_for_stmt (stmt, &ev))
+    {
+      *known = false;
+      return false;
+    }
+  if (ev.kind == INIT_LREG_NONE)
+    {
+      bool edge_known = true;
+      cgraph_edge *e
+	= init_lreg_inline_edge (owner, ucaller, stmt, &edge_known);
+      cgraph_node *body_owner = init_lreg_body_node (owner);
+      if (!e && body_owner != owner && edge_known)
+	e = init_lreg_inline_edge (body_owner, ucaller, stmt, &edge_known);
+      if (!edge_known)
+	{
+	  *known = false;
+	  return false;
+	}
+      return !e || init_lreg_apply_inline (ucaller, e->callee, kind, live,
+					   known, active);
+    }
+
+  switch (kind)
+    {
+    case INIT_LREG_OWNED:
+      if (ev.kind == INIT_LREG_ACCESS)
+	*live = (*live & ~ev.first) | ev.writes;
+      else if (ev.kind == INIT_LREG_TYPED_READ
+	       || ev.kind == INIT_LREG_TYPED_WRITE)
+	*live &= ~(ev.first | ev.writes);
+      break;
+    case INIT_LREG_PROVENANCE:
+      if (ev.kind == INIT_LREG_EFFECT)
+	*live |= ev.writes;
+      else if (ev.kind == INIT_LREG_ACCESS)
+	*live = (*live & ~ev.first) | ev.writes;
+      else if (ev.kind == INIT_LREG_TYPED_READ
+	       || ev.kind == INIT_LREG_TYPED_WRITE)
+	*live &= ~(ev.first | ev.writes);
+      break;
+    case INIT_LREG_DEMAND:
+    case INIT_LREG_EFFECT_DEMAND:
+      if (ev.kind == INIT_LREG_EFFECT)
+	*live = (*live & ~ev.writes) | ev.first;
+      else if (ev.kind == INIT_LREG_ACCESS)
+	*live &= ~(ev.first | ev.writes);
+      else if (ev.kind == INIT_LREG_TYPED_READ)
+	*live = kind == INIT_LREG_EFFECT_DEMAND
+	  ? *live & ~ev.first : *live | ev.first;
+      else if (ev.kind == INIT_LREG_TYPED_WRITE)
+	*live &= ~ev.writes;
+      break;
+    }
+  return true;
+}
+
+static unsigned
+init_lreg_transfer_block (cgraph_node *ucaller, basic_block bb, unsigned live,
+			  init_lreg_transfer_kind kind, bool *known)
+{
+  auto_vec<cgraph_node *, 8> active;
+  bool backward = kind == INIT_LREG_DEMAND
+    || kind == INIT_LREG_EFFECT_DEMAND;
+  if (backward)
+    for (gimple_stmt_iterator gsi = gsi_last_bb (bb);
+	 !gsi_end_p (gsi); gsi_prev (&gsi))
+      {
+	if (!init_lreg_apply_stmt (ucaller, ucaller, gsi_stmt (gsi), kind,
+				   &live, known, &active))
+	  return live;
+      }
+  if (!backward)
+    for (gimple_stmt_iterator gsi = gsi_start_bb (bb);
+	 !gsi_end_p (gsi); gsi_next (&gsi))
+      {
+	if (!init_lreg_apply_stmt (ucaller, ucaller, gsi_stmt (gsi), kind,
+				   &live, known, &active))
+	  return live;
+      }
+  return live;
+}
+
+/* Return null when FIXED_MASK is disjoint from every raw architectural value
+   live through ENTRY.  The edge-local composition is the RTL pass's block-
+   entry rule: explicit ownership, raw-effect demand, and typed demand with a
+   reaching raw definition.  */
+
+static const char *
+init_fixed_lreg_live_through (cgraph_node *ucaller, function *fn, edge entry,
+			      unsigned fixed_mask, unsigned *live_out)
+{
+  *live_out = 0;
+  if (!fixed_mask)
+    return nullptr;
+  if (!init_lreg_inline_edges_mapped_p (ucaller, ucaller, fn))
+    return "drain-init-rawlreg-unproven";
+
+  const unsigned n_bbs = last_basic_block_for_fn (fn);
+  auto_vec<unsigned> owned_in (n_bbs), owned_out (n_bbs);
+  auto_vec<unsigned> provenance_in (n_bbs), provenance_out (n_bbs);
+  auto_vec<unsigned> demand_in (n_bbs), demand_out (n_bbs);
+  auto_vec<unsigned> effect_in (n_bbs), effect_out (n_bbs);
+  owned_in.safe_grow_cleared (n_bbs);
+  owned_out.safe_grow_cleared (n_bbs);
+  provenance_in.safe_grow_cleared (n_bbs);
+  provenance_out.safe_grow_cleared (n_bbs);
+  demand_in.safe_grow_cleared (n_bbs);
+  demand_out.safe_grow_cleared (n_bbs);
+  effect_in.safe_grow_cleared (n_bbs);
+  effect_out.safe_grow_cleared (n_bbs);
+
+  bool known = true;
+  bool changed;
+  do
+    {
+      changed = false;
+      basic_block bb;
+      FOR_EACH_BB_FN (bb, fn)
+	{
+	  unsigned next_in = 0;
+	  edge e;
+	  edge_iterator ei;
+	  FOR_EACH_EDGE (e, ei, bb->preds)
+	    next_in |= owned_out[e->src->index];
+	  unsigned next_out = init_lreg_transfer_block
+	    (ucaller, bb, next_in, INIT_LREG_OWNED, &known);
+	  if (!known)
+	    return "drain-init-rawlreg-unproven";
+	  if (next_in != owned_in[bb->index]
+	      || next_out != owned_out[bb->index])
+	    {
+	      owned_in[bb->index] = next_in;
+	      owned_out[bb->index] = next_out;
+	      changed = true;
+	    }
+	}
+    }
+  while (changed);
+
+  do
+    {
+      changed = false;
+      basic_block bb;
+      FOR_EACH_BB_FN (bb, fn)
+	{
+	  unsigned next_in = 0;
+	  edge e;
+	  edge_iterator ei;
+	  FOR_EACH_EDGE (e, ei, bb->preds)
+	    next_in |= provenance_out[e->src->index];
+	  unsigned next_out = init_lreg_transfer_block
+	    (ucaller, bb, next_in, INIT_LREG_PROVENANCE, &known);
+	  if (!known)
+	    return "drain-init-rawlreg-unproven";
+	  if (next_in != provenance_in[bb->index]
+	      || next_out != provenance_out[bb->index])
+	    {
+	      provenance_in[bb->index] = next_in;
+	      provenance_out[bb->index] = next_out;
+	      changed = true;
+	    }
+	}
+    }
+  while (changed);
+
+  for (unsigned pass = 0; pass != 2; ++pass)
+    {
+      auto_vec<unsigned> &in = pass ? effect_in : demand_in;
+      auto_vec<unsigned> &out = pass ? effect_out : demand_out;
+      do
+	{
+	  changed = false;
+	  basic_block bb;
+	  FOR_EACH_BB_FN (bb, fn)
+	    {
+	      unsigned next_out = 0;
+	      edge e;
+	      edge_iterator ei;
+	      FOR_EACH_EDGE (e, ei, bb->succs)
+		next_out |= in[e->dest->index];
+	      unsigned next_in = init_lreg_transfer_block
+		(ucaller, bb, next_out,
+		 pass ? INIT_LREG_EFFECT_DEMAND : INIT_LREG_DEMAND, &known);
+	      if (!known)
+		return "drain-init-rawlreg-unproven";
+	      if (next_in != in[bb->index] || next_out != out[bb->index])
+		{
+		  in[bb->index] = next_in;
+		  out[bb->index] = next_out;
+		  changed = true;
+		}
+	    }
+	}
+      while (changed);
+    }
+
+  unsigned live = owned_out[entry->src->index]
+    | effect_in[entry->dest->index]
+    | (demand_in[entry->dest->index]
+	& provenance_out[entry->src->index]);
+  *live_out = live & 0xff;
+  return (live & fixed_mask) ? "drain-init-fixed-lreg-live" : nullptr;
+}
 
 /* Commit: insert the hoisted prefix as typed builtin calls at the tail
    of the caller loop's dedicated preheader (created on the entry edge
@@ -1328,6 +1820,26 @@ rvtt_crosscall_init_hoist (function *callee_fn,
       const char *why = nullptr;
       if (!mop_init_ok_p (*prog, c, &ctx.owned_row_dirty, &why))
 	result = why;
+    }
+
+  if (!result && prog->n_words)
+    {
+      unsigned live = 0;
+      result = init_fixed_lreg_live_through (ucaller, cfn, entry,
+					    1u << 0, &live);
+      if (result)
+	{
+	  if (strcmp (result, "drain-init-fixed-lreg-live") == 0)
+	    rvtt_refuse_by_name_at
+	      (result, ucall, dump_file,
+	       "init-hoist: refused (%s): entry raw-live mask 0x%02x, "
+	       "fixed prefix mask 0x01\n", result, live);
+	  else
+	    rvtt_refuse_by_name_at
+	      (result, ucall, dump_file,
+	       "init-hoist: refused (%s): caller raw-LREG transfer unknown, "
+	       "fixed prefix mask 0x01\n", result);
+	}
     }
 
   if (!result)

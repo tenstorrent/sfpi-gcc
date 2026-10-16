@@ -533,6 +533,8 @@ RVTT_REFUSAL (WINDOW_SIZING_REFORM_COMPOSITION_UNAUDITED, "window-sizing-reform-
 RVTT_REFUSAL (WINDOW_SIZING_SLOT_EXHAUSTED, "window-sizing-slot-exhausted")
 RVTT_REFUSAL (ZERO_LENGTH, "zero-length")
 RVTT_REFUSAL (ZERO_TRIP_PREHEADER_UNPROVEN, "zero-trip-preheader-unproven")
+RVTT_REFUSAL (DRAIN_INIT_FIXED_LREG_LIVE, "drain-init-fixed-lreg-live")
+RVTT_REFUSAL (DRAIN_INIT_RAWLREG_UNPROVEN, "drain-init-rawlreg-unproven")
 RVTT_REFUSAL (DST_ROW_INTERLEAVE_BH_ONLY, "dst-row-interleave-bh-only")
 RVTT_REFUSAL (DST_ROW_INTERLEAVE_LOOP_SHAPE, "dst-row-interleave-loop-shape")
 RVTT_REFUSAL (DST_ROW_INTERLEAVE_TRIPS_UNPROVEN, "dst-row-interleave-trips-unproven")
