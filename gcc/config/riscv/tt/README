@@ -42,6 +42,7 @@ a recorded reason (see section 5).
   LUT selection              If-conversion of piecewise range dispatch into
 			     SFPLUTFP32 table selection, including the FP16
 			     six-entry form.
+  crosscall                  Interprocedural LICM across noinline boundaries.
 
 Supporting infrastructure that is not a pass: rvtt-cost / rvtt-delivery-cost
 / rvtt-timing / rvtt-trips (pricing engines), rvtt-bnb (an exact
