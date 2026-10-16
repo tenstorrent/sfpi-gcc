@@ -770,6 +770,12 @@ launch_flatten_stmt_words (const rvtt_insn_data *insnd)
        words this scan can price).  */
     case rvtt_insn_data::sfpwritelreg:
       return 0;
+    /* The raw-LREG effect marker the TT_ issue macros place after a raw
+       or computed word: compiler-only metadata describing that word,
+       which is counted on its own.  It emits nothing, and unrolling
+       copies it next to its word.  */
+    case rvtt_insn_data::sfprawlreg_effect:
+      return 0;
     default:
       return -1;
     }
