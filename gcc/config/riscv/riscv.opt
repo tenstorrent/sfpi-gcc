@@ -617,6 +617,10 @@ mtt-tensix-optimize-launch-flatten
 Target Var(riscv_tt_opt_launch_flatten) Init(0)
 Request complete unrolling of counted innermost delivery loops so the flattened word stream reaches replay formation.
 
+mtt-tensix-optimize-launch-flatten-bounded
+Target Var(riscv_tt_opt_launch_flatten_bounded) Init(0)
+Let launch-flatten also request delivery loops bounded by a proven iteration limit, and nests of requested delivery loops.
+
 mtt-tensix-optimize-round-interleave
 Target Var(riscv_tt_opt_round_interleave) Init(0)
 Interleave two iterations of counted SFPU round loops whose iterations are provably independent.
