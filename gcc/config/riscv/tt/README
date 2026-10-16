@@ -47,6 +47,8 @@ a recorded reason (see section 5).
 			     residency walk that keeps invariants resident.
   Dst ownership              Dst row ownership tracking: identical Dst
 			     reloads become register copies.
+  Dst auto-increment         Auto-increment addressing formation for per-row
+			     Dst steps.
 
 Supporting infrastructure that is not a pass: rvtt-cost / rvtt-delivery-cost
 / rvtt-timing / rvtt-trips (pricing engines), rvtt-bnb (an exact
