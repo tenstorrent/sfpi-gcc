@@ -605,6 +605,30 @@ mtt-tensix-optimize-replay
 Target Var(riscv_tt_opt_replay) Init(1)
 Generate Tensix replay instructions.
 
+mtt-tensix-optimize-replay-hoist
+Target Var(riscv_tt_opt_replay_hoist) Init(0)
+Hoist fixed-encoding Tensix replay captures out of profitable loops.
+
+mtt-tensix-optimize-replay-loop-unroll
+Target Var(riscv_tt_opt_replay_loop_unroll) Init(0)
+Request generic unrolling of counted single-block SFPU row loops so replay formation can capture the repeated row.
+
+mtt-tensix-optimize-launch-flatten
+Target Var(riscv_tt_opt_launch_flatten) Init(0)
+Request complete unrolling of counted innermost delivery loops so the flattened word stream reaches replay formation.
+
+mtt-tensix-optimize-round-interleave
+Target Var(riscv_tt_opt_round_interleave) Init(0)
+Interleave two iterations of counted SFPU round loops whose iterations are provably independent.
+
+mtt-tensix-optimize-invariant-loadi
+Target Var(riscv_tt_opt_invariant_loadi) Init(0)
+Hoist loop-invariant Tensix immediate-vector materializations before register allocation.
+
+mtt-tensix-optimize-cc-region-general
+Target Var(riscv_tt_opt_cc_region_general) Init(0)
+Accept any CC layout that is proven equivalent to a recognized shape.
+
 mtt-tensix-macro-planner-replay
 Target Var(riscv_tt_macro_planner_replay) Init(0)
 Admit planner-formed SFPLOADMACRO launches into automatic replay recording.
