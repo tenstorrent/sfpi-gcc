@@ -1,0 +1,913 @@
+/* Typed architectural effect sets for Tensix instructions.
+   Copyright (C) 2026 Tenstorrent Inc.
+
+This file is part of GCC.
+
+GCC is free software; you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free
+Software Foundation; either version 3, or (at your option) any later
+version.
+
+GCC is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or
+FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+for more details.
+
+You should have received a copy of the GNU General Public License
+along with GCC; see the file COPYING3.  If not see
+<http://www.gnu.org/licenses/>.  */
+
+#define IN_TARGET_CODE 1
+
+#include "config.h"
+#include "system.h"
+#include "coretypes.h"
+#include "backend.h"
+#include "tree.h"
+#include "gimple.h"
+#include "rtl.h"
+#include "insn-config.h"
+#include "insn-codes.h"
+#include "insn-attr.h"
+#include "recog.h"
+#include "regs.h"
+#include "memmodel.h"
+#include "emit-rtl.h"
+#include "rtl-iter.h"
+#include "tm_p.h"
+#include "rvtt.h"
+#include "rvtt-protos.h"
+#include "rvtt-effects.h"
+#include "rvtt-macro-tables.h"
+#include "rvtt-raw-boundary.h"
+
+/* Effect data lives once, in the generated attribute family of
+   rvtt-cost.md; this file only resolves it against operands.  Every
+   default is conservative: an unaudited pattern, a call, or asm yields
+   opaque=true and consumers must leave the code unchanged.  The one
+   audited asm exception is the raw `.ttinsn' constant word whose
+   architectural field decode proves the pure Dst/RWC counter class
+   (rvtt-raw-boundary.cc); it carries the typed TTSETRWC effect set.  */
+
+static xtt_subunit_t
+subunit_from_attr (enum xtt_subunit a)
+{
+  switch (a)
+    {
+    case XTT_SUBUNIT_NONE:   return XTT_SU_NONE;
+    case XTT_SUBUNIT_SIMPLE: return XTT_SU_SIMPLE;
+    case XTT_SUBUNIT_MAD:    return XTT_SU_MAD;
+    case XTT_SUBUNIT_ROUND:  return XTT_SU_ROUND;
+    case XTT_SUBUNIT_LOAD:   return XTT_SU_LOAD;
+    case XTT_SUBUNIT_STORE:  return XTT_SU_STORE;
+    case XTT_SUBUNIT_CFG:    return XTT_SU_CFG;
+    case XTT_SUBUNIT_SYNC:   return XTT_SU_SYNC;
+    }
+  gcc_unreachable ();
+}
+
+/* Resolve an operand-position bitmask to a hard-LREG mask (L0..L15 plus
+   LREG16).  Positions holding pseudos or non-LREG operands contribute no
+   bits; post-RA every live LREG operand is a hard register.  */
+
+static uint32_t
+lreg_mask_of_positions (int position_mask)
+{
+  uint32_t mask = 0;
+  for (int i = 0; i < recog_data.n_operands && (position_mask >> i); ++i)
+    if ((position_mask >> i) & 1)
+      {
+	rtx op = recog_data.operand[i];
+	if (!REG_P (op))
+	  continue;
+	unsigned regno = REGNO (op);
+	/* A client may query after allocation but before reload has
+	   rewritten every pseudo to its assigned hard register.  Resolve
+	   that normal GCC representation here so typed effects describe the
+	   allocated LREG rather than silently dropping the operand.  */
+	if (regno >= FIRST_PSEUDO_REGISTER && reg_renumber
+	    && reg_renumber[regno] >= 0)
+	  regno = reg_renumber[regno];
+	/* SFPU_REG_P bounds the bit to the real L0-L7 file; a bare `<= 16'
+	   bound would admit regnos up to 96 (v0) and set bits outside the
+	   16-bit mask.  */
+	if (SFPU_REG_P (regno))
+	  mask |= 1u << (regno - SFPU_REG_FIRST);
+      }
+  return mask;
+}
+
+/* The canonical no-increment load/store address mode.  This constant is
+   target capability data and must never be duplicated into pass decision
+   logic.  */
+
+static int
+no_increment_address_mode ()
+{
+  if (TARGET_XTT_TENSIX_BH)
+    return 7;
+  if (TARGET_XTT_TENSIX_WH)
+    return 3;
+  return -1;			/* QSR: unproven -> refuse.  */
+}
+
+/* Public accessor for passes that need the same capability fact (see the
+   comment above).  */
+
+int
+rvtt_no_increment_address_mode ()
+{
+  return no_increment_address_mode ();
+}
+
+/* The effect query (see rvtt-effects.h): resolve the rvtt-cost.md
+   attribute family against INSN's operands into one xtt_effect_set.  Every default is refusing -- calls, unclassified
+   asm, unrecognized or non-Tensix insns, and any unaudited attribute
+   field keep opaque=true; the one audited asm exception is the raw
+   `.ttinsn' pure Dst/RWC counter word (see the comment above).  */
+
+xtt_effect_set
+rvtt_macro_insn_effects (rtx_insn *insn)
+{
+  xtt_effect_set e = {};
+  e.opaque = true;
+  e.result_latency = -1;
+  e.next_slot_stall = false;
+  e.rwc.kind = xtt_rwc_effect_t::UNKNOWN;
+
+  if (!insn || !NONDEBUG_INSN_P (insn) || CALL_P (insn))
+    return e;
+  if (asm_noperands (PATTERN (insn)) >= 0)
+    {
+      /* Raw `.ttinsn' constant words (the LLK TTI_ macro shape) are
+	 field-decoded architecturally -- rvtt-raw-boundary.cc; only
+	 the pure Dst/RWC counter class is on record.  A proven word
+	 carries the typed TTSETRWC effect set verbatim: no LREG, CC,
+	 configuration, or Dst-memory effect, a SET-class RWC counter
+	 effect, sync sub-unit, no audited result latency.  Every
+	 other asm keeps the refusing opaque default.  */
+      xtt_rwc_effect_t rwc;
+      if (rvtt_raw_pure_dst_rwc (insn, &rwc))
+	{
+	  e.rwc = rwc;
+	  e.subunit = XTT_SU_SYNC;
+	  e.opaque = false;
+	}
+      return e;
+    }
+  int code = recog_memoized (insn);
+  if (code < 0 || get_attr_type (insn) != TYPE_TENSIX)
+    return e;
+
+  /* The numeric attributes are stored with a +1 bias (generated
+     attributes cannot be negative); 0 means unaudited.  This function is
+     the only decoder of that bias.  */
+  int read_positions = get_attr_xtt_lreg_read_ops (insn) - 1;
+  int write_positions = get_attr_xtt_lreg_write_ops (insn) - 1;
+  enum xtt_cc_effect cc = get_attr_xtt_cc_effect (insn);
+  enum xtt_config_effect cfg = get_attr_xtt_config_effect (insn);
+  enum xtt_rwc_effect rwc = get_attr_xtt_rwc_effect (insn);
+
+  /* Any unaudited field keeps the whole set opaque.  */
+  if (read_positions < 0 || write_positions < 0
+      || cc == XTT_CC_EFFECT_UNKNOWN
+      || cfg == XTT_CONFIG_EFFECT_UNKNOWN
+      || rwc == XTT_RWC_EFFECT_UNKNOWN)
+    return e;
+
+  if (read_positions || write_positions
+      || cfg == XTT_CONFIG_EFFECT_DEST
+      || rwc == XTT_RWC_EFFECT_INC
+      || rwc == XTT_RWC_EFFECT_SET
+      || cfg == XTT_CONFIG_EFFECT_READ
+      || rwc == XTT_RWC_EFFECT_ADDR_MODE)
+    extract_insn (insn);
+
+  e.lreg_read = lreg_mask_of_positions (read_positions);
+  e.lreg_write = lreg_mask_of_positions (write_positions);
+
+  e.cc_read = (cc == XTT_CC_EFFECT_READ || cc == XTT_CC_EFFECT_READWRITE);
+  e.cc_write = (cc == XTT_CC_EFFECT_WRITE || cc == XTT_CC_EFFECT_READWRITE);
+
+  /* Lane-state proof of a CC write (the ambient-enable obligation of macro
+     formation): provable only when the written value is word-exact against
+     the architectural all-lanes SFPENCC encoding, derived once in the
+     capability tables.  Reaching the admitted instruction's operands by
+     recognized code is done as for XTT_RWC_EFFECT_INC below; every
+     other CC writer keeps the refusing default (lane-state-unproved).
+     Operand mapping: the rvtt_sfpencc template prints "%1, %0" and the
+     assembler reads "SFPENCC imm12, mod1", so operand 1 is the encoded
+     imm12 (SFPENCC_IMM12_BOTH for all lanes) and operand 0 the encoded
+     mod1 (SFPENCC_MOD1_EI_RI).  */
+  if (e.cc_write && !e.cc_read && code == CODE_FOR_rvtt_sfpencc)
+    {
+      extract_insn (insn);
+      if (recog_data.n_operands >= 2
+	  && CONST_INT_P (recog_data.operand[0])
+	  && CONST_INT_P (recog_data.operand[1])
+	  && INTVAL (recog_data.operand[0]) >= 0
+	  && INTVAL (recog_data.operand[1]) >= 0)
+	{
+	  uint32_t word;
+	  e.cc_write_all_lanes
+	    = (rvtt_macro::sfpencc_encode
+		 (UINTVAL (recog_data.operand[1]),
+		  UINTVAL (recog_data.operand[0]), &word)
+	       && word == rvtt_macro::sfpencc_all_lanes_word ());
+	}
+    }
+
+  if (cfg == XTT_CONFIG_EFFECT_DEST || cfg == XTT_CONFIG_EFFECT_READ)
+    {
+      /* A non-constant destination is a typed access to a statically
+	 unknown register: every destination is possibly touched.  */
+      int pos = get_attr_xtt_config_dest_op (insn) - 1;
+      uint32_t dests = ~0u;
+      if (pos >= 0 && pos < recog_data.n_operands
+	  && CONST_INT_P (recog_data.operand[pos])
+	  && INTVAL (recog_data.operand[pos]) >= 0
+	  && INTVAL (recog_data.operand[pos]) <= 15)
+	dests = 1u << INTVAL (recog_data.operand[pos]);
+      if (cfg == XTT_CONFIG_EFFECT_DEST)
+	e.config_dests_written = dests;
+      else
+	e.config_dests_read = dests;
+    }
+
+  switch (rwc)
+    {
+    case XTT_RWC_EFFECT_NONE:
+      e.rwc.kind = xtt_rwc_effect_t::NONE;
+      break;
+    case XTT_RWC_EFFECT_FACE:
+      /* One face advance: two architectural Dst += 8 counter steps.  */
+      e.rwc.kind = xtt_rwc_effect_t::FACE;
+      e.rwc.dst_delta = 16;
+      break;
+    case XTT_RWC_EFFECT_INC:
+      /* Class admitted by attribute; typed operand layout (cr, d, b, a)
+	 reached by code.  */
+      gcc_assert (code == CODE_FOR_rvtt_ttincrwc);
+      if (!CONST_INT_P (recog_data.operand[0])
+	  || !CONST_INT_P (recog_data.operand[1]))
+	return e;
+      e.rwc.kind = xtt_rwc_effect_t::INC;
+      e.rwc.cr_delta = INTVAL (recog_data.operand[0]);
+      e.rwc.dst_delta = INTVAL (recog_data.operand[1]);
+      break;
+    case XTT_RWC_EFFECT_SET:
+      {
+	int mask_pos = code == CODE_FOR_rvtt_ttsetrwc_qsr ? 3 : 5;
+	if (!CONST_INT_P (recog_data.operand[mask_pos]))
+	  return e;
+	e.rwc.kind = xtt_rwc_effect_t::SET;
+	e.rwc.set_mask = UINTVAL (recog_data.operand[mask_pos]);
+      }
+      break;
+    case XTT_RWC_EFFECT_ADDR_MODE:
+      {
+	/* Load/store RWC effect decided by the address-mode operand.  */
+	int pos = code == CODE_FOR_rvtt_sfpload_lv_int ? 8
+	  : code == CODE_FOR_rvtt_sfpstore_int ? 6 : -1;
+	int no_inc = no_increment_address_mode ();
+	if (pos < 0 || no_inc < 0
+	    || !CONST_INT_P (recog_data.operand[pos]))
+	  e.rwc.kind = xtt_rwc_effect_t::UNKNOWN;
+	else if (INTVAL (recog_data.operand[pos]) == no_inc)
+	  e.rwc.kind = xtt_rwc_effect_t::NONE;
+	else
+	  /* Auto-increment deltas are capability-table data;
+	     unaudited modes stay UNKNOWN so consumers refuse.  */
+	  e.rwc.kind = xtt_rwc_effect_t::UNKNOWN;
+      }
+      break;
+    case XTT_RWC_EFFECT_UNKNOWN:
+      gcc_unreachable ();
+    }
+
+  e.subunit = subunit_from_attr (get_attr_xtt_subunit (insn));
+  e.dst_mem_read = e.subunit == XTT_SU_LOAD;
+  e.dst_mem_write = e.subunit == XTT_SU_STORE;
+  e.result_latency = get_attr_xtt_result_latency (insn) - 1;
+  e.next_slot_stall
+    = get_attr_xtt_next_slot_stall (insn) == XTT_NEXT_SLOT_STALL_YES;
+  e.prng_advance
+    = get_attr_xtt_prng_effect (insn) == XTT_PRNG_EFFECT_ADVANCE;
+  e.opaque = false;
+  return e;
+}
+
+xtt_effect_set
+rvtt_insn_effects (rtx_insn *insn)
+{
+  xtt_effect_set e = rvtt_macro_insn_effects (insn);
+  if (e.prng_advance)
+    e.opaque = true;
+  return e;
+}
+
+/* Operand access after admission: the effect class (subunit
+   load/store) has already admitted the instruction, so its typed
+   operands can be read by insn code.  */
+
+bool
+rvtt_dst_access_operands (rtx_insn *insn, const xtt_effect_set &effects,
+			  rtx *address, rtx *mode, rtx *addr_mode)
+{
+  if (effects.opaque || (!effects.dst_mem_read && !effects.dst_mem_write))
+    return false;
+  int code = recog_memoized (insn);
+  int addr_pos, mode_pos, am_pos;
+  if (code == CODE_FOR_rvtt_sfpload_lv_int)
+    addr_pos = 4, mode_pos = 7, am_pos = 8;
+  else if (code == CODE_FOR_rvtt_sfpstore_int)
+    addr_pos = 3, mode_pos = 5, am_pos = 6;
+  else
+    return false;
+  extract_insn (insn);
+  *address = recog_data.operand[addr_pos];
+  *mode = recog_data.operand[mode_pos];
+  *addr_mode = recog_data.operand[am_pos];
+  return true;
+}
+
+/* Gimple-level subunit query.  The table below is identity plumbing only:
+   it names the late RTL pattern each audited builtin resolves to.  The
+   effect data itself lives solely in the rvtt-cost.md attributes; the
+   generated constant-attribute accessors switch on the memoized insn code
+   without operand extraction, so a pattern-less scratch insn with a preset
+   INSN_CODE is a legitimate query key.  Unlisted builtins return the
+   refusing default.  */
+
+struct builtin_late_code_map
+{
+  rvtt_insn_data::insn_id id;
+  enum insn_code icode;
+};
+
+static const builtin_late_code_map builtin_late_codes[] = {
+  { rvtt_insn_data::sfpmul,	    CODE_FOR_rvtt_sfpmul_lv },
+  { rvtt_insn_data::sfpmul_lv,	    CODE_FOR_rvtt_sfpmul_lv },
+  { rvtt_insn_data::sfpadd,	    CODE_FOR_rvtt_sfpadd_lv },
+  { rvtt_insn_data::sfpadd_lv,	    CODE_FOR_rvtt_sfpadd_lv },
+  { rvtt_insn_data::sfpmuli,	    CODE_FOR_rvtt_sfpmuli_int_lv },
+  { rvtt_insn_data::sfpmuli_lv,	    CODE_FOR_rvtt_sfpmuli_int_lv },
+  { rvtt_insn_data::sfpaddi,	    CODE_FOR_rvtt_sfpaddi_int_lv },
+  { rvtt_insn_data::sfpaddi_lv,	    CODE_FOR_rvtt_sfpaddi_int_lv },
+  { rvtt_insn_data::sfpmad,	    CODE_FOR_rvtt_sfpmad_lv },
+  { rvtt_insn_data::sfpmad_lv,	    CODE_FOR_rvtt_sfpmad_lv },
+  { rvtt_insn_data::sfpmul24,	    CODE_FOR_rvtt_sfpmul24_lv },
+  { rvtt_insn_data::sfpmul24_lv,    CODE_FOR_rvtt_sfpmul24_lv },
+  { rvtt_insn_data::sfpstochrnd, CODE_FOR_rvtt_sfpstochrnd_lv },
+  { rvtt_insn_data::sfpstochrnd_lv, CODE_FOR_rvtt_sfpstochrnd_lv },
+  { rvtt_insn_data::sfpstochrnd_descale_i, CODE_FOR_rvtt_sfpstochrnd_descale_i_lv_int },
+  { rvtt_insn_data::sfpstochrnd_descale_i_lv, CODE_FOR_rvtt_sfpstochrnd_descale_i_lv_int },
+  { rvtt_insn_data::sfpstochrnd_descale_v, CODE_FOR_rvtt_sfpstochrnd_descale_v_lv },
+  { rvtt_insn_data::sfpstochrnd_descale_v_lv, CODE_FOR_rvtt_sfpstochrnd_descale_v_lv },
+  { rvtt_insn_data::sfpload,	    CODE_FOR_rvtt_sfpload_lv_int },
+  { rvtt_insn_data::sfpstore,	    CODE_FOR_rvtt_sfpstore_int },
+};
+
+/* See rvtt-effects.h and the block comment above: the execution
+   sub-unit of the late RTL pattern the builtin INSND resolves to,
+   read from the constant xtt_subunit attribute through a pattern-less
+   scratch insn.  Unlisted builtins return the refusing XTT_SU_NONE.  */
+
+xtt_subunit_t
+rvtt_builtin_subunit (const rvtt_insn_data *insnd)
+{
+  if (!insnd)
+    return XTT_SU_NONE;
+  for (const builtin_late_code_map &m : builtin_late_codes)
+    if (m.id == insnd->id)
+      {
+	rtx_insn *scratch = as_a <rtx_insn *> (rtx_alloc (INSN));
+	PATTERN (scratch) = const0_rtx;
+	INSN_CODE (scratch) = (int) m.icode;
+	return subunit_from_attr (get_attr_xtt_subunit (scratch));
+      }
+  return XTT_SU_NONE;
+}
+
+/* See rvtt-effects.h: the audited result latency of the late RTL
+   pattern INSND resolves to, read through the same scratch-insn
+   attribute seam as rvtt_builtin_subunit.  -1 (unaudited or unlisted)
+   is the refusing default.  */
+
+int
+rvtt_builtin_result_latency (const rvtt_insn_data *insnd)
+{
+  if (!insnd)
+    return -1;
+  for (const builtin_late_code_map &m : builtin_late_codes)
+    if (m.id == insnd->id)
+      {
+	/* Only patterns whose `xtt_result_latency' attribute is a
+	   CONSTANT (operand-free) expression may be queried through a
+	   pattern-less scratch insn; several patterns (sfpiadd, the
+	   loads) condition the attribute on operand values and would
+	   extract.  Allowlist = the MAD-family value ops, each carrying
+	   the constant encoded latency "2" in rvtt.md.  Everything else
+	   keeps the refusing default.  */
+	if (m.icode != CODE_FOR_rvtt_sfpadd_lv
+	    && m.icode != CODE_FOR_rvtt_sfpmul_lv
+	    && m.icode != CODE_FOR_rvtt_sfpmad_lv
+	    && m.icode != CODE_FOR_rvtt_sfpmul24_lv)
+	  return -1;
+	rtx_insn *scratch = as_a <rtx_insn *> (rtx_alloc (INSN));
+	PATTERN (scratch) = const0_rtx;
+	INSN_CODE (scratch) = (int) m.icode;
+	/* Encoded latency+1; 0 = unaudited, hence the -1 refusing return
+	   after the bias is removed.  */
+	return get_attr_xtt_result_latency (scratch) - 1;
+      }
+  return -1;
+}
+
+/* ---- Multi-result / shadow-coupled effect structure.
+
+   As for rvtt_dst_access_operands, the effect attributes have already
+   admitted the instruction, so its typed operands can be read by insn
+   code.  The companion pairing itself is pattern data (the
+   indexed SFPSWAP's register alternatives pin companion == value + 4; the
+   eight-definition SFPTRANSP defines both banks), so the masks here are
+   read off the extracted hard registers, never recomputed independently.  */
+
+static uint32_t
+hard_lreg_bit (rtx op)
+{
+  /* SFPU_REG_P, not `<= 16': see the mask-bound note above.  */
+  if (REG_P (op) && HARD_REGISTER_P (op) && SFPU_REG_P (REGNO (op)))
+    return 1u << (REGNO (op) - SFPU_REG_FIRST);
+  return 0;
+}
+
+/* Fill *GROUP with INSN's value-bank and companion write masks when
+   INSN is one of the audited multi-result instructions (contract in
+   rvtt-effects.h).  EFFECTS must be INSN's own effect set; opaque
+   effects and instructions with no companion structure on record
+   return false.  */
+
+bool
+rvtt_multiresult_group (rtx_insn *insn, const xtt_effect_set &effects,
+			xtt_multiresult_group *group)
+{
+  if (effects.opaque)
+    return false;
+  int code = recog_memoized (insn);
+  int value_ops, companion_ops;
+  if (code == CODE_FOR_rvtt_sfpswap_indexed_int)
+    value_ops = 2, companion_ops = 2;
+  else if (code == CODE_FOR_rvtt_sfptransp_int)
+    value_ops = 4, companion_ops = 4;
+  else
+    return false;
+  extract_insn (insn);
+  group->value_write_mask = 0;
+  group->companion_write_mask = 0;
+  for (int i = 0; i != value_ops; ++i)
+    group->value_write_mask |= hard_lreg_bit (recog_data.operand[i]);
+  for (int i = 0; i != companion_ops; ++i)
+    group->companion_write_mask
+      |= hard_lreg_bit (recog_data.operand[value_ops + i]);
+  return true;
+}
+
+/* Zero-length architectural LREG interface marker: a recognized Tensix
+   pattern of no delivered words whose pattern mentions the variable-LREG
+   unspec.  *LREG_MASK collects every hard LREG the marker pins.  */
+
+static uint32_t
+varlreg_reg_mask (const_rtx x)
+{
+  uint32_t mask = hard_lreg_bit (const_cast<rtx> (x));
+  const char *fmt = GET_RTX_FORMAT (GET_CODE (x));
+  for (int i = GET_RTX_LENGTH (GET_CODE (x)); i--;)
+    if (fmt[i] == 'e')
+      mask |= varlreg_reg_mask (XEXP (x, i));
+    else if (fmt[i] == 'E')
+      for (int j = XVECLEN (x, i); j--;)
+	mask |= varlreg_reg_mask (XVECEXP (x, i, j));
+  return mask;
+}
+
+/* Whether the rtx tree X contains the variable-LREG volatile unspec
+   (UNSPECV_SFPVARLREG) anywhere.  */
+
+static bool
+mentions_varlreg_p (const_rtx x)
+{
+  if (GET_CODE (x) == UNSPEC_VOLATILE && XINT (x, 1) == UNSPECV_SFPVARLREG)
+    return true;
+  const char *fmt = GET_RTX_FORMAT (GET_CODE (x));
+  for (int i = GET_RTX_LENGTH (GET_CODE (x)); i--;)
+    if (fmt[i] == 'e')
+      {
+	if (mentions_varlreg_p (XEXP (x, i)))
+	  return true;
+      }
+    else if (fmt[i] == 'E')
+      for (int j = XVECLEN (x, i); j--;)
+	if (mentions_varlreg_p (XVECEXP (x, i, j)))
+	  return true;
+  return false;
+}
+
+/* Recognize the marker described above: INSN must be a recognized
+   zero-length TYPE_TENSIX pattern mentioning the variable-LREG
+   unspec.  On success *LREG_MASK receives the pinned hard-LREG bits
+   collected from the whole pattern.  */
+
+bool
+rvtt_lreg_marker (rtx_insn *insn, uint32_t *lreg_mask)
+{
+  if (!insn || GET_CODE (insn) != INSN || recog_memoized (insn) < 0)
+    return false;
+  if (get_attr_type (insn) != TYPE_TENSIX || get_attr_length (insn))
+    return false;
+  if (!mentions_varlreg_p (PATTERN (insn)))
+    return false;
+  *lreg_mask = varlreg_reg_mask (PATTERN (insn));
+  return true;
+}
+
+/* Debug/self-check annotation of the effect set, emitted as an assembler
+   comment after each Tensix or asm instruction under
+   -mtt-tensix-dump-effects.  DejaGnu golden tests pin these lines.  */
+
+static const char *const subunit_names[] = {
+  "none", "simple", "mad", "round", "load", "store", "cfg", "sync"
+};
+static const char *const port_names[] = {
+  "none", "own", "shared_simple_round", "borrows_mad"
+};
+
+/* Print INSN's resolved effect set to FILE as one "# xtt-effects:"
+   assembler-comment line (see the block comment above).  Non-Tensix
+   non-asm insns print nothing; an opaque set prints "opaque".  */
+
+void
+rvtt_dump_insn_effects (FILE *file, rtx_insn *insn)
+{
+  if (!insn || !NONDEBUG_INSN_P (insn))
+    return;
+  bool is_asm = asm_noperands (PATTERN (insn)) >= 0;
+  if (!is_asm
+      && (recog_memoized (insn) < 0 || get_attr_type (insn) != TYPE_TENSIX))
+    return;
+
+  xtt_effect_set e = rvtt_insn_effects (insn);
+  if (e.opaque)
+    {
+      fprintf (file, "\t# xtt-effects: opaque\n");
+      return;
+    }
+
+  fprintf (file, "\t# xtt-effects: subunit=%s latency=%d lreg-read=0x%x"
+	   " lreg-write=0x%x port=%s cc=%s%s%s%s config=0x%x",
+	   subunit_names[e.subunit], e.result_latency, e.lreg_read,
+	   e.lreg_write, port_names[get_attr_xtt_lreg_write_port (insn)],
+	   e.cc_read ? "r" : "", e.cc_write ? "w" : "",
+	   /* Lane-state proof of the CC write: only a word-exact
+	      all-lanes SFPENCC is proven; everything else dumps the
+	      bare (unproved) "w".  */
+	   e.cc_write_all_lanes ? ":all-lanes" : "",
+	   !e.cc_read && !e.cc_write ? "none" : "",
+	   e.config_dests_written);
+
+  switch (e.rwc.kind)
+    {
+    case xtt_rwc_effect_t::NONE:
+      fprintf (file, " rwc=none");
+      break;
+    case xtt_rwc_effect_t::INC:
+      fprintf (file, " rwc=inc:d=%d,cr=%d", e.rwc.dst_delta, e.rwc.cr_delta);
+      break;
+    case xtt_rwc_effect_t::SET:
+      fprintf (file, " rwc=set:mask=0x%x", e.rwc.set_mask);
+      break;
+    case xtt_rwc_effect_t::FACE:
+      fprintf (file, " rwc=face:d=%d", e.rwc.dst_delta);
+      break;
+    case xtt_rwc_effect_t::UNKNOWN:
+      fprintf (file, " rwc=unknown");
+      break;
+    }
+
+  fprintf (file, " dst=%s%s%s encodable=%s\n",
+	   e.dst_mem_read ? "r" : "", e.dst_mem_write ? "w" : "",
+	   !e.dst_mem_read && !e.dst_mem_write ? "none" : "",
+	   get_attr_xtt_macro_encodable (insn) == XTT_MACRO_ENCODABLE_YES
+	   ? "yes" : "no");
+}
+
+
+/* ------------------------------------------------------------------ */
+/* Typed-effect attribute queries.
+
+   The two queries below are the only decoders of the xtt_lane_local /
+   xtt_cc_write / xtt_lane_gated attributes (rvtt-cost.md); passes that need
+   the lane-local or lane-gated classification must use them rather than
+   keep their own insn-code tables.  */
+
+bool
+rvtt_lane_local_effects (rtx_insn *insn, bool *cc_writes)
+{
+  int code = recog_memoized (insn);
+  bool hit = false;
+  bool ccw = false;
+  if (code >= 0
+      && get_attr_xtt_lane_local (insn) == XTT_LANE_LOCAL_YES)
+    {
+      hit = true;
+      enum xtt_cc_write w = get_attr_xtt_cc_write (insn);
+      /* Family invariant: an admitted lane-local row always carries an
+	 audited CC_WRITES value (never the refusing unknown).  */
+      gcc_assert (w != XTT_CC_WRITE_UNKNOWN);
+      ccw = (w == XTT_CC_WRITE_YES);
+    }
+  if (hit)
+    *cc_writes = ccw;
+  return hit;
+}
+
+/* See rvtt-effects.h and the block comment above: the sole decoder of
+   the xtt_lane_gated attribute.  Refusing default: an unrecognized or
+   unannotated pattern answers false.  */
+
+bool
+rvtt_lane_gated_consumer_p (rtx_insn *insn)
+{
+  int code = recog_memoized (insn);
+  bool hit = code >= 0
+	     && get_attr_xtt_lane_gated (insn) == XTT_LANE_GATED_YES;
+  return hit;
+}
+
+/* ---------------------------------------------------------------- */
+/* Builtin-call classification shared by the lane passes.  See
+   rvtt-effects.h for the contracts.  */
+
+bool
+rvtt_call_const_uarg (const gcall *call, unsigned argno, unsigned *out)
+{
+  if (gimple_call_num_args (call) <= argno)
+    return false;
+  tree arg = gimple_call_arg (call, argno);
+  if (TREE_CODE (arg) != INTEGER_CST || !tree_fits_uhwi_p (arg))
+    return false;
+  *out = (unsigned) tree_to_uhwi (arg);
+  return true;
+}
+
+/* Word-exact all-lanes SFPENCC, proven against the capability table's
+   architectural encoding.  The builtin's argument order is (mod1,
+   imm12): the correct all-lanes call is __builtin_rvtt_sfpencc (10, 3),
+   which the rvtt_sfpencc template ("SFPENCC\t%1, %0") prints as the gas
+   spelling "SFPENCC 3, 10" (Imm12 first, Mod1 second; the assembler
+   rejects the inverted spelling with an invalid-mod error).  This is
+   the form the structured-CC lowering emits at region exits.  */
+
+bool
+rvtt_encc_all_lanes_call_p (const gcall *call, const rvtt_insn_data *insnd)
+{
+  if (insnd->id != rvtt_insn_data::sfpencc)
+    return false;
+  unsigned mod1, imm12;
+  if (!rvtt_call_const_uarg (call, 0, &mod1)
+      || !rvtt_call_const_uarg (call, 1, &imm12))
+    return false;
+  uint32_t word;
+  return rvtt_macro::sfpencc_encode (imm12, mod1, &word)
+	 && word == rvtt_macro::sfpencc_all_lanes_word ();
+}
+
+bool
+rvtt_cc_writer_id_p (rvtt_insn_data::insn_id id)
+{
+  switch (id)
+    {
+    case rvtt_insn_data::sfpsetcc:
+    case rvtt_insn_data::sfpencc:
+    case rvtt_insn_data::sfpcompc:
+    case rvtt_insn_data::sfppushc:
+    case rvtt_insn_data::sfppopc:
+    case rvtt_insn_data::sfpxpred:
+    case rvtt_insn_data::sfpxlogic:
+    case rvtt_insn_data::sfpxcond:
+    case rvtt_insn_data::sfpxcmp:
+    case rvtt_insn_data::sfpgt:
+    case rvtt_insn_data::sfpgt_lv:
+    case rvtt_insn_data::sfple:
+    case rvtt_insn_data::sfple_lv:
+      return true;
+    default:
+      return false;
+    }
+}
+
+bool
+rvtt_dst_inert_compute_id_p (rvtt_insn_data::insn_id id)
+{
+  switch (id)
+    {
+    case rvtt_insn_data::synth_opcode:
+    case rvtt_insn_data::sfpnop:
+    case rvtt_insn_data::sfpnovalue:
+    case rvtt_insn_data::sfpselect2:
+    case rvtt_insn_data::sfpselect4:
+    case rvtt_insn_data::sfpselect8:
+    case rvtt_insn_data::sfpassign:
+    case rvtt_insn_data::sfpassign_lv:
+    case rvtt_insn_data::sfploadi:
+    case rvtt_insn_data::sfploadi_lv:
+    case rvtt_insn_data::sfpxloadi:
+    case rvtt_insn_data::sfpmov:
+    case rvtt_insn_data::sfpmov_lv:
+    case rvtt_insn_data::sfpexexp:
+    case rvtt_insn_data::sfpexexp_lv:
+    case rvtt_insn_data::sfpexman:
+    case rvtt_insn_data::sfpexman_lv:
+    case rvtt_insn_data::sfpabs:
+    case rvtt_insn_data::sfpabs_lv:
+    case rvtt_insn_data::sfplz:
+    case rvtt_insn_data::sfplz_lv:
+    case rvtt_insn_data::sfpand:
+    case rvtt_insn_data::sfpand_lv:
+    case rvtt_insn_data::sfpor:
+    case rvtt_insn_data::sfpor_lv:
+    case rvtt_insn_data::sfpxor:
+    case rvtt_insn_data::sfpxor_lv:
+    case rvtt_insn_data::sfpnot:
+    case rvtt_insn_data::sfpnot_lv:
+    case rvtt_insn_data::sfpshft_v:
+    case rvtt_insn_data::sfpshft_v_lv:
+    case rvtt_insn_data::sfpshft_i:
+    case rvtt_insn_data::sfpshft_i_lv:
+    case rvtt_insn_data::sfpiadd_v:
+    case rvtt_insn_data::sfpiadd_v_lv:
+    case rvtt_insn_data::sfpiadd_i:
+    case rvtt_insn_data::sfpiadd_i_lv:
+    case rvtt_insn_data::sfpmul:
+    case rvtt_insn_data::sfpmul_lv:
+    case rvtt_insn_data::sfpmuli:
+    case rvtt_insn_data::sfpmuli_lv:
+    case rvtt_insn_data::sfpadd:
+    case rvtt_insn_data::sfpadd_lv:
+    case rvtt_insn_data::sfpaddi:
+    case rvtt_insn_data::sfpaddi_lv:
+    case rvtt_insn_data::sfpsetexp_v:
+    case rvtt_insn_data::sfpsetexp_v_lv:
+    case rvtt_insn_data::sfpsetexp_i:
+    case rvtt_insn_data::sfpsetexp_i_lv:
+    case rvtt_insn_data::sfpsetman_v:
+    case rvtt_insn_data::sfpsetman_v_lv:
+    case rvtt_insn_data::sfpsetman_i:
+    case rvtt_insn_data::sfpsetman_i_lv:
+    case rvtt_insn_data::sfpsetsgn_v:
+    case rvtt_insn_data::sfpsetsgn_v_lv:
+    case rvtt_insn_data::sfpsetsgn_i:
+    case rvtt_insn_data::sfpsetsgn_i_lv:
+    case rvtt_insn_data::sfpmad:
+    case rvtt_insn_data::sfpmad_lv:
+    case rvtt_insn_data::sfpdivp2:
+    case rvtt_insn_data::sfpdivp2_lv:
+    case rvtt_insn_data::sfpcast:
+    case rvtt_insn_data::sfpcast_lv:
+    case rvtt_insn_data::sfpstochrnd:
+    case rvtt_insn_data::sfpstochrnd_lv:
+    case rvtt_insn_data::sfpstochrnd_descale_i:
+    case rvtt_insn_data::sfpstochrnd_descale_i_lv:
+    case rvtt_insn_data::sfpstochrnd_descale_v:
+    case rvtt_insn_data::sfpstochrnd_descale_v_lv:
+    case rvtt_insn_data::sfplut:
+    case rvtt_insn_data::sfplutfp32_3r:
+    case rvtt_insn_data::sfplutfp32_6r:
+    case rvtt_insn_data::sfpswap:
+    case rvtt_insn_data::sfpmul24:
+    case rvtt_insn_data::sfpmul24_lv:
+    case rvtt_insn_data::sfparecip:
+    case rvtt_insn_data::sfparecip_lv:
+    case rvtt_insn_data::sfpnonlinear:
+    case rvtt_insn_data::sfpnonlinear_lv:
+    case rvtt_insn_data::sfpreadconfig:
+    case rvtt_insn_data::sfpreadconfig_lv:
+    case rvtt_insn_data::sfpreadlreg:
+      return true;
+    default:
+      return false;
+    }
+}
+
+bool
+rvtt_cc_quiet_compute_id_p (rvtt_insn_data::insn_id id)
+{
+  /* Everything Dst-inert is also CC-quiet.  */
+  if (rvtt_dst_inert_compute_id_p (id))
+    return true;
+
+  /* Admitted here and nowhere else: these touch Dst memory or move data
+     between lanes, which the Dst-inert contract forbids, but they leave
+     the lane-enable CC state alone and carry no hidden raw effect, so a
+     CC-window or lane-state scan may walk through them.  */
+  switch (id)
+    {
+    case rvtt_insn_data::sfpload:
+    case rvtt_insn_data::sfpload_lv:
+    case rvtt_insn_data::sfpstore:
+    case rvtt_insn_data::sfpswap_indexed:
+    case rvtt_insn_data::sfptransp8:
+    case rvtt_insn_data::sfpshft2_subvec_shfl1:
+    case rvtt_insn_data::sfpshft2_subvec_shfl1_lv:
+      return true;
+    default:
+      return false;
+    }
+}
+
+long
+rvtt_call_int_arg (const gcall *call, unsigned n)
+{
+  tree arg = gimple_call_arg (call, n);
+  if (arg && TREE_CODE (arg) == INTEGER_CST)
+    return TREE_INT_CST_LOW (arg);
+  return -1;
+}
+
+gcall *
+rvtt_call_with_id (gimple *stmt, rvtt_insn_data::insn_id id)
+{
+  if (const rvtt_insn_data *insnd = rvtt_get_insn_data (stmt))
+    if (insnd->id == id)
+      return as_a <gcall *> (stmt);
+  return nullptr;
+}
+
+bool
+rvtt_pattern_transparent_p (rtx_insn *insn)
+{
+  if (CALL_P (insn))
+    return false;
+  rtx pat = PATTERN (insn);
+  if (asm_noperands (pat) >= 0)
+    return false;
+  subrtx_iterator::array_type array;
+  FOR_EACH_SUBRTX (iter, array, pat, ALL)
+    {
+      const_rtx x = *iter;
+      if (GET_CODE (x) == UNSPEC_VOLATILE)
+	return false;
+      if (GET_CODE (x) == SET && MEM_P (SET_DEST (x)))
+	return false;
+      if (GET_CODE (x) == CLOBBER && MEM_P (XEXP (x, 0)))
+	return false;
+    }
+  return true;
+}
+
+bool
+rvtt_zero_vector_p (tree val)
+{
+  if (TREE_CODE (val) != SSA_NAME)
+    return false;
+  gimple *def = SSA_NAME_DEF_STMT (val);
+  const rvtt_insn_data *insnd = rvtt_get_insn_data (def);
+  if (!insnd)
+    return false;
+  gcall *call = as_a <gcall *> (def);
+  switch (insnd->id)
+    {
+    case rvtt_insn_data::sfpreadlreg:
+      return rvtt_call_int_arg (call, 0) == CREG_IDX_0;
+    case rvtt_insn_data::sfpxloadi:
+      /* (ib, value, ...) -- all-constant argument forms only.  */
+      return rvtt_call_int_arg (call, 1) == 0;
+    case rvtt_insn_data::sfploadi:
+      return rvtt_call_int_arg (call, 1) == 0;
+    default:
+      return false;
+    }
+}
+
+bool
+rvtt_instrn_buffer_name_p (const char *name)
+{
+  return name && !strcmp (name, RVTT_INSTRN_BUFFER_SYMBOL);
+}
+
+bool
+rvtt_canonical_buffer_arg_p (tree addr)
+{
+  if (integer_zerop (addr))
+    return true;
+  STRIP_NOPS (addr);
+  if (TREE_CODE (addr) != ADDR_EXPR)
+    return false;
+  tree decl = TREE_OPERAND (addr, 0);
+  return VAR_P (decl)
+    && DECL_EXTERNAL (decl)
+    && TREE_PUBLIC (decl)
+    && DECL_ASSEMBLER_NAME (decl)
+    && rvtt_instrn_buffer_name_p
+	 (IDENTIFIER_POINTER (DECL_ASSEMBLER_NAME (decl)));
+}
