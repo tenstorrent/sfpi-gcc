@@ -641,6 +641,10 @@ mtt-tensix-optimize-repeat-residency
 Target Var(riscv_tt_opt_repeat_residency) Init(0)
 Park a constant that a loop-free, call-free function materializes repeatedly in a PRGM register programmed once at the function entry.
 
+mtt-tensix-optimize-drain-exit
+Target Var(riscv_tt_opt_drain_exit) Init(0)
+Size a loop's exit drain from the decoded pending events left after the loop tail, instead of the full derived drain.
+
 mtt-tensix-optimize-window-pairing-stride
 Target Var(riscv_tt_opt_window_pairing_stride) Init(0)
 Extend window-pairing proofs to rows whose addresses advance with any issued word of the row.

@@ -1371,6 +1371,7 @@ See RS/6000 and PowerPC Options.
 -mtt-tensix-optimize-dst-autoincr-load-carrier
 -mtt-tensix-optimize-post-autoincr-window
 -mtt-tensix-optimize-drain-schedule
+-mtt-tensix-optimize-drain-exit
 -mtt-tensix-optimize-window-pairing
 -mtt-tensix-optimize-window-pairing-stride
 -mtt-tensix-optimize-crossrow-pairing
@@ -32672,6 +32673,12 @@ replay windows where every outstanding event is proven discharged.  The
 model covers per-event footprints, register, CC and configuration
 conflicts, and the audited Dst row and column-parity disjointness
 rules; any unproven piece declines and keeps the full drain.
+
+@opindex mtt-tensix-optimize-drain-exit
+@item -mtt-tensix-optimize-drain-exit
+Size the drain at the exit of a macro-planned loop from the pending
+events that the loop tail leaves, instead of emitting the full derived
+drain.
 
 @opindex mtt-tensix-optimize-window-pairing-stride
 @item -mtt-tensix-optimize-window-pairing-stride

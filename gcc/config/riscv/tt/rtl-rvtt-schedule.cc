@@ -7078,8 +7078,11 @@ bool
 rvtt_macro_drain_backedge_elidable (const macro_region &region,
 				    const macro_schedule &schedule,
 				    const macro_descriptor &desc,
-				    unsigned first_run_end, FILE *dump)
+				    unsigned first_run_end, FILE *dump,
+				    int *exit_drain)
 {
+  if (exit_drain)
+    *exit_drain = desc.drain_slots;
   if (!region.loop_body || !region.bb)
     return drain_refuse (dump, "drain-follower-opaque", nullptr);
   int max_dist = desc.drain_slots;
@@ -7110,6 +7113,7 @@ rvtt_macro_drain_backedge_elidable (const macro_region &region,
       if (!drain_stream_insn_neutral (insn, &credit, &why))
 	return drain_refuse (dump, why, insn);
     }
+  unsigned tail_credit = credit;
 
   /* Head walk: anything before the region at the head of the body
      (executed after the backedge, before the region).  */
@@ -7143,6 +7147,9 @@ rvtt_macro_drain_backedge_elidable (const macro_region &region,
     fprintf (dump, "Macro-planner drain-schedule: loop-backedge drain"
 	     " elided (drain=%d stream-credit=%u)\n",
 	     h.max_dist, credit);
+  if (exit_drain)
+    *exit_drain = h.max_dist > (int) tail_credit
+      ? h.max_dist - (int) tail_credit : 0;
   return true;
 }
 

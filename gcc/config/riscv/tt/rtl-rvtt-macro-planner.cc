@@ -648,6 +648,7 @@ form_region (function *fn, macro_region &region,
      in-body drain and emit the drain on the exit path instead.  */
   bool backedge_elide = false;
   edge drain_exit_edge = nullptr;
+  int exit_drain = desc.drain_slots;
   if (riscv_tt_opt_drain_schedule && desc.drain_slots > 0
       && region.loop_body && region.bb)
     {
@@ -673,10 +674,22 @@ form_region (function *fn, macro_region &region,
 	{
 	  unsigned first_run_end = run_begins.length () > 1
 	    ? run_begins[1] : region.rows.length ();
+	  int tail_exit_drain = desc.drain_slots;
 	  backedge_elide = rvtt_macro_drain_backedge_elidable
-	    (region, schedule, desc, first_run_end, dump);
+	    (region, schedule, desc, first_run_end, dump, &tail_exit_drain);
 	  if (backedge_elide)
-	    drain_exit_edge = exit_e;
+	    {
+	      drain_exit_edge = exit_e;
+	      if (riscv_tt_opt_drain_exit)
+		{
+		  if (dump)
+		    fprintf (dump, "Macro-planner drain-exit: compensation"
+			     " %d -> %d SFPNOPs (loop tail covers the rest"
+			     " of the decoded horizon)\n",
+			     desc.drain_slots, tail_exit_drain);
+		  exit_drain = tail_exit_drain;
+		}
+	    }
 	}
     }
 
@@ -695,7 +708,7 @@ form_region (function *fn, macro_region &region,
 			resident_elide, resid, init_hoist_stage,
 			b == 0 ? &config_placement : nullptr);
     }
-  if (backedge_elide)
+  if (backedge_elide && exit_drain > 0)
     {
       /* Emit the drain on the loop's exit path so that events from the final
 	 trip complete; under -mtt-tensix-optimize-drain-exit, only the part
@@ -707,7 +720,7 @@ form_region (function *fn, macro_region &region,
 	  || !bb_note (dest))
 	dest = split_edge (drain_exit_edge);
       start_sequence ();
-      for (int d = 0; d != desc.drain_slots; ++d)
+      for (int d = 0; d != exit_drain; ++d)
 	emit_insn (gen_rvtt_sfpnop ());
       rtx_insn *nops = get_insns ();
       end_sequence ();
@@ -718,7 +731,7 @@ form_region (function *fn, macro_region &region,
       if (dump)
 	fprintf (dump, "Macro-planner drain-backedge: loop-carried drain"
 		 " elided; exit compensation %d SFPNOPs (bb %d)\n",
-		 desc.drain_slots, dest->index);
+		 exit_drain, dest->index);
     }
   if (!resident_elide)
     rvtt_macro_residency_record (desc, config_placement, resid);
