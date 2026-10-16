@@ -642,7 +642,7 @@ model_schedule (const std::vector<pnode> &nodes, const pressure_ctx &ctx,
 
 static std::vector<int>
 ecc_schedule (const std::vector<pnode> &nodes, const pressure_ctx &ctx,
-	      unsigned limit)
+	      unsigned limit, unsigned cap = 0)
 {
   unsigned n = nodes.size ();
   std::vector<std::pair<unsigned, int>> remaining = ctx.use_count;
@@ -705,6 +705,12 @@ ecc_schedule (const std::vector<pnode> &nodes, const pressure_ctx &ctx,
 	  int ecc = MAX (then - (int) limit, 0) - MAX (now - (int) limit, 0);
 
 	  long rank = (long) ecc + delay;
+	  /* The capped variant never trades a register for a cycle: an
+	     issue that would lift liveness past CAP ranks behind every
+	     issue that does not, so it is taken only when nothing else is
+	     ready (and then the least-growing one first).  */
+	  if (cap && then > (int) cap)
+	    rank = 1000L + then;
 	  if (best < 0 || rank < best_rank
 	      || (rank == best_rank
 		  && (delay < best_delay
@@ -964,7 +970,8 @@ static bool
 prera_schedule_region (basic_block bb, std::vector<pnode> &nodes,
 		       rtx_insn *anchor, rtx_insn *entry_producer,
 		       rtx_insn *exit_consumer,
-		       const std::vector<unsigned> &unaudited_defs)
+		       const std::vector<unsigned> &unaudited_defs,
+		       bool cyclic)
 {
   unsigned n = nodes.size ();
 
@@ -1051,6 +1058,14 @@ prera_schedule_region (basic_block bb, std::vector<pnode> &nodes,
   std::vector<int> model_order = model_schedule (nodes, ctx, &model_peak);
   unsigned limit = MAX (model_peak, (unsigned) SFPU_REG_NUM);
   std::vector<int> ecc_order = ecc_schedule (nodes, ctx, limit);
+  /* 3. In a self-loop row (-prera-loop) the ECC candidate tends to buy
+     its fill with one register too many, which the joint acceptance
+     then refuses.  Also offer the same list schedule with the baseline
+     peak as a hard cap: it fills interlock shadows only with issues
+     that keep liveness within what the original order already needs.  */
+  std::vector<int> capped_order;
+  if (cyclic)
+    capped_order = ecc_schedule (nodes, ctx, limit, base_peak);
 
   struct candidate
   {
@@ -1061,18 +1076,27 @@ prera_schedule_region (basic_block bb, std::vector<pnode> &nodes,
     bool moves;
     bool accepted;
   };
-  candidate cands[2] = {
+  candidate cands[3] = {
     { "ecc", &ecc_order, 0, 0, false, false },
     { "model", &model_order, 0, 0, false, false },
+    { "capped", &capped_order, 0, 0, false, false },
   };
   for (candidate &c : cands)
     {
+      if (c.order->empty ())
+	continue;
       c.peak = pressure_of_order (nodes, *c.order, ctx);
       std::vector<int> issue (n, 0);
       c.end = simulate_order (nodes, *c.order, &issue, exit_shadow);
       c.moves = *c.order != base_order;
       c.accepted = c.moves && c.peak <= base_peak && c.end <= base_end
 	&& (c.peak < base_peak || c.end < base_end);
+      /* In a self-loop row only the capped order is offered for commit:
+	 it never lets liveness pass the original peak at any issue, while
+	 the ECC and model orders are judged on the peak alone and can
+	 reshape the live ranges past what the allocator can colour.  */
+      if (cyclic && c.order != &capped_order)
+	c.accepted = false;
     }
 
   if (dump_file)
@@ -1080,6 +1104,9 @@ prera_schedule_region (basic_block bb, std::vector<pnode> &nodes,
 	     "end=%d moves=%d; model peak=%u end=%d moves=%d; limit=%u\n",
 	     cands[0].peak, cands[0].end, cands[0].moves,
 	     cands[1].peak, cands[1].end, cands[1].moves, limit);
+  if (dump_file && cyclic)
+    fprintf (dump_file, "Prera-pressure-schedule capped candidate: peak=%u "
+	     "end=%d moves=%d\n", cands[2].peak, cands[2].end, cands[2].moves);
 
   candidate *chosen = nullptr;
   for (candidate &c : cands)
@@ -1173,8 +1200,23 @@ struct prera_region
    (each barrier flushes the current region; a replay-capture owner ends
    collection for the rest of the block; regions below three nodes are
    skipped), then defer repeated region shapes by name and hand the
-   survivors to prera_schedule_region.  Self-loop blocks defer whole,
-   and targets without audited latency facts refuse up front.  */
+   survivors to prera_schedule_region.  Self-loop blocks defer whole
+   unless -mtt-tensix-optimize-pressure-schedule-prera-loop admits them,
+   and targets without audited latency facts refuse up front.
+
+   Under -prera-loop alone only self-loop blocks are scheduled.  A
+   self-loop block is a rolled row loop: its row runs back to back
+   across the backedge, so the linear seam the makespan model assumes
+   is pessimistic there, not unsound.  A region still never crosses a
+   barrier or the block boundary, so a commit is a dependence-respecting
+   permutation of one trip's straight-line words: every trip computes
+   the same values, and the joint acceptance (peak pressure from the DF
+   recount, which follows the backedge liveness, and the modeled
+   makespan, both no worse with one strictly better) is unchanged.
+   This is what a noinline semantic body's rolled loop needs when it
+   is too LREG-tight for the row interleave: independent words moved
+   into the interlock shadows of a dependent MAD chain while the
+   registers are still virtual.  */
 
 static void
 prera_schedule_function (function *fn)
@@ -1202,7 +1244,9 @@ prera_schedule_function (function *fn)
       FOR_EACH_EDGE (e, ei, bb->succs)
 	if (e->dest == bb)
 	  self_loop = true;
-      if (self_loop)
+      if (!self_loop && !riscv_tt_opt_pressure_schedule_prera)
+	continue;
+      if (self_loop && !riscv_tt_opt_pressure_schedule_prera_loop)
 	{
 	  if (dump_file)
 	    fprintf (dump_file, "Prera-pressure-schedule deferred: cyclic "
@@ -1309,7 +1353,7 @@ prera_schedule_function (function *fn)
 				 regions[i].entry_producer,
 				 prera_exit_consumer
 				   (bb, regions[i].nodes.back ().insn),
-				 regions[i].unaudited_defs);
+				 regions[i].unaudited_defs, self_loop);
 	}
     }
 }
@@ -1337,7 +1381,8 @@ public:
   bool gate (function *) final override
   {
     return optimize > 0 && TARGET_XTT_TENSIX
-      && riscv_tt_opt_pressure_schedule_prera;
+      && (riscv_tt_opt_pressure_schedule_prera
+	  || riscv_tt_opt_pressure_schedule_prera_loop);
   }
 
   unsigned execute (function *fn) final override
