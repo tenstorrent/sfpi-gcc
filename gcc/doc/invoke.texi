@@ -1308,16 +1308,24 @@ See RS/6000 and PowerPC Options.
 -mtt-tensix-optimize-int-abs
 -mtt-tensix-optimize-int-not
 -mtt-tensix-optimize-store-fold
+-mtt-tensix-optimize-store-source-tier
 -mtt-tensix-optimize-cc-region-general
 -mtt-tensix-optimize-round-interleave
 -mtt-tensix-optimize-invariant-loadi
 -mtt-tensix-optimize-prgm-const
+-mtt-tensix-optimize-const-residency
 -mtt-tensix-optimize-const-remat
+-mtt-tensix-optimize-pressure-park
+-mtt-tensix-optimize-park-ordering
 -mtt-tensix-optimize-madpair-vocabulary
+-mtt-tensix-optimize-hoisted-prgm-reuse
+-mtt-tensix-optimize-loop-prgm-reclaim
+-mtt-tensix-optimize-priced-placement
 -mtt-tensix-optimize-crosscall-hoist
 -mtt-tensix-optimize-crosscall-config-prefix
 -mtt-tensix-optimize-ipa-ra
 -mtt-tensix-optimize-crossloop-hoist
+-mtt-tensix-optimize-crossloop-cc-peel
 -mtt-tensix-optimize-opaque-replay-record
 -mtt-tensix-optimize-replay  -mno-tt-tensix-optimize-replay
 -mtt-tensix-replay-buffer-size=@var{words}
@@ -32021,6 +32029,15 @@ never changes stored values; see
 @option{-mtt-tensix-optimize-store-sink} for the value-changing
 extension.
 
+@opindex mtt-tensix-optimize-store-source-tier
+@item -mtt-tensix-optimize-store-source-tier
+Keep constants that feed Dst stores in ordinary vector registers rather
+than programmable constant registers.  @code{SFPSTORE} cannot read the
+programmable constant registers directly, so parking a store-consumed
+constant there would cost a copy per store; this option routes such
+constants to the vector-register placement tier instead.  Effective
+only with @option{-mtt-tensix-optimize-const-residency}.
+
 @opindex mtt-tensix-optimize-cc-region-general
 @item -mtt-tensix-optimize-cc-region-general
 Generalize the recognizers of CC-consuming transformations.  The
@@ -32079,11 +32096,45 @@ Allocate programmable constant registers to loop-invariant SFPU
 immediates, replacing an in-loop materialization with a one-time
 @code{SFPCONFIG} programming and a constant-register read.
 
+@opindex mtt-tensix-optimize-const-residency
+@item -mtt-tensix-optimize-const-residency
+Allocate programmable constant registers to proven-constant SFPU values
+generally, selecting candidates by priced comparison of the programming
+cost against the saved in-loop materializations.  In-loop
+materializations are preferred as candidates.  Several of the options
+below add candidate classes or placement tiers to this walk and are
+inert without it.
+
 @opindex mtt-tensix-optimize-const-remat
 @item -mtt-tensix-optimize-const-remat
 Rematerialize proven-constant SFPU values at their uses when vector
 register pressure exceeds the eight-register file, instead of keeping
 them live across the region.
+
+@opindex mtt-tensix-optimize-pressure-park
+@item -mtt-tensix-optimize-pressure-park
+Widen the class of constant materializations that may be hoisted to a
+proven programming point to include invariant constants positioned at
+or after a loop body's first CC write.  Such a constant is admitted
+only when every consumer is proven lane-predicated, so that reading the
+hoisted all-lanes value changes nothing on any lane the original code
+defined; and hoisting to an ordinary vector register is permitted only
+while a whole-function pressure model stays within the eight-register
+file.  Effective only with
+@option{-mtt-tensix-optimize-const-residency}.
+
+@opindex mtt-tensix-optimize-park-ordering
+@item -mtt-tensix-optimize-park-ordering
+Coordinate the early conservative invariant hoist with the late
+constant-residency walk.  In-region invariant constants inside a
+CC-restoring loop defer to the late walk when both
+@option{-mtt-tensix-optimize-const-residency} and
+@option{-mtt-tensix-optimize-pressure-park} are enabled, since the late
+walk places them under an exact pressure model; constants at region
+depth zero keep the early hoist, which for them is a free code motion.
+Loops carrying lookup-table machinery, and loops with three or more
+in-region invariant constants, defer wholesale to the later placement
+authorities.
 
 @opindex mtt-tensix-optimize-madpair-vocabulary
 @item -mtt-tensix-optimize-madpair-vocabulary
@@ -32092,6 +32143,37 @@ constant-residency candidates, so that a multiply and add pair the
 instruction combiner will later fuse is treated as one candidate pair.
 Discovery only: admission checks and pricing are unchanged.  Effective
 only with @option{-mtt-tensix-optimize-const-residency}.
+
+@opindex mtt-tensix-optimize-hoisted-prgm-reuse
+@item -mtt-tensix-optimize-hoisted-prgm-reuse
+Let a loop-invariant constant that has already been hoisted out of the
+loop claim a programmable constant register: a free register, or one
+whose every write in the translation unit is proven to program the same
+32-bit value, in which case it is reprogrammed idempotently in place.
+The materialization then becomes a constant-register read, releasing a
+loop-wide vector register.  Effective only with
+@option{-mtt-tensix-optimize-const-residency}.
+
+@opindex mtt-tensix-optimize-loop-prgm-reclaim
+@item -mtt-tensix-optimize-loop-prgm-reclaim
+Reprogram a claimed programmable constant register that no statement in
+the translation unit ever reads with a different value at a loop's
+programming point, provided the window from the programming to the last
+in-loop read is free of calls and assembler statements that could
+interpose.  Effective only with
+@option{-mtt-tensix-optimize-const-residency}.
+
+@opindex mtt-tensix-optimize-priced-placement
+@item -mtt-tensix-optimize-priced-placement
+Arbitrate the competing constant-placement tiers above through one
+priced authority instead of their individual local heuristics.
+Delivery cost, register pressure, and loop-trip amortization are each
+taken from a single shared model, while every legality proof remains in
+its owning pass.  With this option the last free vector register can be
+awarded to a downstream fold worth more than the marginal constant
+parking, and an early-hoist deferral can be rescued when its
+keep-side is fully proven; unpriceable alternatives decline and keep
+the established decision.
 
 @opindex mtt-tensix-optimize-crosscall-hoist
 @item -mtt-tensix-optimize-crosscall-hoist
@@ -32122,6 +32204,18 @@ programmable-constant options, their programming points) across
 enclosing loops whose bodies deliver only instruction words proven free
 of interfering effects.  Every unanalyzable word or statement class
 declines.
+
+@opindex mtt-tensix-optimize-crossloop-cc-peel
+@item -mtt-tensix-optimize-crossloop-cc-peel
+Lift the programming of constants parked under
+@option{-mtt-tensix-optimize-pressure-park} across enclosing loops as a
+programming-only motion, placing it once at the outermost proven loop
+entry instead of once per enclosing-loop iteration.  The crossed loops
+must be proven to confine all their CC activity to balanced structured
+regions that cannot reach the parked register, and no local CC write
+may reach the lifted preheader.  Effective only with
+@option{-mtt-tensix-optimize-const-residency} and
+@option{-mtt-tensix-optimize-crossloop-hoist}.
 
 @opindex mtt-tensix-optimize-opaque-replay-record
 @item -mtt-tensix-optimize-opaque-replay-record
