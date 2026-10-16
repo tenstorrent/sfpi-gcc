@@ -69,6 +69,8 @@ a recorded reason (see section 5).
 			     ownership,verify}.
   pressure scheduling        Reordering of SFPU regions, on GIMPLE and before
 			     IRA, so that live values fit the eight LREGs.
+  LREG allocation            DSATUR graph-colouring allocation over the 8
+			     LREGs by splitting live ranges through Dst scratch rows.
 
 Supporting infrastructure that is not a pass: rvtt-cost / rvtt-delivery-cost
 / rvtt-timing / rvtt-trips (pricing engines), rvtt-bnb (an exact
