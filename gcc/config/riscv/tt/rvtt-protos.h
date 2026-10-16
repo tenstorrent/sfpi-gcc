@@ -317,6 +317,7 @@ constexpr unsigned int SFPXCMP_MOD1_TYPE_MASK = 3;
 
 constexpr unsigned int SFPXSCMP_SRC_ARG_POS = 1;
 
+constexpr unsigned int SFPABS_MOD1_INT = 0;
 constexpr unsigned int SFPABS_MOD1_FLOAT = 1;
 
 constexpr unsigned int SFPIADD_MOD1_ARG_LREG_DST = 0;
