@@ -39,6 +39,7 @@ namespace rvtt_macro {
   extern bool sfpencc_encode (uint64_t imm12, uint64_t mod1, uint32_t *word);
 }
 extern void rvtt_dump_insn_effects (FILE *, rtx_insn *);
+extern const char *rvtt_output_owned_setc16 (rtx *operands);
 extern rtx rvtt_gen_rtx_creg (machine_mode, unsigned sfpu_regno);
 extern rtx rvtt_gen_rtx_noval (machine_mode);
 extern bool rvtt_merge_lv_src (rtx *lv, rtx *src, rtx *commute = nullptr);
