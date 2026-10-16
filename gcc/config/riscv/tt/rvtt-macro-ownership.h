@@ -163,4 +163,38 @@ extern bool rvtt_stmt_executes_every_entered_iteration_p (class loop *loop,
    constant once the immediate-shortening passes have run.  */
 extern unsigned rvtt_sfpxloadi_materialization_cost (gcall *call);
 
+/* Return true if no statement in LOOP's body or in the preheader tail
+   after the ENTRY insertion point can write an LREG in LREG_MASK, change
+   the SFPU CC state, or deliver an unclassified or replay instruction
+   word (implemented in gimple-rvtt-crosscall.cc).  Otherwise return false
+   with the reason in *WHY and the offending statement, if known, in
+   *WHY_STMT.  If CC_IMMATERIAL (-mtt-tensix-optimize-crossloop-cc-peel),
+   typed CC-writing builtins whose only effects are the lane-enable state
+   and their SSA result are accepted; this is sound only for a consumer
+   whose hoisted state is set before the region and cannot be affected by
+   CC writes, such as a claimed programmable constant register.  */
+extern bool rvtt_crossloop_region_scan (class loop *loop, edge entry,
+					unsigned lreg_mask,
+					const char **why,
+					gimple **why_stmt,
+					bool cc_immaterial = false);
+
+/* Return the outermost entry edge to which a placement on ENTRY of LOOP
+   can be lifted: walk outward while the enclosing loop's region scan,
+   preheader insertion and first-iteration checks all succeed.  Return
+   ENTRY if nothing can be lifted.  */
+extern edge rvtt_crossloop_outermost_entry (class loop *loop, edge entry,
+					    unsigned lreg_mask,
+					    bool cc_immaterial = false);
+
+/* Return true if BB executes on the first iteration of LOOP entered
+   through ENTRY: the header exit test folds towards the body (or is
+   implied by a dominating guard on the same SSA operands), and BB is
+   reached from the taken edge by a chain of single-successor blocks.
+   This covers do-while and guarded loops that constant folding of the
+   header test alone cannot.  */
+extern bool rvtt_crossloop_block_executes_on_entry_p (class loop *loop,
+						      edge entry,
+						      basic_block bb);
+
 #endif /* GCC_RVTT_MACRO_OWNERSHIP_H */
