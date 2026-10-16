@@ -17,8 +17,8 @@ You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
-/* Enforce the indexed-destination window rule on Wormhole and Blackhole
-   under -mtt-tensix-optimize-crosslane.
+/* Enforce the indexed-destination window rule on every Wormhole and
+   Blackhole compilation.
 
    While LaneConfig.ENABLE_DEST_INDEX is set, an instruction other than
    SFPLOAD / SFPLOADI / SFPSWAP / SFPTRANSP that writes LReg[4..7] is
@@ -947,8 +947,7 @@ public:
   bool gate (function *) final override
   {
     return TARGET_XTT_TENSIX
-	   && (TARGET_XTT_TENSIX_BH || TARGET_XTT_TENSIX_WH)
-	   && riscv_tt_opt_crosslane > 0;
+	   && (TARGET_XTT_TENSIX_BH || TARGET_XTT_TENSIX_WH);
   }
 
   unsigned int execute (function *fn) final override
@@ -963,7 +962,7 @@ public:
 
 /* Instantiate the window-enforcement pass for CTXT; rvtt-passes.def
    places it before free_cfg, after every code-motion pass, and it gates
-   on a WH/BH Tensix target plus -mtt-tensix-optimize-crosslane.  */
+   on a WH/BH Tensix target.  */
 
 rtl_opt_pass *
 make_pass_rvtt_crosslane_window (gcc::context *ctxt)
