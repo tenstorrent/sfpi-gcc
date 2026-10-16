@@ -79,7 +79,11 @@ struct prgm_alloc { unsigned value; unsigned reg; basic_block bb;
 		       across calls: a later candidate with the same value
 		       must prove its own call-free window and always
 		       reprograms.  */
-		    bool reclaimed = false; };
+		    bool reclaimed = false;
+		    /* The programming is at the end of BB rather than at
+		       its entry or in place, so it is visible in every
+		       block strictly dominated by BB.  */
+		    bool at_end = false; };
 
 struct prgm_state
 {
@@ -113,5 +117,8 @@ extern bool single_issue_constant_image_p (gcall *load, unsigned *value);
 extern bool staged_config_value (tree staged, unsigned *value);
 extern bool remat_consumer_audited_p (gimple *stmt, tree name);
 extern bool remat_transform (function *fn);
+
+/* gimple-rvtt-prgm-residency.cc */
+extern bool residency_transform (function *fn, prgm_state *st);
 
 #endif /* GCC_GIMPLE_RVTT_PRGM_INT_H */
