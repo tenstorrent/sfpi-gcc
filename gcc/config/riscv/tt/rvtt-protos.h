@@ -142,6 +142,12 @@ extern gimple_opt_pass *make_pass_rvtt_int_abs (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_int_not (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_store_fold (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_combine (gcc::context *ctxt);
+extern gimple_opt_pass *make_pass_rvtt_prgm_const (gcc::context *ctxt);
+/* Whether the TU-wide CC/lane-enable audit proved that no opaque
+   instruction-delivery channel can write the lane-enable state.  False
+   (with *REASON named) when the audit has not run or classified some
+   channel as a possible lane-enable writer.  */
+extern bool rvtt_tu_opaque_cc_ambient_preserving_p (const char **reason);
 extern gimple_opt_pass *make_pass_rvtt_check_early (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_check_late (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_dce (gcc::context *ctxt);

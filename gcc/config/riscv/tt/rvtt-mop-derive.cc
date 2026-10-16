@@ -1500,6 +1500,303 @@ rvtt_mop_derive_finish (const rvtt_mop_derive_state *st, const char **why)
   return true;
 }
 
+/* ------------------------------------------------------------------ */
+/* Raw REPLAY record regions (-mtt-tensix-optimize-opaque-replay-record).
+
+   A raw REPLAY word with load_mode=1 opens a record window: the
+   thread's next COUNT delivered frontend words are stored to the
+   32-slot per-thread replay buffer, and with execute_while_loading=0
+   they are never pushed to the backend (rvtt-mop-tables.h, REPLAY
+   field decode).  Stored content has effects only when a playback
+   delivers it, and a translation unit this proof admits has no
+   playback path:
+
+     (a) a raw REPLAY execute word (load_mode=0) refuses
+	 (replay-execute-unproven);
+     (b) a REPLAY word in a MOP template slot refuses
+	 (mop-template-replay-unproven), and the audited table refuses a
+	 REPLAY word pushed through the instruction-FIFO store scan;
+     (c) the compiler's typed replay machinery plays back only its own
+	 recorded content: every replay-forming pass treats any asm or
+	 call as a boundary between a record and its launches
+	 (rtl-rvtt-replay.cc loop_preserves_replay_p and friends).
+
+   So the words of an admitted record region have no PRGM, LaneConfig
+   or CC effect, and the scan excludes them from the executed-word
+   scan (the *SUPPRESSED set); every other word is still audited.
+
+   Conditions for admission (otherwise the TU is refused):
+
+     - the record word decodes cleanly: reserved bits zero, len in
+       [1,32], start_idx + len within the buffer
+       (replay-record-word-unproven);
+     - exec_while_loading=1 admits without suppression: every window
+       word also executes and is audited by the ordinary scan;
+     - exec_while_loading=0 needs the swallowed region identified
+       statically: the walk from the record collects exactly COUNT raw
+       `.ttinsn' constant words along straight-line control flow
+       (transparent scalar statements allowed) and through at most one
+       structurally counted single-block loop whose every trip is
+       swallowed.  A call, typed builtin, volatile store, unrecognized
+       asm or FIFO-delivering statement inside the window refuses
+       (replay-record-interleave-unproven: it would be swallowed too),
+       any other control shape refuses
+       (replay-record-region-shape-unproven), and a window the region
+       cannot fill exactly refuses (replay-record-count-unproven);
+     - recorded words that could write PRGM state if played back refuse
+       as a precaution: SFPCONFIG, SFPLOADI with a non-allocatable
+       destination, nested MOP/MOP_CFG/REPLAY.  Other SFPU words,
+       including CC writers, are admitted as recorded content, since it
+       is never played back.
+
+   The counted loop handles the rolled form of a record followed by a
+   `#pragma GCC unroll' loop, which is still rolled when the TU walk
+   scans the einline-stage body.  Trip counts are proven from the
+   loop's own IV and guard, as in the bounded-IV store-range proof
+   above, and must be exact.
+
+   The transform never inserts programming inside an admitted window:
+   residency and prgm-const programming lands only on the function
+   entry edge or on preheaders of loops that contain typed residency
+   candidates, and a window interior contains no typed statement.  */
+
+namespace {
+
+/* Check one recorded (swallowed) word: NULL when recordable, else the
+   named refusal.  */
+
+static const char *
+replay_record_word_disposition (uint32_t word)
+{
+  unsigned opcode = word >> 24;
+  if (opcode == XTT_REPLAY_OPCODE || opcode == XTT_MOP_OPCODE
+      || opcode == XTT_MOP_CFG_OPCODE)
+    return "replay-record-nested-unproven: expander word in recorded content";
+  if (opcode == 0x91)		/* SFPCONFIG: PRGM/LaneConfig writer */
+    return "replay-record-content-prgm-unproven: SFPCONFIG in recorded "
+	   "content";
+  if (opcode == 0x71 && ((word >> 20) & 0xf) >= 8)
+    return "replay-record-content-prgm-unproven: non-allocatable SFPLOADI "
+	   "in recorded content";
+  return nullptr;
+}
+
+/* One statement inside an open record window.  */
+
+enum region_stmt_class { RGN_TRANSPARENT, RGN_WORD, RGN_REFUSE };
+
+/* Classify STMT inside an open record window: RGN_WORD for a raw
+   `.ttinsn' constant word that passes replay_record_word_disposition
+   (*WORD receives it); RGN_TRANSPARENT for statements that deliver no
+   Tensix word (debug/label/nop/control, empty or fence-only asm,
+   clobbers, non-volatile scalar assigns); RGN_REFUSE, with the named
+   reason in *WHY, for anything that could deliver a word the window
+   would swallow (calls, volatile stores, unrecognized asm) or a
+   recorded word that replay_record_word_disposition rejects.  */
+
+static region_stmt_class
+classify_region_stmt (gimple *stmt, uint32_t *word, const char **why)
+{
+  if (is_gimple_debug (stmt))
+    return RGN_TRANSPARENT;
+  switch (gimple_code (stmt))
+    {
+    case GIMPLE_LABEL:
+    case GIMPLE_NOP:
+    case GIMPLE_PREDICT:
+    case GIMPLE_COND:		/* control: handled by the BB walk */
+    case GIMPLE_RETURN:
+      return RGN_TRANSPARENT;
+    default:
+      break;
+    }
+  if (gasm *a = dyn_cast <gasm *> (stmt))
+    {
+      const char *s = gimple_asm_string (a);
+      while (*s == ' ' || *s == '\t')
+	++s;
+      if (!*s || !strcmp (s, "fence"))
+	/* Pure barrier / scalar fence: delivers no Tensix word.  */
+	return RGN_TRANSPARENT;
+      if (rvtt_raw_ttinsn_word_p (a, word))
+	{
+	  if (const char *d = replay_record_word_disposition (*word))
+	    {
+	      *why = d;
+	      return RGN_REFUSE;
+	    }
+	  return RGN_WORD;
+	}
+      *why = "replay-record-interleave-unproven: unrecognized asm inside "
+	     "a record window";
+      return RGN_REFUSE;
+    }
+  if (is_gimple_call (stmt))
+    {
+      /* Any call -- typed builtin, scalar builtin, defined function --
+	 could deliver Tensix words that the open window would swallow,
+	 so refuse all of them.  */
+      *why = "replay-record-interleave-unproven: call inside a record "
+	     "window";
+      return RGN_REFUSE;
+    }
+  if (is_gimple_assign (stmt))
+    {
+      if (gimple_clobber_p (stmt))
+	return RGN_TRANSPARENT;
+      if (gimple_store_p (stmt))
+	{
+	  tree lhs = gimple_get_lhs (stmt);
+	  tree base = lhs ? get_base_address (lhs) : NULL_TREE;
+	  if ((lhs && TREE_THIS_VOLATILE (lhs))
+	      || (base && DECL_P (base) && TREE_THIS_VOLATILE (base)))
+	    {
+	      /* A volatile store could push an instruction-FIFO word
+		 into the open window (the same rule the TU store
+		 scan uses: hardware registers are declared
+		 volatile; non-volatile stores are memory).  */
+	      *why = "replay-record-interleave-unproven: volatile store "
+		     "inside a record window";
+	      return RGN_REFUSE;
+	    }
+	}
+      return RGN_TRANSPARENT;
+    }
+  *why = "replay-record-interleave-unproven: unproven statement inside "
+	 "a record window";
+  return RGN_REFUSE;
+}
+
+/* Structural exact trip count of the single-block self-loop LOOP_BB
+   entered by ENTRY_E (the same discipline as bounded_iv_store_range's
+   guard forms, restricted to the do-while shape a rolled counted region
+   loop takes): IV = PHI <C (entry), STEP_VAL (backedge)>, STEP_VAL =
+   IV + K in this block, the block's closing cond tests STEP_VAL
+   against constant BOUND, and taking the backedge means the test
+   passed.  NE requires divisibility; LT takes the ceiling; both
+   require C < BOUND (the do-while body runs before any test).  */
+
+static bool
+region_loop_trip_count (basic_block header, edge entry_e, edge latch_e,
+			edge iterate_e, unsigned HOST_WIDE_INT *trips)
+{
+  gimple_stmt_iterator lgsi = gsi_last_bb (header);
+  if (gsi_end_p (lgsi))
+    return false;
+  gcond *cond = dyn_cast <gcond *> (gsi_stmt (lgsi));
+  if (!cond)
+    return false;
+  tree op0 = gimple_cond_lhs (cond), op1 = gimple_cond_rhs (cond);
+  tree_code ccode = gimple_cond_code (cond);
+  if (TREE_CODE (op0) == INTEGER_CST)
+    {
+      std::swap (op0, op1);
+      ccode = swap_tree_comparison (ccode);
+    }
+  if (TREE_CODE (op0) != SSA_NAME || TREE_CODE (op1) != INTEGER_CST
+      || !(tree_fits_uhwi_p (op1) || tree_fits_shwi_p (op1)))
+    return false;
+  /* Two guard forms:
+       do-while (rotated / ivcanon): the tested value is STEP_VAL =
+	 IV + K defined in the loop, the PHI's latch argument;
+       while (unrotated header guard): the tested value is the PHI,
+	 whose latch argument is PHI + K defined in the loop.
+     Both forms run the body for IV = C, C+K, ... up to but excluding
+     BOUND, so the same trip formulas apply (NE with divisibility, LT
+     with the ceiling).  */
+  gphi *phi;
+  tree kt;
+  if (gphi *p = dyn_cast <gphi *> (SSA_NAME_DEF_STMT (op0)))
+    {
+      /* while form: OP0 is the PHI; latch arg = PHI + K.  */
+      phi = p;
+      if (gimple_bb (phi) != header || gimple_phi_num_args (phi) != 2)
+	return false;
+      tree latch_val = gimple_phi_arg_def_from_edge (phi, latch_e);
+      if (!latch_val || TREE_CODE (latch_val) != SSA_NAME)
+	return false;
+      gimple *stepd = SSA_NAME_DEF_STMT (latch_val);
+      if (!stepd || !is_gimple_assign (stepd)
+	  || (gimple_assign_rhs_code (stepd) != PLUS_EXPR
+	      && gimple_assign_rhs_code (stepd) != POINTER_PLUS_EXPR)
+	  || gimple_assign_rhs1 (stepd) != op0)
+	return false;
+      kt = gimple_assign_rhs2 (stepd);
+    }
+  else
+    {
+      /* do-while form: OP0 = IV + K; PHI's latch arg is OP0.  */
+      gimple *stepd = SSA_NAME_DEF_STMT (op0);
+      if (!stepd || !is_gimple_assign (stepd)
+	  || (gimple_assign_rhs_code (stepd) != PLUS_EXPR
+	      && gimple_assign_rhs_code (stepd) != POINTER_PLUS_EXPR))
+	return false;
+      tree ivt = gimple_assign_rhs1 (stepd);
+      kt = gimple_assign_rhs2 (stepd);
+      if (TREE_CODE (ivt) != SSA_NAME)
+	return false;
+      phi = dyn_cast <gphi *> (SSA_NAME_DEF_STMT (ivt));
+      if (!phi || gimple_bb (phi) != header
+	  || gimple_phi_num_args (phi) != 2
+	  || gimple_phi_arg_def_from_edge (phi, latch_e) != op0)
+	return false;
+    }
+  if (TREE_CODE (kt) != INTEGER_CST
+      || !(tree_fits_uhwi_p (kt) || tree_fits_shwi_p (kt)))
+    return false;
+  tree init = gimple_phi_arg_def_from_edge (phi, entry_e);
+  if (!init || TREE_CODE (init) != INTEGER_CST
+      || !(tree_fits_uhwi_p (init) || tree_fits_shwi_p (init)))
+    return false;
+  /* Normalize: CCODE holds exactly when the loop iterates (the
+     do-while backedge / the while form's header-to-body edge).  */
+  if (!(iterate_e->flags & EDGE_TRUE_VALUE))
+    ccode = invert_tree_comparison (ccode, /*honor_nans=*/false);
+  /* Fixed-width modular IV arithmetic at the IV type's precision (the
+     ivcanon down-counting form steps by the modular -1).  */
+  unsigned prec = TYPE_PRECISION (TREE_TYPE (op0));
+  if (prec < 2 || prec > HOST_BITS_PER_WIDE_INT)
+    return false;
+  unsigned HOST_WIDE_INT mask
+    = prec == HOST_BITS_PER_WIDE_INT
+      ? ~(unsigned HOST_WIDE_INT) 0
+      : (((unsigned HOST_WIDE_INT) 1 << prec) - 1);
+  unsigned HOST_WIDE_INT c = TREE_INT_CST_LOW (init) & mask;
+  unsigned HOST_WIDE_INT k = TREE_INT_CST_LOW (kt) & mask;
+  unsigned HOST_WIDE_INT bound = TREE_INT_CST_LOW (op1) & mask;
+  if (k == 0)
+    return false;
+  bool down = k > (mask >> 1);	/* modular negative step */
+  if (ccode == NE_EXPR)
+    {
+      /* Monotonic modular ascent (descent) from C exits exactly at
+	 BOUND; divisibility keeps equality from being stepped over
+	 (a non-divisible NE loop would wrap -- refuse).  */
+      if (down)
+	{
+	  unsigned HOST_WIDE_INT kd = (mask - k + 1) & mask;
+	  if (bound >= c || (c - bound) % kd != 0)
+	    return false;
+	  *trips = (c - bound) / kd;
+	  return true;
+	}
+      if (bound <= c || (bound - c) % k != 0)
+	return false;
+      *trips = (bound - c) / k;
+      return true;
+    }
+  if (ccode == LT_EXPR && !down)
+    {
+      if (bound <= c)
+	return false;
+      *trips = (bound - c + k - 1) / k;
+      return true;
+    }
+  return false;
+}
+
+} /* anonymous namespace */
+
 /* Parse STMT as the canonical raw `.ttinsn %0' asm with exactly one
    constant input and no outputs; on success set *WORD to the 32-bit
    instruction word and return true.  Any other spelling or a
@@ -1524,5 +1821,260 @@ rvtt_raw_ttinsn_word_p (gasm *stmt, uint32_t *word)
   if (TREE_CODE (op) != INTEGER_CST)
     return false;
   *word = (uint32_t) TREE_INT_CST_LOW (op);
+  return true;
+}
+
+/* Decide whether the raw REPLAY word WORD at asm statement RECORD is
+   admissible for the TU freedom proof (see the section comment above).
+   Playback words and malformed encodings refuse with a reason in *WHY.
+   A record word walks its window from RECORD: exactly LEN raw constant
+   words along straight-line flow, allowing one structurally counted
+   loop whose every trip is swallowed, each word passing the
+   recorded-content check.  With exec_while_loading=0 every window
+   statement is added to *SUPPRESSED (it is never delivered, so it is
+   excluded from the executed-word scan); exec_while_loading=1 admits
+   without suppression but still requires the proven window.  */
+
+bool
+rvtt_mop_replay_record_admit (gasm *record, uint32_t word,
+			      hash_set<gimple *> *suppressed,
+			      const char **why)
+{
+  gcc_checking_assert ((word >> 24) == XTT_REPLAY_OPCODE);
+  if (!((word >> XTT_REPLAY_LOAD_BIT) & 1))
+    {
+      *why = "replay-execute-unproven: playback of recorded content";
+      return false;
+    }
+  unsigned len = (word >> XTT_REPLAY_LEN_SHIFT) & XTT_REPLAY_LEN_MASK;
+  unsigned idx = (word >> XTT_REPLAY_IDX_SHIFT) & XTT_REPLAY_IDX_MASK;
+  if ((word & XTT_REPLAY_RESERVED_MASK) != 0
+      || len < 1 || len > XTT_REPLAY_BUF_SLOTS
+      || idx >= XTT_REPLAY_BUF_SLOTS
+      || idx + len > XTT_REPLAY_BUF_SLOTS)
+    {
+      /* The simulator faults on these encodings; the hardware
+	 behaviour is undocumented.  */
+      *why = "replay-record-word-unproven: malformed REPLAY encoding";
+      return false;
+    }
+  /* Exec-while-loading admits without suppression: every window word
+     also executes and is audited by the ordinary scan, and the stored
+     image is unreachable (arms (a)-(c) above).  The window must still
+     be walked: the hardware turns a nested expander word inside an
+     open window into stored data, so a REPLAY/MOP word the scan would
+     treat as executing must refuse, and finding the window's end needs
+     the same statically countable region (a typed call's emitted word
+     count is unknown).  */
+  bool exec_while_loading = (word >> XTT_REPLAY_EXEC_BIT) & 1;
+
+  /* Prove the window region (swallowed when Exec=0).  */
+  unsigned HOST_WIDE_INT need = len;
+  basic_block bb = gimple_bb (record);
+  if (!bb)
+    {
+      *why = "replay-record-region-shape-unproven";
+      return false;
+    }
+  gimple_stmt_iterator gsi = gsi_for_stmt (record);
+  gsi_next (&gsi);
+  auto_vec<gimple *, 32> members;
+  unsigned budget = 4096;
+  while (need)
+    {
+      if (gsi_end_p (gsi))
+	{
+	  if (!single_succ_p (bb))
+	    {
+	      *why = "replay-record-region-shape-unproven";
+	      return false;
+	    }
+	  basic_block succ = single_succ (bb);
+	  if (succ->index == EXIT_BLOCK)
+	    {
+	      *why = "replay-record-count-unproven: window escapes the "
+		     "scanned body";
+	      return false;
+	    }
+	  if (single_pred_p (succ))
+	    {
+	      bb = succ;
+	      gsi = gsi_start_bb (bb);
+	      continue;
+	    }
+	  /* The one non-straight-line shape: a structurally counted
+	     loop entered here -- either the rotated single-block
+	     self-loop (do-while) or the unrotated header+body pair
+	     (while).  SUCC is the header.  */
+	  if (EDGE_COUNT (succ->preds) != 2 || EDGE_COUNT (succ->succs) != 2)
+	    {
+	      *why = "replay-record-region-shape-unproven";
+	      return false;
+	    }
+	  edge entry_e = nullptr, latch_e = nullptr;
+	  edge_iterator ei;
+	  edge e;
+	  FOR_EACH_EDGE (e, ei, succ->preds)
+	    {
+	      if (e->src == bb)
+		entry_e = e;
+	      else
+		latch_e = e;
+	    }
+	  if (!entry_e || !latch_e)
+	    {
+	      *why = "replay-record-region-shape-unproven";
+	      return false;
+	    }
+	  basic_block body = nullptr;	/* while form's body block */
+	  edge iterate_e = nullptr, exit_e = nullptr;
+	  if (latch_e->src == succ)
+	    {
+	      /* do-while self-loop: the latch is the header itself.  */
+	      iterate_e = latch_e;
+	      exit_e = EDGE_SUCC (succ, 0) == latch_e
+		       ? EDGE_SUCC (succ, 1) : EDGE_SUCC (succ, 0);
+	    }
+	  else
+	    {
+	      /* while form: the latch must be a separate body block,
+		 entered only from the header's iterate edge and
+		 returning only to the header.  */
+	      body = latch_e->src;
+	      if (!single_pred_p (body) || !single_succ_p (body)
+		  || single_pred (body) != succ
+		  || single_succ (body) != succ)
+		{
+		  *why = "replay-record-region-shape-unproven";
+		  return false;
+		}
+	      iterate_e = EDGE_SUCC (succ, 0)->dest == body
+			  ? EDGE_SUCC (succ, 0) : EDGE_SUCC (succ, 1);
+	      exit_e = EDGE_SUCC (succ, 0)->dest == body
+		       ? EDGE_SUCC (succ, 1) : EDGE_SUCC (succ, 0);
+	      if (iterate_e->dest != body || exit_e->dest == body)
+		{
+		  *why = "replay-record-region-shape-unproven";
+		  return false;
+		}
+	    }
+	  if (exit_e->dest == succ)
+	    {
+	      *why = "replay-record-region-shape-unproven";
+	      return false;
+	    }
+	  /* Per-trip word scan.  The words live in the per-trip part
+	     (the self-loop block / the while body); a delivered word in
+	     the while HEADER would run trips+1 times and refuses.  */
+	  unsigned HOST_WIDE_INT per_trip = 0;
+	  auto_vec<gimple *, 16> loop_members;
+	  basic_block scan[2] = { succ, body };
+	  for (basic_block cbb : scan)
+	    {
+	      if (!cbb)
+		continue;
+	      for (gimple_stmt_iterator lgsi = gsi_start_bb (cbb);
+		   !gsi_end_p (lgsi); gsi_next (&lgsi))
+		{
+		  if (!budget--)
+		    {
+		      *why = "replay-record-region-shape-unproven";
+		      return false;
+		    }
+		  uint32_t w;
+		  const char *cwhy = nullptr;
+		  switch (classify_region_stmt (gsi_stmt (lgsi), &w, &cwhy))
+		    {
+		    case RGN_TRANSPARENT:
+		      break;
+		    case RGN_WORD:
+		      if (body && cbb == succ)
+			{
+			  *why = "replay-record-region-shape-unproven: "
+				 "delivered word in a while-loop header";
+			  return false;
+			}
+		      loop_members.safe_push (gsi_stmt (lgsi));
+		      ++per_trip;
+		      break;
+		    case RGN_REFUSE:
+		      *why = cwhy;
+		      return false;
+		    }
+		}
+	    }
+	  if (per_trip == 0)
+	    {
+	      /* A wordless loop delivers nothing: transparent.  */
+	      bb = exit_e->dest;
+	      if (bb->index == EXIT_BLOCK || !single_pred_p (bb))
+		{
+		  *why = "replay-record-region-shape-unproven";
+		  return false;
+		}
+	      gsi = gsi_start_bb (bb);
+	      continue;
+	    }
+	  unsigned HOST_WIDE_INT trips = 0;
+	  if (!region_loop_trip_count (succ, entry_e, latch_e, iterate_e,
+				       &trips)
+	      || trips == 0)
+	    {
+	      *why = "replay-record-trips-unproven: counted-loop trip "
+		     "count inside a record window";
+	      return false;
+	    }
+	  if (per_trip > need / trips || per_trip * trips > need)
+	    {
+	      /* A partial-trip swallow cannot be attributed per trip:
+		 some executions of the same statement would be
+		 swallowed and others delivered.  */
+	      *why = "replay-record-count-unproven: loop deliveries "
+		     "exceed the record window";
+	      return false;
+	    }
+	  need -= per_trip * trips;
+	  for (gimple *m : loop_members)
+	    members.safe_push (m);
+	  if (need == 0)
+	    break;
+	  bb = exit_e->dest;
+	  if (bb->index == EXIT_BLOCK || !single_pred_p (bb))
+	    {
+	      *why = "replay-record-region-shape-unproven";
+	      return false;
+	    }
+	  gsi = gsi_start_bb (bb);
+	  continue;
+	}
+      if (!budget--)
+	{
+	  *why = "replay-record-region-shape-unproven";
+	  return false;
+	}
+      gimple *stmt = gsi_stmt (gsi);
+      uint32_t w;
+      const char *cwhy = nullptr;
+      switch (classify_region_stmt (stmt, &w, &cwhy))
+	{
+	case RGN_TRANSPARENT:
+	  break;
+	case RGN_WORD:
+	  members.safe_push (stmt);
+	  --need;
+	  break;
+	case RGN_REFUSE:
+	  *why = cwhy;
+	  return false;
+	}
+      gsi_next (&gsi);
+    }
+  /* Exec=0: the window words are architecturally never delivered --
+     exclude them from the executed-word scan.  Exec=1: they execute
+     and stay in the scan (the walk above still proved the window
+     free of neutered expander words).  */
+  if (!exec_while_loading)
+    for (gimple *m : members)
+      suppressed->add (m);
   return true;
 }
