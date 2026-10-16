@@ -601,6 +601,10 @@ mtt-tensix-optimize-dce
 Target Var(riscv_tt_opt_dce) Init(1)
 Remove dead Tensix instructions.
 
+mtt-tensix-optimize-repeat-residency
+Target Var(riscv_tt_opt_repeat_residency) Init(0)
+Park a constant that a loop-free, call-free function materializes repeatedly in a PRGM register programmed once at the function entry.
+
 mtt-tensix-optimize-prgm-const
 Target Var(riscv_tt_opt_prgm_const) Init(0)
 Allocate programmable constant registers to loop-invariant SFPU immediates.

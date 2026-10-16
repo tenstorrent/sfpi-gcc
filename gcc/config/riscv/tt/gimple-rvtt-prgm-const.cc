@@ -756,7 +756,7 @@ public:
       {
 	unsigned regs = 0;
 	for (const prgm_alloc &a : st.allocs)
-	  if (!a.reclaimed)
+	  if (!a.reclaimed || a.repeat)
 	    regs |= 1u << a.reg;
 	if (unsigned moved = rvtt_crosscall_prgm_hoist (fn, regs))
 	  {
