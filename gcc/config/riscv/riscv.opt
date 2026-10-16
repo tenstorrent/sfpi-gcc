@@ -677,6 +677,10 @@ mtt-tensix-optimize-invariant-loadi
 Target Var(riscv_tt_opt_invariant_loadi) Init(0)
 Hoist loop-invariant Tensix immediate-vector materializations before register allocation.
 
+mtt-tensix-optimize-dst-ownership
+Target Var(riscv_tt_opt_dst_ownership) Init(0)
+Fold proven-identity Dst reloads into register-resident values using the Dst ownership analysis.
+
 mtt-tensix-optimize-lut-select
 Target Var(riscv_tt_opt_lut_select) Init(1)
 Select Tensix SFPU LUT instructions from encodable magnitude range-dispatch trees.

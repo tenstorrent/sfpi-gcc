@@ -193,6 +193,7 @@ extern unsigned rvtt_modwrite_drained_frontend_window (void);
 
 /* RTL passes */
 class rtl_opt_pass;
+extern rtl_opt_pass *make_pass_rvtt_dst_ownership (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_fix_ebreak (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_fix_raw (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_fix_rocc (gcc::context *ctxt);
