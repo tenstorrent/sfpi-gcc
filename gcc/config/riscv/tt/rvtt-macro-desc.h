@@ -152,6 +152,40 @@ extern bool rvtt_macro_build_expectations
   (const macro_region &region, const macro_schedule &schedule,
    rvtt_macro_verify::expectations *out);
 
+/* Drain-aware boundary placement (rtl-rvtt-schedule.cc, used by the
+   planner's emission under -mtt-tensix-optimize-drain-schedule): prove
+   that the derived drain of the run ending before row END may be elided
+   at the boundary into the next run [END, NEXT_END), because every
+   in-flight macro event's writeback provably precedes the first
+   conflicting follower access.  All distances derive from the
+   descriptor's own SequenceBits delays; refusals are named to DUMP and
+   keep the full derived drain.  */
+extern bool rvtt_macro_drain_boundary_elidable
+  (const macro_region &region, const macro_schedule &schedule,
+   const macro_descriptor &desc, unsigned begin, unsigned end,
+   unsigned next_end, FILE *dump);
+/* Loop-backedge drain elision: prove that a loop-body region's final
+   run may elide its in-body drain because the backedge follower stream
+   -- the in-body tail, the loop-head prefix, and the region's own first
+   run [0, FIRST_RUN_END) in the next iteration -- provably orders every
+   access after every pending writeback.  The caller must emit the full
+   derived drain on the loop's exit path (the architectural exit
+   contract is preserved, only its placement moves from once-per-trip to
+   once-per-exit).  */
+extern bool rvtt_macro_drain_backedge_elidable
+  (const macro_region &region, const macro_schedule &schedule,
+   const macro_descriptor &desc, unsigned first_run_end, FILE *dump);
+/* Window-pairing inter-row drain tuning (rtl-rvtt-schedule.cc, used by
+   the planner's emission under -mtt-tensix-optimize-window-pairing): the
+   minimal proven inter-row drain for a run of uniform rows with a
+   fixed-VD value carrier, from the exact pending-event versus
+   follower-access model (register-, Dst- and sub-unit-aware) instead of
+   the full derived drain.  Returns a value in [0, desc.drain_slots], or
+   desc.drain_slots on any refusal, named to DUMP.  A result below the
+   full drain names its binding conflict through *BOUND_NAME.  */
+extern int rvtt_macro_interrow_drain_tuned
+  (function *fn, const macro_region &region, const macro_schedule &schedule,
+   const macro_descriptor &desc, FILE *dump, const char **bound_name);
 /* ------------------------------------------------------------------ */
 /* Descriptor-program residency (-mtt-tensix-macro-planner-residency,
    default off), after the dictionary compression of C. Lefurgy, P. Bird,
