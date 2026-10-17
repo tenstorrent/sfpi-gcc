@@ -84,6 +84,13 @@ extern edge rvtt_loop_entry_edge (class loop *loop);
    successor, not the function entry block).  */
 extern bool rvtt_dedicated_preheader_p (edge entry);
 
+/* Return LOOP's dedicated preheader: the unique block outside the loop
+   with a normal edge into the header whose only successor is the header,
+   so an insn placed at its end executes exactly once per loop entry.
+   Return null when the loop has several entry blocks or the candidate is
+   shared with other code.  */
+extern basic_block rvtt_dedicated_loop_preheader (class loop *loop);
+
 /* Return true if the region of a hoist onto ENTRY contains an opaque
    statement.  The region is the preheader from the insertion point on
    plus the body of LOOP: a value hoisted onto the entry edge and used
