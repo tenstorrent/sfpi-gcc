@@ -106,6 +106,9 @@ struct riscv_address_info {
 
 /* Routines implemented in riscv.cc.  */
 extern const char *riscv_asm_output_opcode (FILE *asm_out_file, const char *p);
+#ifdef HARD_CONST
+extern void riscv_ipa_ra_conservative_regs (HARD_REG_SET *);
+#endif
 extern enum riscv_symbol_type riscv_classify_symbolic_expression (rtx);
 extern bool riscv_symbolic_constant_p (rtx, enum riscv_symbol_type *);
 extern int riscv_float_const_rtx_index_for_fli (rtx);

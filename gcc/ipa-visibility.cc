@@ -240,6 +240,15 @@ cgraph_externally_visible_p (struct cgraph_node *node,
       && comdat_can_be_unshared_p (node))
     return false;
 
+#ifdef TARGET_UNSHARE_COMDAT_FUNCTIONS
+  /* The target may ask for the same private copies without whole-program
+     mode, e.g. so that IPA-RA can trust the callee's register usage.  */
+  if (TARGET_UNSHARE_COMDAT_FUNCTIONS
+      && DECL_COMDAT (node->decl)
+      && comdat_can_be_unshared_p (node))
+    return false;
+#endif
+
   /* When doing link time optimizations, hidden symbols become local.  */
   if ((in_lto_p && !flag_incremental_link)
       && (DECL_VISIBILITY (node->decl) == VISIBILITY_HIDDEN
@@ -541,7 +550,12 @@ optimize_weakref (symtab_node *node)
 static void
 localize_node (bool whole_program, symtab_node *node)
 {
+#ifdef TARGET_UNSHARE_COMDAT_FUNCTIONS
+  gcc_assert (whole_program || in_lto_p || !TREE_PUBLIC (node->decl)
+	      || (TARGET_UNSHARE_COMDAT_FUNCTIONS && DECL_COMDAT (node->decl)));
+#else
   gcc_assert (whole_program || in_lto_p || !TREE_PUBLIC (node->decl));
+#endif
 
   /* It is possible that one comdat group contains both hidden and non-hidden
      symbols.  In this case we can privatize all hidden symbol but we need
