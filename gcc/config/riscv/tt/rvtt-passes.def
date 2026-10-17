@@ -192,6 +192,13 @@ INSERT_PASS_BEFORE (pass_ira, 1, pass_rvtt_dst_ownership);
    reordering over pseudos is the seam where a ten-simultaneously-live
    instruction order can still become an eight-register-schedulable one.  */
 INSERT_PASS_BEFORE (pass_ira, 1, pass_rvtt_lp_schedule_prera);
+/* Reserve raw-LREG intervals for IRA: LREGs that hand-written raw instructions
+   own, as named by the sfprawlreg metadata builtins, get zero-length sentinel
+   reads and USEs of the hard register so IRA cannot hand them to a compiler
+   temporary.  This is a correctness pass with no option: it runs for every
+   Tensix compilation, including -O0, after the pre-IRA folds and before the
+   LREG allocator.  */
+INSERT_PASS_BEFORE (pass_ira, 1, pass_rvtt_lreg_livein);
 INSERT_PASS_BEFORE (pass_ira, 1, pass_rvtt_lp_alloc);
 /* Named SFPU spill diagnosis runs first after allocation, before any other
    Tensix RTL pass consumes the stream: an allocated XTT32SI memory move
