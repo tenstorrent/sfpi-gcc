@@ -82,6 +82,9 @@ struct scan_ctx
   unsigned contract_mask;
   tree callee_decl;		/* the contract call target (caller scan);
 				   NULL_TREE for the callee's own scan */
+  gimple *site = nullptr;	/* the proven call statement itself, when
+				   its target is a not-yet-redirected
+				   clone (caller scan)		     */
   bool in_caller = false;	/* which side this scan covers (names) */
   bool region = false;		/* hoist-region rules (cross-loop hoist
 				   consumers): vector dataflow is

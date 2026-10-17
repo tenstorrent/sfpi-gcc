@@ -94,6 +94,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt-effects.h"
 #include "rvtt-pressure.h"
 #include "rvtt-delivery-cost.h"
+#include "rvtt-placement.h"
 #include "rvtt-macro-ownership.h"
 #include "rvtt-macro-tables.h"
 #include "rvtt-raw-boundary.h"
@@ -1364,6 +1365,151 @@ transform (function *fn)
 
       if (loads.is_empty ())
 	continue;
+
+      /* Ordering with the residency walk.  Under
+	 -mtt-tensix-optimize-park-ordering, when the late const-residency walk
+	 and its pressure-park tier are enabled, the in-region candidates of a
+	 CC-restore loop are left to that walk (residency-walk-ordering),
+	 because hoisting them here is worse:
+	 - each hoist here takes an LREG for the whole loop based on a
+	   conservative single-body estimate, before the walk's function-wide
+	   model can choose among all the loop's constants;
+	 - hoisting a predicated in-region load defines its disabled lanes, so
+	   a merge consumer (sfpassign_lv) whose tie would otherwise be broken
+	   keeps it and becomes a per-iteration SFPMOV merge.  Depth-zero
+	   candidates stay here (depth-zero-hoist-dominant): the restore proof
+	   makes their hoist free and mask-exact, while the walk could only
+	   place them after a first-iteration peel, which costs prologue words,
+	   may need an SFPMOV for a consumer that cannot read a constant
+	   register, and flips the trip parity of an even-trip paired row loop
+	   (crossrow-pairing-trips-odd).  */
+      if (riscv_tt_opt_park_ordering > 0
+	  && cc.has_cc
+	  && riscv_tt_opt_const_residency > 0
+	  && riscv_tt_opt_pressure_park > 0)
+	{
+	  /* A loop with SFPLUT/SFPLUTFP32 is left to the walk entirely: its
+	     constants are LUT coefficients, which are placed with the LUT, and
+	     hoisting one here leaves extra moves in the LUT row.  */
+	  bool lut_body = false;
+	  basic_block *nest = get_loop_body (loop);
+	  for (unsigned ix = 0; ix != loop->num_nodes && !lut_body; ++ix)
+	    for (gimple_stmt_iterator gsi = gsi_start_bb (nest[ix]);
+		 !gsi_end_p (gsi) && !lut_body; gsi_next (&gsi))
+	      if (const rvtt_insn_data *insnd
+		    = rvtt_get_insn_data (gsi_stmt (gsi)))
+		if (insnd->id == rvtt_insn_data::sfplut
+		    || insnd->id == rvtt_insn_data::sfplutfp32_3r
+		    || insnd->id == rvtt_insn_data::sfplutfp32_6r)
+		  lut_body = true;
+	  free (nest);
+	  if (lut_body && dump_file)
+	    fprintf (dump_file,
+		     "park-ordering: loop bb %d defers wholesale:"
+		     " lut-coefficient-authority (the body's LUT slot"
+		     " coefficients belong to the lut-select placement)\n",
+		     loop->header->index);
+
+	  /* Each in-region candidate also needs a register from the later
+	     placements, which share the LREG file with what this pass hoists.
+	     With three or more in-region constants the register budget is
+	     contended, so the whole loop is left to the walk.  */
+	  unsigned in_region = 0;
+	  for (gcall *call : loads)
+	    if (cc_depth_at_stmt (cc, call) > 0)
+	      ++in_region;
+	  bool demand_defer = in_region >= 3;
+	  /* Under -mtt-tensix-optimize-priced-placement, replace the
+	     `in_region >= 3' approximation by asking the pressure model
+	     whether the depth-zero hoists and the in-region values fit in the
+	     LREG file together.  If they fit there is no contention and the
+	     depth-zero hoists are kept.  This can only turn a deferral into a
+	     keep, never the reverse: the value of deferring cannot be priced
+	     here, since the walk may refuse the candidates
+	     (place-alternative-unpriceable).  The LUT deferral always
+	     applies.  */
+	  if (!lut_body && in_region > 0 && riscv_tt_opt_priced_placement > 0)
+	    {
+	      if (loads.length () > RVTT_PLACE_MAX_CANDIDATES)
+		rvtt_refuse (RVTT_REF_PLACE_BUDGET_EXHAUSTED, dump_file,
+			     "placement-arbiter: park-ordering loop bb %d"
+			     " over budget (place-budget-exhausted); the"
+			     " demand cut stands\n",
+			     loop->header->index);
+	      else
+		{
+		  rvtt_loop_pressure arb_profile (loop, cc.has_cc);
+		  bool priced_defer = !arb_profile.legal_with (loads);
+		  if (!demand_defer && priced_defer)
+		    /* Deferring cannot be priced here; keep the hoists.  */
+		    rvtt_refuse (RVTT_REF_PLACE_ALTERNATIVE_UNPRICEABLE,
+				 dump_file,
+				 "placement-arbiter: park-ordering loop"
+				 " bb %d priced defer refused"
+				 " (place-alternative-unpriceable: the"
+				 " late walk's re-placement is unproven"
+				 " here); the demand-cut keep stands\n",
+				 loop->header->index);
+		  else
+		    {
+		      if (dump_file)
+			fprintf (dump_file,
+				 "placement-arbiter: park-ordering loop bb %d"
+				 " (in-region %u): demand cut %s, priced %s\n",
+				 loop->header->index, in_region,
+				 demand_defer ? "defer" : "keep",
+				 priced_defer ? "defer" : "keep");
+		      demand_defer = priced_defer;
+		    }
+		}
+	    }
+	  if (demand_defer && !lut_body && dump_file)
+	    fprintf (dump_file,
+		     "park-ordering: loop bb %d defers wholesale:"
+		     " in-region-demand (%u in-region constants: the"
+		     " later placement authorities own this loop's"
+		     " pressure arbitration)\n",
+		     loop->header->index, in_region);
+	  bool wholesale = lut_body || demand_defer;
+	  unsigned kept = 0;
+	  for (gcall *call : loads)
+	    {
+	      if (!wholesale && cc_depth_at_stmt (cc, call) == 0)
+		{
+		  if (dump_file)
+		    {
+		      rvtt_refuse (RVTT_REF_DEPTH_ZERO_HOIST_DOMINANT,
+				   dump_file,
+				   "Invariant SFPU immediate hoist kept"
+				   " under park-ordering:"
+				   " depth-zero-hoist-dominant"
+				   " (loop bb %d): the hoist is a mask-exact"
+				   " free move; the late walk could re-place"
+				   " it only behind its manufactured"
+				   " trip-parity-flipping peel: ",
+				   loop->header->index);
+		      print_gimple_stmt (dump_file, call, 0);
+		    }
+		  loads[kept++] = call;
+		}
+	      else if (dump_file)
+		{
+		  rvtt_refuse (RVTT_REF_RESIDENCY_WALK_ORDERING, dump_file,
+			       "Invariant SFPU immediate hoist deferred:"
+			       " residency-walk-ordering (loop bb %d): the"
+			       " enabled const-residency walk owns this"
+			       " CC-restore loop's %s constants: ",
+			       loop->header->index,
+			       lut_body ? "lut-coefficient"
+			       : demand_defer ? "demand-arbitrated"
+			       : "in-region");
+		  print_gimple_stmt (dump_file, call, 0);
+		}
+	    }
+	  loads.truncate (kept);
+	  if (loads.is_empty ())
+	    continue;
+	}
 
       /* An explicit unroll request multiplies live ranges after this pass;
 	 the single-body pressure proof does not model that overlap.  */
