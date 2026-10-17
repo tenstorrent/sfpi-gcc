@@ -39,6 +39,9 @@ a recorded reason (see section 5).
 			     replay-window loop unroll and launch flattening.
   store forwarding           Lane merges forwarded into their consuming Dst
 			     stores.
+  LUT selection              If-conversion of piecewise range dispatch into
+			     SFPLUTFP32 table selection, including the FP16
+			     six-entry form.
 
 Supporting infrastructure that is not a pass: rvtt-cost / rvtt-delivery-cost
 / rvtt-timing / rvtt-trips (pricing engines), rvtt-bnb (an exact
@@ -74,6 +77,7 @@ The flags enabled by default are:
 	-mtt-tensix-optimize-cc
 	-mtt-tensix-optimize-combine
 	-mtt-tensix-optimize-dce
+	-mtt-tensix-optimize-lut-select
 	-mtt-tensix-optimize-replay
 	-mtt-tensix-optimize-setexp-fold
 
