@@ -308,9 +308,19 @@ rvtt_insn_data::sets_cc (gcall *stmt) const
   return false;
 }
 
+/* Set by rtl-rvtt-spill-diag.cc when it has reported (and deleted)
+   allocated SFPU memory moves in this compilation.  */
+bool rvtt_spill_diag_reported;
 
 void rvtt_mov_error (const rtx_insn *insn)
 {
+  /* Allocated SFPU memory moves are diagnosed (lreg-pressure-exceeded)
+     by rtl-rvtt-spill-diag.cc directly after allocation.  Once that
+     diagnosis has been issued, a leftover move in the discarded assembly
+     is harmless.  An SFPU memory move in any other compilation, including
+     one with unrelated user errors, is a compiler bug.  */
+  if (rvtt_spill_diag_reported && seen_error ())
+    return;
   if (INSN_HAS_LOCATION (insn))
     input_location = INSN_LOCATION (insn);
 
