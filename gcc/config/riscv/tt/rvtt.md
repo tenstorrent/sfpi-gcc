@@ -3386,6 +3386,48 @@
    ;; result latency 1.  With INDIRECT_VD (mod1 & 8) the write goes through
    ;; LReg[7] instead, which the position masks cannot express, so it keeps
    ;; the default attributes.
+   (set (attr "xtt_subunit")
+	(if_then_else (match_test "(TARGET_XTT_TENSIX_BH
+				    || TARGET_XTT_TENSIX_WH)
+				   && CONST_INT_P (operands[8])
+				   && (INTVAL (operands[8]) & 8) == 0")
+		      (const_string "mad") (const_string "none")))
+   (set (attr "xtt_lreg_read_ops")
+	(if_then_else (match_test "(TARGET_XTT_TENSIX_BH
+				    || TARGET_XTT_TENSIX_WH)
+				   && CONST_INT_P (operands[8])
+				   && (INTVAL (operands[8]) & 8) == 0")
+		      (const_int 255) (const_int 0)))
+   (set (attr "xtt_lreg_write_ops")
+	(if_then_else (match_test "(TARGET_XTT_TENSIX_BH
+				    || TARGET_XTT_TENSIX_WH)
+				   && CONST_INT_P (operands[8])
+				   && (INTVAL (operands[8]) & 8) == 0")
+		      (const_int 2) (const_int 0)))
+   (set (attr "xtt_cc_effect")
+	(if_then_else (match_test "(TARGET_XTT_TENSIX_BH
+				    || TARGET_XTT_TENSIX_WH)
+				   && CONST_INT_P (operands[8])
+				   && (INTVAL (operands[8]) & 8) == 0")
+		      (const_string "read") (const_string "unknown")))
+   (set (attr "xtt_config_effect")
+	(if_then_else (match_test "(TARGET_XTT_TENSIX_BH
+				    || TARGET_XTT_TENSIX_WH)
+				   && CONST_INT_P (operands[8])
+				   && (INTVAL (operands[8]) & 8) == 0")
+		      (const_string "none") (const_string "unknown")))
+   (set (attr "xtt_rwc_effect")
+	(if_then_else (match_test "(TARGET_XTT_TENSIX_BH
+				    || TARGET_XTT_TENSIX_WH)
+				   && CONST_INT_P (operands[8])
+				   && (INTVAL (operands[8]) & 8) == 0")
+		      (const_string "none") (const_string "unknown")))
+   (set (attr "xtt_result_latency")
+	(if_then_else (match_test "(TARGET_XTT_TENSIX_BH
+				    || TARGET_XTT_TENSIX_WH)
+				   && CONST_INT_P (operands[8])
+				   && (INTVAL (operands[8]) & 8) == 0")
+		      (const_int 2) (const_int 0)))
    ;; Lane-gated consumer (typed-effect attributes).
    (set_attr "xtt_lane_gated" "yes")])
 
