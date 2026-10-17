@@ -69,6 +69,8 @@ RVTT_OBJS := rvtt.o \
 	gimple-rvtt-lut-select.o \
 	gimple-rvtt-crosscall.o \
 	gimple-rvtt-crosscall-words.o \
+	gimple-rvtt-crosscall-scan.o \
+	gimple-rvtt-crossloop.o \
 	gimple-rvtt-replay-unroll.o \
 	rvtt-lut-tables.o \
 	gimple-rvtt-noval.o \
