@@ -596,9 +596,75 @@ commute_cmp_args (unsigned op, rvtt_arg_info (&args)[2])
    there is no complete ordering of fp types.
    FIXME: integral ordering compares ignore overflow -- that's bug 14598. */
 
+/* Definitions an expanded compare may have left without uses; they are
+   deleted once the compare itself is gone.  */
+static std::vector<gcall *> cmp_dead_defs;
+
+/* If VAL is a leading-zero count with no lane-flag side effect, return
+   its SFPLZ call.  */
+
+static gcall *
+lz_count_def (tree val)
+{
+  if (TREE_CODE (val) != SSA_NAME)
+    return nullptr;
+  gcall *def = dyn_cast <gcall *> (SSA_NAME_DEF_STMT (val));
+  const rvtt_insn_data *insnd = def ? rvtt_get_insn_data (def) : nullptr;
+  if (!insnd || insnd->id != rvtt_insn_data::sfplz)
+    return nullptr;
+  tree mod = gimple_call_arg (def, insnd->mod_arg ());
+  if (TREE_CODE (mod) != INTEGER_CST
+      || (TREE_INT_CST_LOW (mod) & ~SFPLZ_MOD1_NOSGN_MASK) != SFPLZ_MOD1_CC_NONE)
+    return nullptr;
+  return def;
+}
+
+/* A leading-zero count is below 32 exactly when the counted bits are not
+   all zero, which SFPLZ can report in the lane flags itself (CC_NE0).
+   Expand a count != 32 compare as that one instruction instead of a
+   subtract and a SETCC.  The == 32 form would need CC_COMP, which the
+   reference simulator does not accept, so it keeps the subtract.  */
+
+static bool
+expand_lz_cmp (gimple_stmt_iterator *right, gcall *cmp,
+	       rvtt_arg_info (&args)[2], unsigned op)
+{
+  if (op != SFPXCMP_MOD1_CC_NE)
+    return false;
+  /* The caller's operand info only records zero constants.  */
+  rvtt_arg_info count (args[0].get_arg ()), bound (args[1].get_arg ());
+  if (count.is_cst () && !bound.is_cst ())
+    std::swap (count, bound);
+  if (!bound.is_cst () || bound.get_cst () != 32)
+    return false;
+  gcall *lz = lz_count_def (count.get_arg ());
+  if (!lz)
+    return false;
+
+  const rvtt_insn_data *insnd = rvtt_get_insn_data (lz);
+  unsigned mod = TREE_INT_CST_LOW (gimple_call_arg (lz, insnd->mod_arg ()))
+    | SFPLZ_MOD1_CC_NE0;
+  gcall *call = gimple_build_call (insnd->decl, insnd->num_args ());
+  for (unsigned ix = 0; ix != insnd->num_args (); ++ix)
+    gimple_call_set_arg (call, ix, gimple_call_arg (lz, ix));
+  gimple_call_set_arg (call, insnd->mod_arg (),
+		       build_int_cst (unsigned_type_node, mod));
+  gimple_call_set_lhs (call, make_ssa_name (TREE_TYPE (gimple_call_lhs (lz))));
+  gimple_set_location (call, gimple_location (cmp));
+  gsi_insert_after (right, call, GSI_NEW_STMT);
+
+  cmp_dead_defs.push_back (lz);
+  if (gcall *def = bound.get_def ())
+    cmp_dead_defs.push_back (def);
+  return true;
+}
+
 static bool
 expand_cmp_using_sub (gimple_stmt_iterator *right, gcall *cmp, rvtt_arg_info (&args)[2], unsigned op, unsigned type)
 {
+  if (type != SFPXCMP_MOD1_TYPE_FLOAT && expand_lz_cmp (right, cmp, args, op))
+    return false;
+
   // Turn GT/GE to LT/LE to avoid extra insn,
   // Turn 0 EQ/NE A into A EQ/NE 0 to avoid subtract
   if (op >= SFPXCMP_MOD1_CC_GT
@@ -968,6 +1034,18 @@ expand_cond (call_vec_t &conds, unsigned &ix,
   unlink_stmt_vdef (call);
   gimple_stmt_iterator gsi = gsi_for_stmt (call);
   gsi_remove (&gsi, true);
+
+  for (gcall *def : cmp_dead_defs)
+    {
+      tree lhs = gimple_call_lhs (def);
+      if (lhs && TREE_CODE (lhs) == SSA_NAME && has_zero_uses (lhs))
+	{
+	  gimple_stmt_iterator dsi = gsi_for_stmt (def);
+	  gsi_remove (&dsi, true);
+	  release_defs (def);
+	}
+    }
+  cmp_dead_defs.clear ();
 
   return negated;
 }
