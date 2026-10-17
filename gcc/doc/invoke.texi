@@ -1299,6 +1299,8 @@ See RS/6000 and PowerPC Options.
 -mtt-optimize-hll
 -mtt-tensix-optimize-cc  -mno-tt-tensix-optimize-cc
 -mtt-tensix-optimize-dce  -mno-tt-tensix-optimize-dce
+-mtt-tensix-optimize-setexp-fold  -mno-tt-tensix-optimize-setexp-fold
+-mtt-tensix-optimize-addi-register-form
 -mtt-tensix-optimize-cc-region-general
 -mtt-tensix-optimize-round-interleave
 -mtt-tensix-optimize-invariant-loadi
@@ -1309,6 +1311,8 @@ See RS/6000 and PowerPC Options.
 -mtt-tensix-optimize-launch-flatten
 -mtt-tensix-optimize-launch-flatten-bounded
 -mtt-tensix-macro-planner-replay
+-mtt-tensix-optimize-reassoc
+-mtt-tensix-optimize-reassoc-mad-restructure
 -mtt-tensix-dump-effects}
 
 @emph{RL78 Options} (@ref{RL78 Options})
@@ -31932,6 +31936,18 @@ saves, restores, and enables.  Enabled by default.
 Remove Tensix instructions whose results are provably unused.  Enabled
 by default.
 
+@opindex mtt-tensix-optimize-setexp-fold
+@item -mtt-tensix-optimize-setexp-fold
+@itemx -mno-tt-tensix-optimize-setexp-fold
+Fold an exponent extract that feeds @code{SFPSETEXP} into the
+instruction's exponent-copy addressing mode.  Enabled by default.
+
+@opindex mtt-tensix-optimize-addi-register-form
+@item -mtt-tensix-optimize-addi-register-form
+When an SFPADDI would need a copy of its source because the source stays
+live, and the block later loads the same constant into a register, issue
+the add as an SFPADD with that register instead.
+
 @opindex mtt-tensix-optimize-cc-region-general
 @item -mtt-tensix-optimize-cc-region-general
 Generalize the recognizers of CC-consuming transformations.  The
@@ -32083,6 +32099,24 @@ option of the pair absent, every candidate site declines and code
 generation is byte-identical.
 
 @table @gcctabopt
+@opindex mtt-tensix-optimize-reassoc
+@item -mtt-tensix-optimize-reassoc
+Permit value-changing floating-point reassociation in the Tensix SFPU
+passes: accumulation-chain rebalancing and multi-use multiply-add
+fusion.  The value change is limited to the different rounding of a
+re-associated evaluation order.  Requires @option{-fassociative-math}.
+Integer and bitwise chain rebalancing under this option alone is
+value-identical and needs no such opt-in.
+
+@opindex mtt-tensix-optimize-reassoc-mad-restructure
+@item -mtt-tensix-optimize-reassoc-mad-restructure
+Permit fusing a single-use multiply-and-add pair---two serial
+roundings---into one @code{SFPMAD}---a single rounding---removing one
+dependent latency hop.  The value change is double versus single
+rounding on the fused product, plus the signed-zero flush the
+immediate-multiply form performs and @code{SFPMAD} does not.  Requires
+@option{-fassociative-math}.
+
 @end table
 
 @node Tensix Diagnostic Options
