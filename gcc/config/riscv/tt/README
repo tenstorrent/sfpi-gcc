@@ -45,6 +45,8 @@ a recorded reason (see section 5).
   crosscall                  Interprocedural LICM across noinline boundaries.
   prgm constants             Constant-register promotion and the priced
 			     residency walk that keeps invariants resident.
+  Dst ownership              Dst row ownership tracking: identical Dst
+			     reloads become register copies.
 
 Supporting infrastructure that is not a pass: rvtt-cost / rvtt-delivery-cost
 / rvtt-timing / rvtt-trips (pricing engines), rvtt-bnb (an exact
@@ -80,6 +82,7 @@ The flags enabled by default are:
 	-mtt-tensix-optimize-cc
 	-mtt-tensix-optimize-combine
 	-mtt-tensix-optimize-dce
+	-mtt-tensix-optimize-dst-ownership
 	-mtt-tensix-optimize-lut-select
 	-mtt-tensix-optimize-replay
 	-mtt-tensix-optimize-setexp-fold
