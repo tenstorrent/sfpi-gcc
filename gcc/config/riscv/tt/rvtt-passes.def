@@ -192,6 +192,7 @@ INSERT_PASS_BEFORE (pass_ira, 1, pass_rvtt_dst_ownership);
    reordering over pseudos is the seam where a ten-simultaneously-live
    instruction order can still become an eight-register-schedulable one.  */
 INSERT_PASS_BEFORE (pass_ira, 1, pass_rvtt_lp_schedule_prera);
+INSERT_PASS_BEFORE (pass_ira, 1, pass_rvtt_lp_alloc);
 /* Named SFPU spill diagnosis runs first after allocation, before any other
    Tensix RTL pass consumes the stream: an allocated XTT32SI memory move
    becomes the named user error lreg-pressure-exceeded rather than the
