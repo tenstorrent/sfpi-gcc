@@ -629,9 +629,25 @@ mtt-tensix-optimize-capture-rotation
 Target Var(riscv_tt_opt_capture_rotation) Init(0)
 Rotate replayed capture rows to fill known interlock stalls across the row boundary.
 
+mtt-tensix-optimize-drain-schedule
+Target Var(riscv_tt_opt_drain_schedule) Init(0)
+Elide provably unnecessary drain NOPs at macro run boundaries.
+
+mtt-tensix-optimize-window-pairing
+Target Var(riscv_tt_opt_window_pairing) Init(0)
+Reduce inter-row drain spacing to the minimum the pending-event model proves safe.
+
 mtt-tensix-optimize-repeat-residency
 Target Var(riscv_tt_opt_repeat_residency) Init(0)
 Park a constant that a loop-free, call-free function materializes repeatedly in a PRGM register programmed once at the function entry.
+
+mtt-tensix-optimize-drain-exit
+Target Var(riscv_tt_opt_drain_exit) Init(0)
+Size a loop's exit drain from the decoded pending events left after the loop tail, instead of the full derived drain.
+
+mtt-tensix-optimize-window-pairing-stride
+Target Var(riscv_tt_opt_window_pairing_stride) Init(0)
+Extend window-pairing proofs to rows whose addresses advance with any issued word of the row.
 
 mtt-tensix-optimize-crossrow-pairing
 Target Var(riscv_tt_opt_crossrow_pairing) Init(0)
@@ -658,6 +674,10 @@ Realize the modulo-variable-expansion kernel unroll on eligible paired SFPU loop
 mtt-tensix-mve-expand-inject-fault
 Target Undocumented Var(riscv_tt_mve_expand_inject_fault) Init(0)
 Testing only: mis-rotate one committed modulo-variable-expansion rename to exercise the post-commit verification.
+
+mtt-tensix-optimize-init-hoist
+Target Var(riscv_tt_opt_init_hoist) Init(0)
+Hoist a callee's loop-invariant initialization prefix into the calling loop's preheader.
 
 mtt-tensix-optimize-prgm-const
 Target Var(riscv_tt_opt_prgm_const) Init(0)
@@ -919,9 +939,39 @@ mtt-tensix-optimize-setexp-fold
 Target Var(riscv_tt_opt_setexp_fold) Init(1)
 Fold a biased Tensix SFPU exponent extract feeding SFPSETEXP into the exponent-copy addressing mode.
 
+mtt-tensix-macro-planner
+Target Var(riscv_tt_macro_planner) Init(0)
+Plan, prove, and materialize SFPLOADMACRO schedules from typed effects and target capability tables.
+
+mtt-tensix-macro-planner-analyze
+Target Var(riscv_tt_macro_planner_analyze) Init(0)
+Report macro-planner regions and their recorded decline reasons without changing code.
+
+mtt-tensix-macro-planner-verify
+Target Var(riscv_tt_macro_planner_verify) Init(0)
+Differentially verify synthesized macro-planner descriptors against the region's explicit facts.
+
+; Testing knob: corrupts only the verifier-local copy, so that a test
+; can check that a verification mismatch refuses formation.
+mtt-tensix-macro-planner-verify-corrupt-template
+Target Undocumented Var(riscv_tt_macro_planner_verify_corrupt_template) Init(0)
+Testing only: corrupt the verifier's local copy of one template word to check that a mismatch refuses formation.
+
 mtt-tensix-macro-planner-replay
 Target Var(riscv_tt_macro_planner_replay) Init(0)
 Admit planner-formed SFPLOADMACRO launches into automatic replay recording.
+
+mtt-tensix-macro-planner-residency
+Target Var(riscv_tt_macro_planner_residency) Init(0)
+Extend proven macro descriptor programming outward across enclosing loops and share identical descriptor programs.
+
+mtt-tensix-macro-ims
+Target Var(riscv_tt_macro_ims) Init(0)
+Retry refused macro-calendar proposals with reduced hosted sets and arbitrate formation against the replay alternative.
+
+mtt-tensix-macro-ims-carrier
+Target Var(riscv_tt_macro_ims_carrier) Init(0)
+Form extra-value-carrier variants of proven macro calendars, committing only variants that re-prove at a smaller initiation interval.
 
 mtt-tensix-dump-effects
 Target Var(riscv_tt_dump_effects) Init(0)

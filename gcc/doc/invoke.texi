@@ -1337,6 +1337,7 @@ See RS/6000 and PowerPC Options.
 -mtt-tensix-optimize-repeat-residency
 -mtt-tensix-optimize-crosscall-prgm
 -mtt-tensix-optimize-priced-placement
+-mtt-tensix-optimize-init-hoist
 -mtt-tensix-optimize-crosscall-hoist
 -mtt-tensix-optimize-crosscall-config-prefix
 -mtt-tensix-optimize-crosscall-addrmod
@@ -1369,12 +1370,22 @@ See RS/6000 and PowerPC Options.
 -mtt-tensix-optimize-dst-autoincr
 -mtt-tensix-optimize-dst-autoincr-load-carrier
 -mtt-tensix-optimize-post-autoincr-window
+-mtt-tensix-optimize-drain-schedule
+-mtt-tensix-optimize-drain-exit
+-mtt-tensix-optimize-window-pairing
+-mtt-tensix-optimize-window-pairing-stride
 -mtt-tensix-optimize-crossrow-pairing
 -mtt-tensix-optimize-crossrow-pairing-stall-words
 -mtt-tensix-optimize-crossrow-pairing-seed
 -mtt-tensix-optimize-crossrow-shared-reload
 -mtt-tensix-optimize-mve-expand
+-mtt-tensix-macro-planner
+-mtt-tensix-macro-planner-analyze
+-mtt-tensix-macro-planner-verify
 -mtt-tensix-macro-planner-replay
+-mtt-tensix-macro-planner-residency
+-mtt-tensix-macro-ims
+-mtt-tensix-macro-ims-carrier
 -mtt-tensix-optimize-reassoc
 -mtt-tensix-optimize-reassoc-loop-carried
 -mtt-tensix-optimize-reassoc-mad-restructure
@@ -32345,6 +32356,15 @@ parking, and an early-hoist deferral can be rescued when its
 keep-side is fully proven; unpriceable alternatives decline and keep
 the established decision.
 
+@opindex mtt-tensix-optimize-init-hoist
+@item -mtt-tensix-optimize-init-hoist
+Hoist a non-inlined callee's loop-invariant, idempotent initialization
+prefix (its derived descriptor programming, and where the caller's
+reaching configuration is proven equal, its configuration writes and
+lane-enable setup) into the calling loop's preheader, executing it once
+per loop instead of once per call.  Every unproven link declines and
+keeps the per-call prefix.
+
 @opindex mtt-tensix-optimize-crosscall-hoist
 @item -mtt-tensix-optimize-crosscall-hoist
 Hoist a non-inlined callee's call-invariant immediate materializations
@@ -32639,6 +32659,34 @@ allocation prices every candidate against the single replay buffer.
 The deferral loses no opportunity: every window capturable before the
 fold is capturable verbatim after it.
 
+@opindex mtt-tensix-optimize-drain-schedule
+@item -mtt-tensix-optimize-drain-schedule
+Prove per-boundary drain requirements from the derived event calendars
+and elide structurally multiplied drain NOPs at boundaries proven
+neutral; any unproven boundary keeps the full derived drain.
+
+@opindex mtt-tensix-optimize-window-pairing
+@item -mtt-tensix-optimize-window-pairing
+Tune the planner's fixed inter-row drain down to the minimal spacing an
+exact pending-event model proves safe, restoring back-to-back paired
+replay windows where every outstanding event is proven discharged.  The
+model covers per-event footprints, register, CC and configuration
+conflicts, and the audited Dst row and column-parity disjointness
+rules; any unproven piece declines and keeps the full drain.
+
+@opindex mtt-tensix-optimize-drain-exit
+@item -mtt-tensix-optimize-drain-exit
+Size the drain at the exit of a macro-planned loop from the pending
+events that the loop tail leaves, instead of emitting the full derived
+drain.
+
+@opindex mtt-tensix-optimize-window-pairing-stride
+@item -mtt-tensix-optimize-window-pairing-stride
+Generalize the window-pairing proof to rows whose Dst addresses advance
+with any issued word of the row, rebasing each access footprint by the
+stride phase of its carrying word.  Effective only where
+@option{-mtt-tensix-optimize-window-pairing} reaches the tuner.
+
 @opindex mtt-tensix-optimize-crossrow-pairing
 @item -mtt-tensix-optimize-crossrow-pairing
 Pair consecutive iterations of an eligible single-row Dst loop into one
@@ -32714,12 +32762,53 @@ and materializes the descriptor programming.  All of these options are
 disabled by default.
 
 @table @gcctabopt
+@opindex mtt-tensix-macro-planner
+@item -mtt-tensix-macro-planner
+Plan, prove, and materialize @code{SFPLOADMACRO} schedules from typed
+effects and target capability tables.
+
+@opindex mtt-tensix-macro-planner-analyze
+@item -mtt-tensix-macro-planner-analyze
+Discover, prove, and report macro-planner regions and their recorded
+decline reasons without changing generated code.
+
+@opindex mtt-tensix-macro-planner-verify
+@item -mtt-tensix-macro-planner-verify
+Differentially verify each synthesized macro-planner descriptor against
+the region's explicit facts; a mismatch declines the formation.  This
+verification is also forced on in checking builds of the compiler.
+
 @opindex mtt-tensix-macro-planner-replay
 @item -mtt-tensix-macro-planner-replay
 Admit planner-formed @code{SFPLOADMACRO} launches into automatic replay
 recording; the launch is a pure instruction word, and execution at a
 replay site reads the descriptor configuration current at that site.
 
+@opindex mtt-tensix-macro-planner-residency
+@item -mtt-tensix-macro-planner-residency
+Extend a proven descriptor-programming configuration epoch outward
+through successively enclosing loops, so the programming words become
+resident once per kernel entry instead of once per loop iteration, and
+elide the descriptor programming of a later region whose derived words
+are bit-identical to an already-programmed dominating one.  Every proof
+failure declines and keeps the established placement.
+
+@opindex mtt-tensix-macro-ims
+@item -mtt-tensix-macro-ims
+When a maximal macro-hosting proposal is declined downstream,
+deterministically retry with reduced hosted sets instead of declining
+the whole region; and additionally require a formed calendar to price
+below the replay-compressed explicit alternative under the shared
+issue-cost model.
+
+@opindex mtt-tensix-macro-ims-carrier
+@item -mtt-tensix-macro-ims-carrier
+Enumerate extra-value-carrier variants of proven macro calendars:
+duplicate one of the row's provably non-advancing Dst loads into a
+provably free register, replicate its setup, and move one consumer web
+onto the new carrier.  A variant commits only when the mutated region
+re-proves through the full derivation pipeline at a strictly smaller
+initiation interval; otherwise it is reverted exactly.
 @end table
 
 @node Tensix Value-Changing Options

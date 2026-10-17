@@ -186,6 +186,9 @@ INSERT_PASS_AFTER (pass_late_combine, 1, pass_rvtt_rmext);
    reservation below and register allocation must observe in final form.  */
 INSERT_PASS_BEFORE (pass_ira, 1, pass_rvtt_dst_ownership);
 INSERT_PASS_BEFORE (pass_postreload, 1, pass_rvtt_synth_opcode);
+/* The generic macro planner analyzes and forms macro regions after IRA has
+   assigned LREGs, ahead of the hazard scheduler and replay formation.  */
+INSERT_PASS_BEFORE (pass_postreload, 1, pass_rvtt_macro_planner);
 /* The du-chain LREG rename runs after register allocation (the collisions it
    breaks are the allocator's storage reuse, so it must see final hard LREGs),
    after macro formation (planner calendars are effect-opaque members and
