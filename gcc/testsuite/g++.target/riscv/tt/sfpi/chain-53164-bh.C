@@ -72,17 +72,17 @@ void loop () {
 **	# READ L0
 **	# READ L1
 **	SFPGT	L1, L0, 0, 1
-**	li	a2,16384
-**	addi	a5,a2,-64
-**	li	a0, 1897922560	# 1:71200000
-**	addi	a2,a2,-144
-**	lui	a1,%hi\(_ZN7ckernel13instrn_bufferE\)
-**	lw	a4,%lo\(_ZN7ckernel13instrn_bufferE\)\(a1\)
-**	add	a3,a5,a0
-**	sw	a3, 0\(a4\)	# 1:SFPLOADI	L2, a3, 0
+**	lui	a5,%hi\(_ZN7ckernel13instrn_bufferE\)
+**	li	a3,16384
+**	lw	a1,%lo\(_ZN7ckernel13instrn_bufferE\)\(a5\)
+**	li	a2, 1897922560	# 1:71200000
+**	addi	a5,a3,-64
+**	addi	a3,a3,-144
+**	add	a4,a5,a2
+**	sw	a4, 0\(a1\)	# 1:SFPLOADI	L2, a4, 0
 **	SFPGT	L2, L0, 0, 1
 **	addi	a5,a5,-16
-**	bne	a5,a2,.L[0-9]+
+**	bne	a5,a3,.L[0-9]+
 **	SFPCOMPC
 **	SFPLOADI	L1, 16544, 0	# LV:L1
 **	SFPENCC	3, 10
