@@ -518,7 +518,8 @@ replace_sequence (replay_sequence &seq, replay_block &block, unsigned replay_sta
   rtx capture = gen_rvtt_ttreplay_int
     (const0_rtx, const0_rtx, const0_rtx, GEN_INT (length),
      rvtt_gen_rtx_noval (XTT32SImode),
-     GEN_INT (replay_start), GEN_INT (not_quasar_fix), GEN_INT (1));
+     GEN_INT (replay_start), GEN_INT (not_quasar_fix), GEN_INT (1),
+     const0_rtx, const0_rtx);
   emit_insn_before (capture, block[seq.clones.front ().begin].insn);
 
   // Make sure we've not deleted anything in this instance already
@@ -532,7 +533,7 @@ replace_sequence (replay_sequence &seq, replay_block &block, unsigned replay_sta
       rtx replay = gen_rvtt_ttreplay_int
 	(const0_rtx, const0_rtx, const0_rtx, GEN_INT (length),
 	 rvtt_gen_rtx_noval (XTT32SImode),
-	 GEN_INT (replay_start), const0_rtx, const0_rtx);
+	 GEN_INT (replay_start), const0_rtx, const0_rtx, const0_rtx, const0_rtx);
       auto *insn = emit_insn_after (replay, block[clone->end - 1].insn);
       if (dump_file)
 	{

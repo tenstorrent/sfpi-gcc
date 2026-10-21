@@ -240,10 +240,13 @@ RVTT_FN (sfparecip_lv,       bh,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,             
 RVTT_FN (sfpnonlinear,      qsr,,XTT_VEC_FTYPE_XTT_VEC_USI,                                  0, ({M,0x3f}), ECF)
 RVTT_FN (sfpnonlinear_lv,   qsr,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,                          LV, ({M,0x3f}), ECF)
 
-RVTT_FN (ttincrwc,             ,,VOID_FTYPE_SI_SI_SI_SI,                                     VOL, ({CS, 6}, {CS, 4}, {CS, 4}, {CS, 4}), ECF)
-RVTT_FN (ttreplay,             ,,VOID_FTYPE_XTT_IPTR_USI_USI_USI_USI_USI_USI,                VOL, ({CU, 5, 4, 1}, {CU, 5}, {CU, 1}, {CU, 1}), ECF)
 // Last 3 parms are CC-behavior, dstlregmask, srclregmask, for future use
 RVTT_FN (ttinsn,               ,,VOID_FTYPE_XTT_IPTR_USI_USI_USI_USI,                        VOL, ({R}, {M, 0xf}, {CU, 16}, {CU, 16}), ECF)
+
+RVTT_FN (ttreplay,             ,,VOID_FTYPE_XTT_IPTR_USI_USI_USI_USI_USI_USI,                VOL, ({CU,5,4,1},{CU,5},{CU,1},{CU,1}), ECF)
+RVTT_OVR(ttreplay,      qsr,_qsr,VOID_FTYPE_XTT_IPTR_USI_USI_USI_USI_USI_USI_USI_USI,        VOL, ({CU,5,4,1},{CU,5},{CU,1},{CU,1},{CU,1},{CU,1}), ECF)
+
+RVTT_FN (ttincrwc,             ,,VOID_FTYPE_SI_SI_SI_SI,                                     VOL, ({CS,6},{CS,4},{CS,4},{CS,4}), ECF)
 
 // Make sure the last defn is never something we ask for get-live of.
 

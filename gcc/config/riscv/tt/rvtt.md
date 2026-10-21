@@ -104,9 +104,9 @@
   UNSPECV_SFPARECIP
   UNSPECV_SFPNONLINEAR
 
-  UNSPECV_TTINCRWC
-  UNSPECV_TTREPLAY
   UNSPECV_TTINSN
+  UNSPECV_TTREPLAY
+  UNSPECV_TTINCRWC
 ])
 
 (define_enum "xtt_delay" [
@@ -2830,76 +2830,6 @@
   [(set_attr "type" "tensix")
    (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_QSR)"))])
 
-(define_insn "rvtt_ttincrwc"
-  [(unspec_volatile:XTT32SI [
-     (match_operand:SI    0 "const_int_operand" "n")
-     (match_operand:SI    1 "const_int_operand" "n")
-     (match_operand:SI    2 "const_int_operand" "n")
-     (match_operand:SI    3 "const_int_operand" "n")
-     ] UNSPECV_TTINCRWC)]
-  "TARGET_XTT_TENSIX"
-  "TTINCRWC\t%0, %1, %2, %3"
-  [(set_attr "type" "tensix")])
-
-(define_expand "rvtt_ttreplay"
-  [(unspec_volatile:XTT32SI [
-     (match_operand:SI    0 "reg_or_0_operand")
-     (match_operand:SI    1 "reg_or_const_int_operand")
-     (match_operand:SI    2 "reg_or_0_operand")
-     (match_operand:SI    3 "const_int_operand")
-     (match_operand:SI    4 "const_int_operand")
-     (match_operand:SI    5 "const_int_operand")
-     (match_operand:SI    6 "const_int_operand")
-     ] UNSPECV_TTREPLAY)]
-  "TARGET_XTT_TENSIX"
-{
-  auto mem = const0_rtx;
-  auto opc = const0_rtx;
-  auto enc = const0_rtx;
-  auto imm = operands[1];
-  if (!CONST_INT_P (imm))
-    {
-      mem = gen_rtx_MEM (SImode, operands[0]);
-      int op
-        = TARGET_XTT_TENSIX_WH  ? TT_OP_WH_REPLAY (INTVAL (operands[4]),
-	                 0, INTVAL (operands[5]), INTVAL (operands[6]))
-        : TARGET_XTT_TENSIX_BH  ? TT_OP_BH_REPLAY (INTVAL (operands[4]),
-	                 0, INTVAL (operands[5]), INTVAL (operands[6]))
-        : TARGET_XTT_TENSIX_QSR ? TT_OP_QSR_REPLAY (INTVAL (operands[4]),
-	                 0, 0, 0, INTVAL (operands[5]), INTVAL (operands[6]))
-        : (gcc_unreachable (), 0);
-      opc = GEN_INT (op);
-      enc = GEN_INT (rvtt_synth (UINTVAL (operands[3])));
-      imm = operands[2];
-    }
-
-  emit_insn (gen_rvtt_ttreplay_int
-    (mem, opc, enc, imm,
-     rvtt_gen_rtx_noval (XTT32SImode),
-     operands[4], operands[5], operands[6]));
-  DONE;
-})
-
-(define_insn "rvtt_ttreplay_int"
-  [(unspec_volatile:XTT32SI [
-     (match_operand:SI    0 "mem_or_0_operand" "J,m")
-     (match_operand:SI    1 "const_int_operand" "J,n") ;; opcode
-     (match_operand:SI    2 "const_int_operand" "J,n") ;; id, src & dst shifts
-     (match_operand:SI    3 "reg_or_const_int_operand" "n,r") ;; imm or insn
-     (match_operand:XTT32SI 4 "noval_operand" "xn,xn") ;; src (none)
-     (match_operand:SI    5 "const_int_operand"  "n,n")
-     (match_operand:SI    6 "const_int_operand"  "n,n") ;; exec-while-load
-     (match_operand:SI    7 "const_int_operand"  "n,n") ;; load
-     ] UNSPECV_TTREPLAY)]
-  "TARGET_XTT_TENSIX"
-  {
-    return rvtt_synth::pattern (which_alternative,
-      TARGET_XTT_TENSIX_QSR ? "TTREPLAY\t%5, %3, 0, 0, %6, %7"
-      : "TTREPLAY\t%5, %3, %6, %7",
-      operands, false, -1);
-  }
-  [(set_attr "type" "tensix")])
-
 (define_expand "rvtt_ttinsn"
   [(unspec_volatile
     [(match_operand:SI    0 "reg_or_0_operand")
@@ -2928,4 +2858,112 @@
   "@
    .ttinsn\t%1
    sw\t%1,%0"
+  [(set_attr "type" "tensix")])
+
+(define_expand "rvtt_ttreplay"
+  [(unspec_volatile:XTT32SI [
+     (match_operand:SI    0 "reg_or_0_operand")
+     (match_operand:SI    1 "reg_or_const_int_operand")
+     (match_operand:SI    2 "reg_or_0_operand")
+     (match_operand:SI    3 "const_int_operand")
+     (match_operand:SI    4 "const_int_operand")
+     (match_operand:SI    5 "const_int_operand")
+     (match_operand:SI    6 "const_int_operand")
+     ] UNSPECV_TTREPLAY)]
+  "TARGET_XTT_TENSIX_WH_BH"
+{
+  auto mem = const0_rtx;
+  auto opc = const0_rtx;
+  auto enc = const0_rtx;
+  auto imm = operands[1];
+  if (!CONST_INT_P (imm))
+    {
+      mem = gen_rtx_MEM (SImode, operands[0]);
+      int op
+        = TARGET_XTT_TENSIX_WH  ? TT_OP_WH_REPLAY (INTVAL (operands[4]),
+	                 0, INTVAL (operands[5]), INTVAL (operands[6]))
+        : TARGET_XTT_TENSIX_BH  ? TT_OP_BH_REPLAY (INTVAL (operands[4]),
+	                 0, INTVAL (operands[5]), INTVAL (operands[6]))
+        : (gcc_unreachable (), 0);
+      opc = GEN_INT (op);
+      enc = GEN_INT (rvtt_synth (UINTVAL (operands[3])));
+      imm = operands[2];
+    }
+
+  emit_insn (gen_rvtt_ttreplay_int
+    (mem, opc, enc, imm,
+     rvtt_gen_rtx_noval (XTT32SImode),
+     operands[4], operands[5], operands[6], const0_rtx, const0_rtx));
+  DONE;
+})
+
+(define_expand "rvtt_ttreplay_qsr"
+  [(unspec_volatile:XTT32SI [
+     (match_operand:SI    0 "reg_or_0_operand")
+     (match_operand:SI    1 "reg_or_const_int_operand")
+     (match_operand:SI    2 "reg_or_0_operand")
+     (match_operand:SI    3 "const_int_operand")
+     (match_operand:SI    4 "const_int_operand")
+     (match_operand:SI    5 "const_int_operand")
+     (match_operand:SI    6 "const_int_operand")
+     (match_operand:SI    7 "const_int_operand")
+     (match_operand:SI    8 "const_int_operand")
+     ] UNSPECV_TTREPLAY)]
+  "TARGET_XTT_TENSIX_QSR"
+{
+  auto mem = const0_rtx;
+  auto opc = const0_rtx;
+  auto enc = const0_rtx;
+  auto imm = operands[1];
+  if (!CONST_INT_P (imm))
+    {
+      mem = gen_rtx_MEM (SImode, operands[0]);
+      int op
+        = TARGET_XTT_TENSIX_QSR ? TT_OP_QSR_REPLAY (INTVAL (operands[4]),
+	                 0, INTVAL (operands[7]), INTVAL (operands[8]),
+			 INTVAL (operands[5]), INTVAL (operands[6]))
+        : (gcc_unreachable (), 0);
+      opc = GEN_INT (op);
+      enc = GEN_INT (rvtt_synth (UINTVAL (operands[3])));
+      imm = operands[2];
+    }
+
+  emit_insn (gen_rvtt_ttreplay_int
+    (mem, opc, enc, imm,
+     rvtt_gen_rtx_noval (XTT32SImode),
+     operands[4], operands[5], operands[6], operands[7], operands[8]));
+  DONE;
+})
+
+(define_insn "rvtt_ttreplay_int"
+  [(unspec_volatile:XTT32SI [
+     (match_operand:SI    0 "mem_or_0_operand" "J,m")
+     (match_operand:SI    1 "const_int_operand" "J,n") ;; opcode
+     (match_operand:SI    2 "const_int_operand" "J,n") ;; id, src & dst shifts
+     (match_operand:SI    3 "reg_or_const_int_operand" "n,r") ;; imm or insn
+     (match_operand:XTT32SI 4 "noval_operand" "xn,xn") ;; src (none)
+     (match_operand:SI    5 "const_int_operand"  "n,n")
+     (match_operand:SI    6 "const_int_operand"  "n,n") ;; exec-while-load
+     (match_operand:SI    7 "const_int_operand"  "n,n") ;; load
+     (match_operand:SI    8 "const_int_operand"  "n,n") ;; last
+     (match_operand:SI    9 "const_int_operand"  "n,n") ;; set mutex
+     ] UNSPECV_TTREPLAY)]
+  "TARGET_XTT_TENSIX"
+  {
+    return rvtt_synth::pattern (which_alternative,
+      TARGET_XTT_TENSIX_QSR ? "TTREPLAY\t%5, %3, %8, %9, %6, %7"
+      : "TTREPLAY\t%5, %3, %6, %7",
+      operands, false, -1);
+  }
+  [(set_attr "type" "tensix")])
+
+(define_insn "rvtt_ttincrwc"
+  [(unspec_volatile:XTT32SI [
+     (match_operand:SI    0 "const_int_operand" "n")
+     (match_operand:SI    1 "const_int_operand" "n")
+     (match_operand:SI    2 "const_int_operand" "n")
+     (match_operand:SI    3 "const_int_operand" "n")
+     ] UNSPECV_TTINCRWC)]
+  "TARGET_XTT_TENSIX"
+  "TTINCRWC\t%0, %1, %2, %3"
   [(set_attr "type" "tensix")])
