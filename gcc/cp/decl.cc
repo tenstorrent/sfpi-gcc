@@ -1577,6 +1577,10 @@ merge_attribute_bits (tree newdecl, tree olddecl)
     |= DECL_NO_INSTRUMENT_FUNCTION_ENTRY_EXIT (newdecl);
   DECL_IS_NOVOPS (newdecl) |= DECL_IS_NOVOPS (olddecl);
   DECL_IS_NOVOPS (olddecl) |= DECL_IS_NOVOPS (newdecl);
+
+  // Tenstorrent
+  DECL_STAY_CONST_P (newdecl) |= DECL_STAY_CONST_P (olddecl);
+  DECL_STAY_CONST_P (olddecl) |= DECL_STAY_CONST_P (newdecl);
 }
 
 #define GNU_INLINE_P(fn) (DECL_DECLARED_INLINE_P (fn)			\

@@ -354,6 +354,8 @@ unpack_ts_function_decl_value_fields (struct bitpack_d *bp, tree expr)
 	}
     }
   set_decl_built_in_function (expr, cl, fcode);
+  // Tenstorrent
+  DECL_STAY_CONST_P (expr) = (unsigned) bp_unpack_value (bp, 1);
 }
 
 
