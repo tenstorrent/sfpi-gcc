@@ -50,7 +50,7 @@ along with GCC; see the file COPYING3.  If not see
 DEBUG_FUNCTION void debug_tree (tree node);
 
 static rvtt_insn_data sfpu_insn_data[] = {
-#define RVTT_FN(id, av, sfx, fmt, fl, ops) \
+#define RVTT_FN(id, av, sfx, fmt, fl, ops, ecf)			\
   { rvtt_insn_data::id, #id, fl, rvtt_insn_data::ops_t ops },
 #include "rvtt-insn.def"
 };
@@ -74,7 +74,7 @@ rvtt_init_builtins ()
     rvtt_insn_data::flags_t flags;
     rvtt_insn_data::ops_t ops;
   } overrides[] = {
-#define RVTT_OVR(id, av, sfx, fmt, fl, ops)		\
+#define RVTT_OVR(id, av, sfx, fmt, fl, ops, ecf)				\
     { tensix##av, rvtt_insn_data::id, rvtt_insn_data::flags_t (fl), rvtt_insn_data::ops_t ops },
 #include "rvtt-insn.def"
   };
@@ -92,9 +92,18 @@ rvtt_init_builtins ()
 void
 rvtt_insn_data::init ()
 {
-  // Compute derived fields;
+  // Compute derived fields.
   int argno = 0, ix = 0;
   tree arg_types = TYPE_ARG_TYPES (TREE_TYPE (decl));
+
+  {
+    // Check liveness consistency -- we know these objects are in an array, and
+    // rely on this elsewhere.
+    unsigned len = strlen (name);
+    gcc_checking_assert (is_live () == (len > 3 && 0 == memcmp ("_lv", name + len - 3, 4)));
+    if (is_live ())
+      gcc_checking_assert (this[-1].decl && 0 == strncmp (this[-1].name, name, len - 3) && !this[-1].name[len - 3]);
+  }
 
   if (POINTER_TYPE_P (TREE_VALUE (arg_types)))
     {
@@ -176,16 +185,12 @@ rvtt_record_builtin (unsigned ix, char const *name, tree decl)
     // Save a bunch of strcmps on the grounds there are at least this many others.
     return false;
 
-  unsigned ecf_flags = ECF_NOTHROW | ECF_NOVOPS;
   if (!riscv_builtin_rvtt_first)
     {
       if (strncmp (name, "__builtin_rvtt_", 15) != 0)
 	return false;
 
       riscv_builtin_rvtt_first = ix;
-
-      // Make synth_opcode a const fn, it's the only one.
-      ecf_flags |= ECF_CONST;
     }
 
   ix -= riscv_builtin_rvtt_first;
@@ -193,7 +198,6 @@ rvtt_record_builtin (unsigned ix, char const *name, tree decl)
   if (ix >= rvtt_insn_data::hwm)
     return false;
 
-  set_call_expr_flags (decl, ecf_flags);
   sfpu_insn_data[ix].decl = decl;
 
   return !ix;

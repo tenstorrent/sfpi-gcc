@@ -83,13 +83,16 @@ struct riscv_builtin_description {
 
   /* The code of the main .md file instruction.  See riscv_builtin_type
      for more information.  */
-  enum insn_code icode;
+  enum insn_code icode : 20;
 
   /* The function's prototype.  */
-  enum riscv_function_type prototype : 24;
+  enum riscv_function_type prototype : 12;
 
   /* True, if the function returns void (and so expansion has no target RTL).  */
   bool no_target : 8;
+
+  /* ECF flags */
+  unsigned ecf_flags : 24;
 
   /* Whether the function is available.  */
   unsigned int (*avail) (void);
@@ -157,20 +160,20 @@ AVAIL (roccqsr, TARGET_XTT_ROCC_QSR)
 
    AVAIL is the name of the availability predicate, without the leading
    riscv_builtin_avail_.  */
-#define RISCV_BUILTIN_NO_PREFIX(INSN, NAME, FUNCTION_TYPE, AVAIL)	\
+#define RISCV_BUILTIN_NO_PREFIX(INSN, NAME, FUNCTION_TYPE, AVAIL, ECF)	\
   { "__builtin_riscv_" NAME, CODE_FOR_ ## INSN,				\
-      FUNCTION_TYPE, false, riscv_builtin_avail_ ## AVAIL }
+      FUNCTION_TYPE, false, ECF, riscv_builtin_avail_ ## AVAIL }
 
 /* Like RISCV_BUiLTIN_NO_PREFIX but with a 'riscv_' prefix added to the
    instruction code.  */
-#define RISCV_BUILTIN(INSN, NAME, FUNCTION_TYPE, AVAIL)			\
-  RISCV_BUILTIN_NO_PREFIX (riscv_ ## INSN, NAME, FUNCTION_TYPE, AVAIL)
+#define RISCV_BUILTIN(INSN, NAME, FUNCTION_TYPE, AVAIL, ECF)		\
+  RISCV_BUILTIN_NO_PREFIX (riscv_ ## INSN, NAME, FUNCTION_TYPE, AVAIL, ECF)
 
 /* Define __builtin_riscv_<INSN>, which is builtin function mapped to
    instruction CODE_FOR_riscv_<INSN>, FUNCTION_TYPE and AVAIL are as for
    RISCV_BUILTIN.  */
-#define DIRECT_BUILTIN(INSN, FUNCTION_TYPE, AVAIL)			\
-  RISCV_BUILTIN (INSN, #INSN, FUNCTION_TYPE, AVAIL)
+#define DIRECT_BUILTIN(INSN, FUNCTION_TYPE, AVAIL, ECF)	\
+  RISCV_BUILTIN (INSN, #INSN, FUNCTION_TYPE, AVAIL, ECF)
 
 /* Argument types.  */
 #define RISCV_ATYPE_VOID void_type_node
@@ -222,13 +225,13 @@ static struct riscv_builtin_description riscv_builtins[] = {
   #include "corev.def"
   #include "ttrocc.def"
 
-  DIRECT_BUILTIN (frflags, RISCV_USI_FTYPE, hard_float),
-  DIRECT_BUILTIN (fsflags, RISCV_VOID_FTYPE_USI, hard_float),
-  RISCV_BUILTIN (pause, "pause", RISCV_VOID_FTYPE, hint_pause),
+  DIRECT_BUILTIN (frflags, RISCV_USI_FTYPE, hard_float, 0),
+  DIRECT_BUILTIN (fsflags, RISCV_VOID_FTYPE_USI, hard_float, 0),
+  RISCV_BUILTIN (pause, "pause", RISCV_VOID_FTYPE, hint_pause, 0),
 
   /* Tenstorrent Tensix builtins */
-#define RVTT_FN(INSN, AVAIL, SFX, FUNCTION_TYPE, fl, ops) \
-  { "__builtin_rvtt_" #INSN, CODE_FOR_rvtt_##INSN##SFX, RISCV_##FUNCTION_TYPE, false, riscv_builtin_avail_tensix##AVAIL},
+#define RVTT_FN(INSN, AVAIL, SFX, FUNCTION_TYPE, fl, ops, ECF)		\
+  { "__builtin_rvtt_" #INSN, CODE_FOR_rvtt_##INSN##SFX, RISCV_##FUNCTION_TYPE, false, ECF, riscv_builtin_avail_tensix##AVAIL},
 #include "tt/rvtt-insn.def"
 };
 
@@ -368,24 +371,27 @@ riscv_init_builtins (void)
 				      + RISCV_BUILTIN_GENERAL,
 				    BUILT_IN_MD, NULL, NULL);
 	  riscv_builtin_decl_index[d->icode] = i;
+	  set_call_expr_flags (riscv_builtin_decls[i],
+			       d->ecf_flags | ECF_NOTHROW);
 
 	  extern bool rvtt_record_builtin (unsigned idx, char const *, tree decl);
 	  if (rvtt_record_builtin (i, d->name, riscv_builtin_decls[i]))
 	    {
 	      // Apply Tensix overrides
 	      enum indices {
-#define RVTT_FN(INSN, AVAIL, SFX, FUNCTION_TYPE, fl, ops) IX_##INSN,
+#define RVTT_FN(INSN, AVAIL, SFX, FUNCTION_TYPE, fl, ops, ECF) IX_##INSN,
 #include "tt/rvtt-insn.def"
 		IX_hwm
 	      };
 	      static const struct {
-		insn_code icode;
-		indices ix : 16;
-		riscv_function_type prototype : 16;
+		insn_code icode: 20;
+		indices ix : 12;
+		riscv_function_type prototype : 10;
+		unsigned ecf : 22;
 		unsigned (*avail) ();
 	      } overrides[] = {
-#define RVTT_OVR(INSN, AVAIL, SFX, FUNCTION_TYPE, fl, ops) \
-		{CODE_FOR_rvtt_ ## INSN ## SFX, IX_##INSN, RISCV_##FUNCTION_TYPE, riscv_builtin_avail_tensix ## AVAIL},
+#define RVTT_OVR(INSN, AVAIL, SFX, FUNCTION_TYPE, fl, ops, ECF)		\
+		{CODE_FOR_rvtt_ ## INSN ## SFX, IX_##INSN, RISCV_##FUNCTION_TYPE, ECF, riscv_builtin_avail_tensix ## AVAIL},
 #include "tt/rvtt-insn.def"
 	      };
 	      for (auto const &ovr : overrides)
