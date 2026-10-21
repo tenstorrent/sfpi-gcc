@@ -13,7 +13,7 @@ void orig () {
   sfpi::vInt e = sfpi::exexp(y, sfpi::ExponentMode::Biased);
 
   v_block {
-    sfpi::vInt e_lt_255 = __builtin_rvtt_sfpiadd_i(e.get(), -255, sfpi::SFPIADD_MOD1_CC_LT0);
+    sfpi::vInt e_lt_255 = (__builtin_rvtt_sfpiadd_i) (nullptr, e.get(), -255, 0, 0, sfpi::SFPIADD_MOD1_CC_LT0);
     y = sfpi::setexp(y, e);
     v_if(e_lt_255 < -254) {
       y = 0.0f;

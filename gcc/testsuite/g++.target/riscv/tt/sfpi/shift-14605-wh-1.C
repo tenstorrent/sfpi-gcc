@@ -11,7 +11,7 @@ using namespace sfpi;
 void f1() {
   vUInt a = l_reg[LRegs::LReg1];
 
-  vUInt r = __builtin_rvtt_sfpshft_i (a.get(), 2, 0);
+  vUInt r = (__builtin_rvtt_sfpshft_i) (nullptr, a.get(), 2, 0, 0, 0);
   l_reg[LRegs::LReg3] = r;
 }
 /*
@@ -26,7 +26,7 @@ void f1() {
 void f3(int s) {
   vUInt a = l_reg[LRegs::LReg1];
 
-  vUInt r = __builtin_rvtt_sfpshft_i (a.get(), s, 0);
+  vUInt r = (__builtin_rvtt_sfpshft_i) (::ckernel::instrn_buffer, a.get(), s, 0, 0, 0);
   l_reg[LRegs::LReg3] = r;
 }
 /*
