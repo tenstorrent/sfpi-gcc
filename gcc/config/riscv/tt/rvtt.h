@@ -42,7 +42,7 @@ along with GCC; see the file COPYING3.  If not see
 // GTY array.
 struct rvtt_insn_data {
   enum insn_id : uint8_t {
-#define RVTT_FN(id, av, sfx, fmt, fl, ops) id,
+#define RVTT_FN(id, av, sfx, fmt, fl, ops, ecf) id,
 #include "rvtt-insn.def"
     hwm
   };

@@ -105,10 +105,12 @@ void block(int ix) {
 **	beq	a0,zero,.L[0-9]*
 **	tt.rocc.nop
 **	tt.rocc.addrgen_push_dest	0
+**	addiw	a0,a0,-1
+**	li	a5,-1
 **	tt.rocc.nop
 **	tt.rocc.addrgen_push_src	1
 **	addiw	a0,a0,-1
-**	bne	a0,zero,.L[0-9]*
+**	bne	a0,a5,.L[0-9]*
 **	tt.rocc.nop
 **	ret
 */
