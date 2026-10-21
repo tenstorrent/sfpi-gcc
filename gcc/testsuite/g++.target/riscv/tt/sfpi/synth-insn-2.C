@@ -13,7 +13,7 @@ void loop_diff (int i) {
 
 #pragma GCC unroll 4
   for (int ix = 0; ix < 4; ix++) {
-    a = __builtin_rvtt_sfpshft_i (a.get(), i + ix, SFPSHFT_MOD1_LOGICAL);
+    a = (__builtin_rvtt_sfpshft_i) (::ckernel::instrn_buffer, a.get(), i + ix, 0, 0, SFPSHFT_MOD1_LOGICAL);
   }
 
   l_reg[LRegs::LReg3] = a;
@@ -56,7 +56,7 @@ void loop_common (int i) {
 
 #pragma GCC unroll 4
   for (int ix = 0; ix < 4; ix++) {
-    a = __builtin_rvtt_sfpshft_i (a.get(), i, SFPSHFT_MOD1_LOGICAL);
+    a = (__builtin_rvtt_sfpshft_i) (::ckernel::instrn_buffer, a.get(), i, 0, 0, SFPSHFT_MOD1_LOGICAL);
   }
 
   l_reg[LRegs::LReg3] = a;

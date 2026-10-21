@@ -10,8 +10,8 @@ using namespace sfpi;
 
 template<unsigned ADDR>
 void load_imm () {
-    vFloat r = __builtin_rvtt_sfpload (ADDR, 3, 7);
-    l_reg[LRegs::LReg3] = r;
+  vFloat r = (__builtin_rvtt_sfpload) (nullptr, ADDR, 0, 0, 3, 7);
+  l_reg[LRegs::LReg3] = r;
 }
 template void load_imm<0> ();
 /*
@@ -30,8 +30,8 @@ template void load_imm<0x1fff> ();
 */
 
 void load_var (unsigned addr) {
-    vFloat r = __builtin_rvtt_sfpload (addr, 3, 7);
-    l_reg[LRegs::LReg3] = r;
+  vFloat r = (__builtin_rvtt_sfpload) (::ckernel::instrn_buffer, addr, 0, 0, 3, 7);
+  l_reg[LRegs::LReg3] = r;
 }
 /*
 **_Z8load_varj:
@@ -48,8 +48,8 @@ void load_var (unsigned addr) {
 
 template<unsigned ADDR>
 void store_imm () {
-    vFloat r = l_reg[LRegs::LReg3];
-    __builtin_rvtt_sfpstore (r.get (), ADDR, 3, 7);
+  vFloat r = l_reg[LRegs::LReg3];
+  (__builtin_rvtt_sfpstore) (nullptr, r.get (), ADDR, 0, 0, 3, 7);
 }
 template void store_imm<0> ();
 /*
@@ -69,7 +69,7 @@ template void store_imm<0x1fff> ();
 
 void store_var (unsigned addr) {
     vFloat r = l_reg[LRegs::LReg3];
-    __builtin_rvtt_sfpstore (r.get (), addr, 3, 7);
+    (__builtin_rvtt_sfpstore) (::ckernel::instrn_buffer, r.get (), addr, 0, 0, 3, 7);
 }
 /*
 **_Z9store_varj:

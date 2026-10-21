@@ -11,7 +11,7 @@ using namespace sfpi;
 void f1() {
   vUInt a = l_reg[LRegs::LReg0];
 
-  vUInt r = __builtin_rvtt_sfpshft_i (a.get(), 2, SFPSHFT_MOD1_LOGICAL);
+  vUInt r = (__builtin_rvtt_sfpshft_i) (nullptr, a.get(), 2, 0, 0, SFPSHFT_MOD1_LOGICAL);
   l_reg[LRegs::LReg3] = r;
 }
 /*
@@ -25,7 +25,7 @@ void f1() {
 void f2() {
   vInt a = l_reg[LRegs::LReg0];
 
-  vInt r = __builtin_rvtt_sfpshft_i (a.get(), 2, SFPSHFT_MOD1_ARITHMETIC);
+  vInt r = (__builtin_rvtt_sfpshft_i) (nullptr, a.get(), 2, 0, 0, SFPSHFT_MOD1_ARITHMETIC);
   l_reg[LRegs::LReg3] = r;
 }
 /*
@@ -39,7 +39,7 @@ void f2() {
 void f3(int s) {
   vUInt a = l_reg[LRegs::LReg0];
 
-  vUInt r = __builtin_rvtt_sfpshft_i (a.get(), s, SFPSHFT_MOD1_LOGICAL);
+  vUInt r = (__builtin_rvtt_sfpshft_i) (::ckernel::instrn_buffer, a.get(), s, 0, 0, SFPSHFT_MOD1_LOGICAL);
   l_reg[LRegs::LReg3] = r;
 }
 /*
@@ -60,7 +60,7 @@ void f3(int s) {
 void f4(int s) {
   vInt a = l_reg[LRegs::LReg0];
 
-  vInt r = __builtin_rvtt_sfpshft_i (a.get(), s, SFPSHFT_MOD1_ARITHMETIC);
+  vInt r = (__builtin_rvtt_sfpshft_i) (::ckernel::instrn_buffer, a.get(), s, 0, 0, SFPSHFT_MOD1_ARITHMETIC);
   l_reg[LRegs::LReg3] = r;
 }
 /*
