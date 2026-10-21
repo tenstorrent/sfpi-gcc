@@ -153,36 +153,6 @@ void LUT2_FP16_6b () {
 **	ret
 */
 
-void llk1a () {
-  sfpi::l_reg[sfpi::LRegs::LReg0] = sfpi::vUInt(0x1DFF);
-  sfpi::l_reg[sfpi::LRegs::LReg1] = sfpi::vUInt(0x481A);
-  sfpi::l_reg[sfpi::LRegs::LReg2] = sfpi::vUInt(0xFF00);
-
-  sfpi::vUInt l0 = l_reg[sfpi::LRegs::LReg0];
-  sfpi::vUInt l1 = l_reg[sfpi::LRegs::LReg1];
-  sfpi::vUInt l2 = l_reg[sfpi::LRegs::LReg2];
-
-  sfpi::vFloat val = sfpi::dst_reg[0];
-  val = sfpi::lut(val, l0, l1, l2); // { dg-warning "is deprecated" "" }
-  sfpi::dst_reg[0] = val;
-}
-/*
-**_Z5llk1av:
-**	SFPLOADI	L0, 7679, 2
-**	# WRITE L0
-**	SFPLOADI	L1, 18458, 2
-**	# WRITE L1
-**	SFPLOADI	L2, 65280, 2
-**	# WRITE L2
-**	# READ L0
-**	# READ L1
-**	# READ L2
-**	SFPLOAD	L3, 0, 0, 7
-**	SFPLUT	L3, 4	# R:L0,L1,L2,L3
-**	SFPSTORE	L3, 0, 0, 7
-**	ret
-*/
-
 void llk1b () {
   sfpi::l_reg[sfpi::LRegs::LReg0] = sfpi::vLut8si(0.90625f, 0.0f);
   sfpi::l_reg[sfpi::LRegs::LReg1] = sfpi::vLut8si(0.09375f, 0.8125f);
@@ -243,40 +213,6 @@ void llk3 () {
 **	ret
 */
 
-void llk4a () {
-  sfpi::vUInt l0 (0x37E7322B);
-  sfpi::vUInt l1 (0x38E138F3);
-  sfpi::vUInt l2 (0x38003852);
-  sfpi::vUInt l4 (0xB12286D8);
-  sfpi::vUInt l5 (0xB437B479);
-  sfpi::vUInt l6 (0x7c00afa4);
-
-  sfpi::vFloat val = sfpi::dst_reg[0];
-  val = sfpi::lut2_sign(val, l0, l1, l2, l4, l5, l6); // { dg-warning "is deprecated" "" }
-  sfpi::dst_reg[0] = val;
-}
-/*
-**_Z5llk4av:
-**	SFPLOADI	L0, 12843, 2
-**	SFPLOADI	L0, 14311, 8	# LV:L0
-**	SFPLOADI	L1, 14579, 2
-**	SFPLOADI	L1, 14561, 8	# LV:L1
-**	SFPLOADI	L2, 14418, 2
-**	SFPLOADI	L2, 14336, 8	# LV:L2
-**	SFPLOADI	L3, 34520, 2
-**	SFPLOADI	L3, 45346, 8	# LV:L3
-**	SFPMOV	L4, L3, 2
-**	SFPLOADI	L3, 46201, 2
-**	SFPLOADI	L3, 46135, 8	# LV:L3
-**	SFPMOV	L5, L3, 2
-**	SFPLOADI	L6, 44964, 2
-**	SFPLOADI	L6, 31744, 8	# LV:L6
-**	SFPLOAD	L3, 0, 0, 7
-**	SFPLUTFP32	L0, 2	# R:L0,L1,L2,L4,L5,L6,L3
-**	SFPSTORE	L0, 0, 0, 7
-**	ret
-*/
-
 void llk4b () {
   sfpi::vLut16ss l0(0.1928f, 0.4939f);
   sfpi::vLut16ss l1(0.6188f, 0.6099f);
@@ -311,40 +247,6 @@ void llk4b () {
 **	ret
 */
 
-void llk5a () {
-  sfpi::vUInt l0 (0x32F433D9u);
-  sfpi::vUInt l1 (0x300A318Au);
-  sfpi::vUInt l2 (0x7C002A35u);
-  sfpi::vUInt l4 (0x23C89018u);
-  sfpi::vUInt l5 (0x30272BAAu);
-  sfpi::vUInt l6 (0x37ff34CCu);
-
-  sfpi::vFloat val = sfpi::dst_reg[0];
-  val = sfpi::lut2(val, l0, l1, l2, l4, l5, l6); // { dg-warning "is deprecated" "" }
-  sfpi::dst_reg[0] = val;
-}
-/*
-**_Z5llk5av:
-**	SFPLOADI	L0, 13273, 2
-**	SFPLOADI	L0, 13044, 8	# LV:L0
-**	SFPLOADI	L1, 12682, 2
-**	SFPLOADI	L1, 12298, 8	# LV:L1
-**	SFPLOADI	L2, 10805, 2
-**	SFPLOADI	L2, 31744, 8	# LV:L2
-**	SFPLOADI	L3, 36888, 2
-**	SFPLOADI	L3, 9160, 8	# LV:L3
-**	SFPMOV	L4, L3, 2
-**	SFPLOADI	L3, 11178, 2
-**	SFPLOADI	L3, 12327, 8	# LV:L3
-**	SFPMOV	L5, L3, 2
-**	SFPLOADI	L6, 13516, 2
-**	SFPLOADI	L6, 14335, 8	# LV:L6
-**	SFPLOAD	L3, 0, 0, 7
-**	SFPLUTFP32	L0, 6	# R:L0,L1,L2,L4,L5,L6,L3
-**	SFPSTORE	L0, 0, 0, 7
-**	ret
-*/
-
 void llk5b () {
   sfpi::vLut16ss l0(0.2452f, 0.2173f);
   sfpi::vLut16ss l1(0.1731f, 0.1262f);
@@ -373,40 +275,6 @@ void llk5b () {
 **	SFPMOV	L5, L3, 2
 **	SFPLOADI	L6, 13516, 2
 **	SFPLOADI	L6, 14335, 8	# LV:L6
-**	SFPLOAD	L3, 0, 0, 7
-**	SFPLUTFP32	L0, 6	# R:L0,L1,L2,L4,L5,L6,L3
-**	SFPSTORE	L0, 0, 0, 7
-**	ret
-*/
-
-void llk6a () {
-  sfpi::vUInt l0 (0x37E7322Bu);
-  sfpi::vUInt l1 (0x38E138F3u);
-  sfpi::vUInt l2 (0x38003852u);
-  sfpi::vUInt l4 (0xB12286D8u);
-  sfpi::vUInt l5 (0xB437B479u);
-  sfpi::vUInt l6 (0x7c00afa4u);
-
-  sfpi::vFloat val = sfpi::dst_reg[0];
-  val = sfpi::lut2(val, l0, l1, l2, l4, l5, l6); // { dg-warning "is deprecated" "" }
-  sfpi::dst_reg[0] = val;
-}
-/*
-**_Z5llk6av:
-**	SFPLOADI	L0, 12843, 2
-**	SFPLOADI	L0, 14311, 8	# LV:L0
-**	SFPLOADI	L1, 14579, 2
-**	SFPLOADI	L1, 14561, 8	# LV:L1
-**	SFPLOADI	L2, 14418, 2
-**	SFPLOADI	L2, 14336, 8	# LV:L2
-**	SFPLOADI	L3, 34520, 2
-**	SFPLOADI	L3, 45346, 8	# LV:L3
-**	SFPMOV	L4, L3, 2
-**	SFPLOADI	L3, 46201, 2
-**	SFPLOADI	L3, 46135, 8	# LV:L3
-**	SFPMOV	L5, L3, 2
-**	SFPLOADI	L6, 44964, 2
-**	SFPLOADI	L6, 31744, 8	# LV:L6
 **	SFPLOAD	L3, 0, 0, 7
 **	SFPLUTFP32	L0, 6	# R:L0,L1,L2,L4,L5,L6,L3
 **	SFPSTORE	L0, 0, 0, 7
