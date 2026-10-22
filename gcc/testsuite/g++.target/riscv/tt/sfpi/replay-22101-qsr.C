@@ -8,7 +8,7 @@ void record () {
 }
 /*
 **_Z6recordv:
-**	TTREPLAY	16, 4, 0, 0, 0, 1
+**	TTREPLAY	16388 >> 10, 16388 & 0x3ff, 0, 0, 0, 1
 **	ret
 */
 
@@ -18,7 +18,7 @@ std::uint32_t replay () {
 }
 /*
 **_Z6replayv:
-**	TTREPLAY	16, 4, 0, 0, 0, 0
+**	TTREPLAY	16388 >> 10, 16388 & 0x3ff, 0, 0, 0, 0
 **	li	a0,67436544
 **	addi	a0,a0,64
 **	ret

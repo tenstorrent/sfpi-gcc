@@ -2868,7 +2868,6 @@
      (match_operand:SI    3 "const_int_operand")
      (match_operand:SI    4 "const_int_operand")
      (match_operand:SI    5 "const_int_operand")
-     (match_operand:SI    6 "const_int_operand")
      ] UNSPECV_TTREPLAY)]
   "TARGET_XTT_TENSIX_WH_BH"
 {
@@ -2880,10 +2879,10 @@
     {
       mem = gen_rtx_MEM (SImode, operands[0]);
       int op
-        = TARGET_XTT_TENSIX_WH  ? TT_OP_WH_REPLAY (INTVAL (operands[4]),
-	                 0, INTVAL (operands[5]), INTVAL (operands[6]))
-        : TARGET_XTT_TENSIX_BH  ? TT_OP_BH_REPLAY (INTVAL (operands[4]),
-	                 0, INTVAL (operands[5]), INTVAL (operands[6]))
+        = TARGET_XTT_TENSIX_WH  ? TT_OP_WH_REPLAY (0, 0,
+	                 INTVAL (operands[4]), INTVAL (operands[5]))
+        : TARGET_XTT_TENSIX_BH  ? TT_OP_BH_REPLAY (0, 0,
+	                 INTVAL (operands[4]), INTVAL (operands[5]))
         : (gcc_unreachable (), 0);
       opc = GEN_INT (op);
       enc = GEN_INT (rvtt_synth (UINTVAL (operands[3])));
@@ -2893,7 +2892,7 @@
   emit_insn (gen_rvtt_ttreplay_int
     (mem, opc, enc, imm,
      rvtt_gen_rtx_noval (XTT32SImode),
-     operands[4], operands[5], operands[6], const0_rtx, const0_rtx));
+     operands[4], operands[5], const0_rtx, const0_rtx));
   DONE;
 })
 
@@ -2907,7 +2906,6 @@
      (match_operand:SI    5 "const_int_operand")
      (match_operand:SI    6 "const_int_operand")
      (match_operand:SI    7 "const_int_operand")
-     (match_operand:SI    8 "const_int_operand")
      ] UNSPECV_TTREPLAY)]
   "TARGET_XTT_TENSIX_QSR"
 {
@@ -2919,9 +2917,9 @@
     {
       mem = gen_rtx_MEM (SImode, operands[0]);
       int op
-        = TARGET_XTT_TENSIX_QSR ? TT_OP_QSR_REPLAY (INTVAL (operands[4]),
-	                 0, INTVAL (operands[7]), INTVAL (operands[8]),
-			 INTVAL (operands[5]), INTVAL (operands[6]))
+        = TARGET_XTT_TENSIX_QSR ? TT_OP_QSR_REPLAY (0, 0,
+	                  INTVAL (operands[6]), INTVAL (operands[7]),
+			  INTVAL (operands[4]), INTVAL (operands[5]))
         : (gcc_unreachable (), 0);
       opc = GEN_INT (op);
       enc = GEN_INT (rvtt_synth (UINTVAL (operands[3])));
@@ -2931,7 +2929,7 @@
   emit_insn (gen_rvtt_ttreplay_int
     (mem, opc, enc, imm,
      rvtt_gen_rtx_noval (XTT32SImode),
-     operands[4], operands[5], operands[6], operands[7], operands[8]));
+     operands[4], operands[5], operands[6], operands[7]));
   DONE;
 })
 
@@ -2942,17 +2940,17 @@
      (match_operand:SI    2 "const_int_operand" "J,n") ;; id, src & dst shifts
      (match_operand:SI    3 "reg_or_const_int_operand" "n,r") ;; imm or insn
      (match_operand:XTT32SI 4 "noval_operand" "xn,xn") ;; src (none)
-     (match_operand:SI    5 "const_int_operand"  "n,n")
-     (match_operand:SI    6 "const_int_operand"  "n,n") ;; exec-while-load
-     (match_operand:SI    7 "const_int_operand"  "n,n") ;; load
-     (match_operand:SI    8 "const_int_operand"  "n,n") ;; last
-     (match_operand:SI    9 "const_int_operand"  "n,n") ;; set mutex
+     (match_operand:SI    5 "const_int_operand"  "n,n") ;; exec-while-load
+     (match_operand:SI    6 "const_int_operand"  "n,n") ;; load
+     (match_operand:SI    7 "const_int_operand"  "n,n") ;; last
+     (match_operand:SI    8 "const_int_operand"  "n,n") ;; set mutex
      ] UNSPECV_TTREPLAY)]
   "TARGET_XTT_TENSIX"
   {
+    gcc_checking_assert (REPLAY_LENGTH_FIELD_SIZE == 10);
     return rvtt_synth::pattern (which_alternative,
-      TARGET_XTT_TENSIX_QSR ? "TTREPLAY\t%5, %3, %8, %9, %6, %7"
-      : "TTREPLAY\t%5, %3, %6, %7",
+      TARGET_XTT_TENSIX_QSR ? "TTREPLAY\t%3 >> 10, %3 & 0x3ff, %7, %8, %5, %6"
+      : "TTREPLAY\t%3 >> 10, %3 & 0x3ff, %5, %6",
       operands, false, -1);
   }
   [(set_attr "type" "tensix")])

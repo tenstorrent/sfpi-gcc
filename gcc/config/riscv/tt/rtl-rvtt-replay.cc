@@ -122,6 +122,7 @@ using replay_active = std::vector<replay_sequence *>;
 
 enum REPLAY_TYPE {REPLAY_none, REPLAY_playback, REPLAY_fixed_capture, REPLAY_variable_capture};
 
+// span.end is the length!
 static REPLAY_TYPE
 is_replay_insn (replay_span &span, rtx_insn *insn)
 {
@@ -129,16 +130,22 @@ is_replay_insn (replay_span &span, rtx_insn *insn)
     return REPLAY_none;
 
   auto pattern = PATTERN (insn);
-  span.begin = INTVAL (XVECEXP (pattern, 0, 5));
-  span.end = 0;
-  auto len = XVECEXP (pattern, 0, 3);
-  auto type = REPLAY_fixed_capture;
-  if (CONST_INT_P (len))
-    span.end = INTVAL (len);
-  else
-    type = REPLAY_variable_capture;
-  if (!INTVAL (XVECEXP (pattern, 0, 7)))
-    type = REPLAY_playback;
+  span.begin = 0, span.end = 0;
+  auto type = REPLAY_playback;
+  if (INTVAL (XVECEXP (pattern, 0, 6)))
+    {
+      // Capturing
+      auto val = XVECEXP (pattern, 0, 3);
+      if (CONST_INT_P (val))
+	{
+	  auto ival = INTVAL (val);
+	  span.begin = ival >> REPLAY_LENGTH_FIELD_SIZE;
+	  span.end = ival & ((1 << REPLAY_LENGTH_FIELD_SIZE) - 1);
+	  type = REPLAY_fixed_capture;
+	}
+      else
+	type = REPLAY_variable_capture;
+    }
   return type;
 }
 
@@ -516,9 +523,9 @@ replace_sequence (replay_sequence &seq, replay_block &block, unsigned replay_sta
 
   // Cannot exec while capturing on quasar
   rtx capture = gen_rvtt_ttreplay_int
-    (const0_rtx, const0_rtx, const0_rtx, GEN_INT (length),
+    (const0_rtx, const0_rtx, const0_rtx, GEN_INT ((replay_start << REPLAY_LENGTH_FIELD_SIZE) | length),
      rvtt_gen_rtx_noval (XTT32SImode),
-     GEN_INT (replay_start), GEN_INT (not_quasar_fix), GEN_INT (1),
+     GEN_INT (not_quasar_fix), GEN_INT (1),
      const0_rtx, const0_rtx);
   emit_insn_before (capture, block[seq.clones.front ().begin].insn);
 
@@ -531,9 +538,9 @@ replace_sequence (replay_sequence &seq, replay_block &block, unsigned replay_sta
   for (auto clone = seq.clones.begin () + not_quasar_fix; clone != seq.clones.end (); ++clone)
     {
       rtx replay = gen_rvtt_ttreplay_int
-	(const0_rtx, const0_rtx, const0_rtx, GEN_INT (length),
+	(const0_rtx, const0_rtx, const0_rtx, GEN_INT ((replay_start << REPLAY_LENGTH_FIELD_SIZE) | length),
 	 rvtt_gen_rtx_noval (XTT32SImode),
-	 GEN_INT (replay_start), const0_rtx, const0_rtx, const0_rtx, const0_rtx);
+	 const0_rtx, const0_rtx, const0_rtx, const0_rtx);
       auto *insn = emit_insn_after (replay, block[clone->end - 1].insn);
       if (dump_file)
 	{
@@ -672,7 +679,7 @@ transform (function *cfn, unsigned buffer_size)
 	    }
 
 	  if (type == REPLAY_variable_capture)
-	    // Using remainder of the buffer.
+	    // Using all of the buffer.
 	    span.end = buffer_size;
 	  else
 	    {
