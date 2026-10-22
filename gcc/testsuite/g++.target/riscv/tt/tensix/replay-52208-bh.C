@@ -20,7 +20,7 @@ void foo () {
 /*
 **_Z3foov:
 **	# READ L0
-**	TTREPLAY	0, 32, 1, 1
+**	TTREPLAY	32 >> 10, 32 & 0x3ff, 1, 1
 **	SFPMULI	L0, 0, 0
 **	SFPMULI	L0, 1, 0
 **	SFPMULI	L0, 2, 0
@@ -55,10 +55,10 @@ void foo () {
 **	SFPMULI	L0, 31, 0
 **	SFPMULI	L0, 32, 0
 **	SFPMULI	L0, 33, 0
-**	TTREPLAY	0, 32, 0, 0
+**	TTREPLAY	32 >> 10, 32 & 0x3ff, 0, 0
 **	SFPMULI	L0, 32, 0
 **	SFPMULI	L0, 33, 0
-**	TTREPLAY	0, 32, 0, 0
+**	TTREPLAY	32 >> 10, 32 & 0x3ff, 0, 0
 **	SFPMULI	L0, 32, 0
 **	SFPMULI	L0, 33, 0
 **	# WRITE L0

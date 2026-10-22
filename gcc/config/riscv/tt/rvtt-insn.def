@@ -55,7 +55,7 @@ along with GCC; see the file COPYING3.  If not see
 // Args are (NAME, ISA, _SFX, TYPE, FLAGS, OPS)
 
 // This is first
-RVTT_FN (synth_opcode,       ,,USI_FTYPE_USI_USI,                                            0, ({U, 0}, {U, 0}))
+RVTT_FN (synth_opcode,       ,,USI_FTYPE_USI_USI,                                            0, ({U, 32}, {U, 32}))
 RVTT_FN (lreg_pressure,      ,,VOID_FTYPE_USI,                                               VOL|EMP, ({U, 1}))
 
 // These builtins are expanded to something else during compilation
@@ -63,7 +63,7 @@ RVTT_FN (sfpxlogic,          ,,USI_FTYPE_USI_USI_USI,                           
 RVTT_FN (sfpxpred,           ,,USI_FTYPE_USI_USI,                                            VOL|EMP, ({XM, 0xb7}, {R}))
 RVTT_FN (sfpxcond,           ,,USI_FTYPE_USI_USI_USI,                                        VOL, ({XM, 0x1}, {R}, {R}))
 RVTT_FN (sfpxcmp,            ,,USI_FTYPE_XTT_VEC_XTT_VEC_USI,                                CC(), ({XM, 0x3f}, {}))
-RVTT_FN (sfpxloadi,          ,,XTT_VEC_FTYPE_XTT_IPTR_USI_USI_USI_SI,                        0, ({E, 0}, {ES, 6, 0}))
+RVTT_FN (sfpxloadi,          ,,XTT_VEC_FTYPE_XTT_IPTR_USI_USI_USI_SI,                        0, ({E, 32}, {ES, 6, 0}))
 
 // If you're putting in nops, you want them preserved, so say it's volatile
 RVTT_FN (sfpnop,             ,,VOID_FTYPE,                                                   VOL, ())
@@ -241,8 +241,9 @@ RVTT_FN (sfpnonlinear_lv,   qsr,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,             
 // Last 3 parms are CC-behavior, dstlregmask, srclregmask, for future use
 RVTT_FN (ttinsn,               ,,VOID_FTYPE_XTT_IPTR_USI_USI_USI_USI,                        VOL, ({R}, {M, 0xf}, {CU, 16}, {CU, 16}))
 
-RVTT_FN (ttreplay,             ,,VOID_FTYPE_XTT_IPTR_USI_USI_USI_USI_USI_USI,                VOL, ({CU, 5, 4, 1}, {CU, 5}, {CU, 1}, {CU, 1}))
-RVTT_OVR(ttreplay,      qsr,_qsr,VOID_FTYPE_XTT_IPTR_USI_USI_USI_USI_USI_USI_USI_USI,        VOL, ({CU, 5, 4, 1}, {CU, 5}, {CU, 1}, {CU, 1}, {CU, 1}, {CU, 1}))
+// start & length are merged as one or both may be dynamic.  Range checking is specially handled
+RVTT_FN (ttreplay,             ,,VOID_FTYPE_XTT_IPTR_USI_USI_USI_USI_USI,                    VOL, ({CU, 20, 4}, {CU, 1}, {CU, 1}))
+RVTT_OVR(ttreplay,      qsr,_qsr,VOID_FTYPE_XTT_IPTR_USI_USI_USI_USI_USI_USI_USI,            VOL, ({CU, 20, 4}, {CU, 1}, {CU, 1}, {CU, 1}, {CU, 1}))
 
 RVTT_FN (ttincrwc,             ,,VOID_FTYPE_SI_SI_SI_SI,                                     VOL, ({CS, 6}, {CS, 4}, {CS, 4}, {CS, 4}))
 

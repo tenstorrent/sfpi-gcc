@@ -119,39 +119,64 @@ check_int_args (bool is_early, const rvtt_insn_data *insnd, gcall *call)
 	{
 	  HOST_WIDE_INT upper = 0xf;
 	  HOST_WIDE_INT lower = 0;
-	  unsigned bias = 0;
+
 	  if (!info.is_mod ())
 	    {
 	      unsigned bits = info.bits ();
-	      if (!bits)
-		bits = 32;
+	      gcc_checking_assert (bits);
 	      upper = (1u << (bits - 1)) - 1;
 	      if (info.kind () != rvtt_insn_data::op_t::UNSIGNED)
 		lower = ~upper;
 	      if (info.kind () != rvtt_insn_data::op_t::SIGNED)
 		upper = (upper << 1) | 1;
-	      bias = info.bias ();
 	    }
 
-	  if (val > upper + bias || val < lower + bias)
+	  if (!ix && insnd->id == rvtt_insn_data::ttreplay)
+	    {
+	      // Replay is special as start and length are smushed together to
+	      // allow either or both to be dynamic
+	      unsigned start = val >> REPLAY_LENGTH_FIELD_SIZE;
+	      unsigned length = val & ((1 << REPLAY_LENGTH_FIELD_SIZE) - 1);
+	      bool ok = true;
+	      // Should we restrict to known replay buffer size, or to
+	      // encoding's limit?
+	      if (start >= REPLAY_START_LIMIT)
+		{
+		  error_at (gimple_location (call),
+			    "start value %u is out of range [0, %u]", start, REPLAY_START_LIMIT - 1);
+		  ok = false;
+		  start = 0;
+		}
+	      if (!length || length > REPLAY_LENGTH_LIMIT)
+		{
+		  error_at (gimple_location (call),
+			    "length value %u is out of range [1, %u]", length, REPLAY_LENGTH_LIMIT);
+		  ok = false;
+		  length = 1;
+		}
+	      if (!ok)
+		{
+		  val = (start << REPLAY_LENGTH_FIELD_SIZE) | length;
+		  goto zap;
+		}
+	    }
+	  else if (val > upper || val < lower)
 	    {
 	      if (info.is_checked ())
 		error_at (gimple_location (call),
 			  "argument %d %qE is out of range [%ld, %ld]",
 			  info.argno () + 1, op,
-			  long (lower + bias), long (upper + bias));
+			  long (lower), long (upper));
 
 	      if (info.is_mod ())
 		goto zap;
 
 	      // Clip imm operands.  Keep nonnimm operands for for the moment,
 	      // until we fix sfpxloadi
-	      val -= bias;
 	      HOST_WIDE_INT sign_bits
 		= info.kind () == rvtt_insn_data::op_t::SIGNED && (val & lower)
 		? ~upper : 0;
 	      val = (val & upper) | sign_bits;
-	      val += bias;
 	      goto zap;
 	    }
 	}
@@ -263,7 +288,7 @@ check_early (function *fn)
 	    if (riscv_tt_fix_qsr_replay > 0 && insnd->id == rvtt_insn_data::ttreplay)
 	      {
 		// Quasar erratum, cannot exec-while-loading
-		tree op = gimple_call_arg (call, insnd->imm_arg () + 4);
+		tree op = gimple_call_arg (call, insnd->imm_arg () + 3);
 		if (!integer_zerop (op))
 		  error_at (gimple_nonartificial_location (call),
 			    "Quasar replay instruction cannot exec-while-load, "
