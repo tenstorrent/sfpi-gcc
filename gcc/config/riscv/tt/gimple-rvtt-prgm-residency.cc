@@ -1520,24 +1520,8 @@ struct repeat_group
 static bool
 stmt_ambient_all_lanes_p (gimple *stmt)
 {
-  gimple_stmt_iterator gsi = gsi_for_stmt (stmt);
-  for (gsi_prev (&gsi); !gsi_end_p (gsi); gsi_prev (&gsi))
-    {
-      gimple *s = gsi_stmt (gsi);
-      if (is_gimple_debug (s))
-	continue;
-      const rvtt_insn_data *insnd = rvtt_get_insn_data (s);
-      if (!insnd)
-	continue;
-      if (rvtt_all_lanes_encc_p (s))
-	return true;
-      gcall *call = as_a <gcall *> (s);
-      if (insnd->sets_cc (call)
-	  || insnd->id == rvtt_insn_data::sfppushc
-	  || insnd->id == rvtt_insn_data::sfppopc)
-	return false;
-    }
-  return prepeel_ambient_all_lanes_p (gimple_bb (stmt));
+  rvtt_gimple_lane_facts facts (cfun);
+  return facts.before (stmt) == RVTT_LANE_ALL;
 }
 
 /* REPEAT class discovery: collect FN's profitable value groups into GROUPS,
