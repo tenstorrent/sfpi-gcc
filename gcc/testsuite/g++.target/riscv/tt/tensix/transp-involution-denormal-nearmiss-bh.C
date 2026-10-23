@@ -6,6 +6,8 @@ using sfpu_t = decltype (__builtin_rvtt_sfpreadlreg (9));
 
 void denormal_unproven ()
 {
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   auto acc = __builtin_rvtt_sfpreadlreg (11);	// programmable constant: may be denormal
   __builtin_rvtt_sfpstore (nullptr, acc, 320, 0, 0, 3, 7);
   auto x0 = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 7);

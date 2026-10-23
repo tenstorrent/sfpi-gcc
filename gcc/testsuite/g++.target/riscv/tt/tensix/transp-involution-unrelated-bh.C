@@ -22,6 +22,8 @@ static inline sfpu_t transposed_gather_sum (int, sfpu_t seed)
 
 void unrelated_transpose_scan ()
 {
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   auto seed = __builtin_rvtt_sfpreadlreg (9);
   seed = transposed_gather_sum (0, seed);
   seed = transposed_gather_sum (1, seed);

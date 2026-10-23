@@ -523,7 +523,6 @@ public:
 
 private:
   void find_candidates ();
-  void compute_lane_states ();
   gcall *rewrite_candidate (candidate &cand);
   void forward_parks (gcall *bundle, basic_block bb);
   void dse_parks (basic_block bb);
@@ -531,8 +530,6 @@ private:
 
   function *m_fn;
   std::vector<candidate> m_cands;
-  /* Lane state known all-lanes at BB entry?  */
-  auto_bitmap m_clean_in;
 };
 
 /* Find all formable transposes.  */
@@ -560,6 +557,19 @@ involution_transform::find_candidates ()
 		       "(addrs %u %u %u %u, mod0 %u)\n",
 		       gimple_uid (call), cand.addr[0], cand.addr[1],
 		       cand.addr[2], cand.addr[3], cand.mod0);
+	    /* Synthesizing SFPENCC can repair flags, never LaneConfig.
+	       Require independently established ROW_MASK before moving loads
+	       or replacing the transpose with a full-register gather.  */
+	    rvtt_gimple_lane_facts facts (m_fn);
+	    if (!(facts.before (cand.group_head) & RVTT_LANE_ROW_MASK_CLEAR)
+		|| !(facts.before (cand.transp) & RVTT_LANE_ROW_MASK_CLEAR))
+	      {
+		if (dump_file)
+		  fprintf (dump_file, "transp-involution: refusing transpose at uid %u "
+			   "(transp-involution-row-mask-unproved)\n",
+			   gimple_uid (call));
+		continue;
+	      }
 	    m_cands.push_back (cand);
 	  }
 	else
@@ -567,102 +577,6 @@ involution_transform::find_candidates ()
 	    fprintf (dump_file, "transp-involution: refusing transpose at uid %u (%s)\n",
 		     gimple_uid (call), why);
       }
-}
-
-/* Forward lane-state dataflow: CLEAN means all lanes enabled since an
-   all-lanes SFPENCC (typed, or one this pass will emit), through
-   lane-state-preserving statements only.  Entry is DIRTY.  Candidate
-   sites are CLEAN, either by inheritance or because the rewrite emits
-   the enable at their group head.  */
-
-void
-involution_transform::compute_lane_states ()
-{
-  bool changed = true;
-  while (changed)
-    {
-      changed = false;
-      basic_block bb;
-      FOR_EACH_BB_FN (bb, m_fn)
-	{
-	  bool in_clean = false;
-	  if (bb != ENTRY_BLOCK_PTR_FOR_FN (m_fn)
-	      && EDGE_COUNT (bb->preds) > 0)
-	    {
-	      in_clean = true;
-	      edge e;
-	      edge_iterator ei;
-	      FOR_EACH_EDGE (e, ei, bb->preds)
-		if (e->src == ENTRY_BLOCK_PTR_FOR_FN (m_fn)
-		    || !bitmap_bit_p (m_clean_in, e->src->index))
-		  {
-		    /* Predecessor's OUT: recompute below; we store OUT
-		       in the same bitmap keyed by src, updated when the
-		       src block is walked.  */
-		    in_clean = false;
-		    break;
-		  }
-	    }
-	  bool state = in_clean;
-	  for (gimple_stmt_iterator gsi = gsi_start_bb (bb); !gsi_end_p (gsi);
-	       gsi_next (&gsi))
-	    {
-	      gimple *stmt = gsi_stmt (gsi);
-	      bool is_site = false;
-	      for (const candidate &cand : m_cands)
-		if (cand.transp == stmt)
-		  {
-		    is_site = true;
-		    break;
-		  }
-	      if (is_site)
-		{
-		  state = true;	/* forced or inherited */
-		  continue;
-		}
-	      classified c = classify_stmt (stmt);
-	      switch (c.cls)
-		{
-		case SC_SKIP: case SC_SAFE: case SC_DST_READ:
-		case SC_DST_WRITE: case SC_GATHER:
-		  break;
-		case SC_ENCC_ALL:
-		  state = true;
-		  break;
-		default:
-		  state = false;
-		  break;
-		}
-	    }
-	  if (state != bitmap_bit_p (m_clean_in, bb->index))
-	    {
-	      if (state)
-		bitmap_set_bit (m_clean_in, bb->index);
-	      else
-		bitmap_clear_bit (m_clean_in, bb->index);
-	      changed = true;
-	    }
-	}
-    }
-  /* m_clean_in now holds each block's OUT state; IN is recomputed from
-     preds when consumed (walk_state_to below).  */
-}
-
-/* Lane state immediately before STMT in BB (using the fixpoint OUT
-   states of the predecessors).  */
-
-static bool
-in_state_of_bb (function *fn, basic_block bb, bitmap outs)
-{
-  if (bb == ENTRY_BLOCK_PTR_FOR_FN (fn) || EDGE_COUNT (bb->preds) == 0)
-    return false;
-  edge e;
-  edge_iterator ei;
-  FOR_EACH_EDGE (e, ei, bb->preds)
-    if (e->src == ENTRY_BLOCK_PTR_FOR_FN (fn)
-	|| !bitmap_bit_p (outs, e->src->index))
-      return false;
-  return true;
 }
 
 /* Count 32-lane vector SSA values live across SITE (def before, some
@@ -783,6 +697,7 @@ void
 involution_transform::forward_parks (gcall *bundle, basic_block bb)
 {
   unsigned site_uid = gimple_uid (bundle);
+  rvtt_gimple_lane_facts lane_facts (m_fn);
 
   /* The lane state must be all-lanes at the stores and loads.  The
      group-head enable (or inherited CLEAN state) covers the contiguous
@@ -793,12 +708,10 @@ involution_transform::forward_parks (gcall *bundle, basic_block bb)
   struct pending { dst_access acc; gimple *stmt; };
   std::vector<pending> stores;
 
-  bool state_proven_here = in_state_of_bb (m_fn, bb, m_clean_in);
   /* Statement-level: walk the block from the top tracking the state up
      to the bundle, collecting candidate park stores in the contiguous
      safe run before it.  */
   std::vector<pending> run_stores;
-  bool state = state_proven_here;
   for (gimple_stmt_iterator gsi = gsi_start_bb (bb); !gsi_end_p (gsi);
        gsi_next (&gsi))
     {
@@ -809,7 +722,6 @@ involution_transform::forward_parks (gcall *bundle, basic_block bb)
       switch (c.cls)
 	{
 	case SC_ENCC_ALL:
-	  state = true;
 	  run_stores.clear ();
 	  break;
 	case SC_SKIP:
@@ -820,16 +732,15 @@ involution_transform::forward_parks (gcall *bundle, basic_block bb)
 	case SC_GATHER:
 	  break;
 	case SC_DST_WRITE:
-	  if (state)
+	  if (lane_facts.before (stmt) == RVTT_LANE_ALL)
 	    run_stores.push_back ({ c.acc, stmt });
 	  break;
 	default:
-	  state = false;
 	  run_stores.clear ();
 	  break;
 	}
     }
-  if (!state)
+  if (lane_facts.before (bundle) != RVTT_LANE_ALL)
     {
       if (dump_file)
 	fprintf (dump_file, "transp-park: no proven all-lanes state before bundle uid %u "
@@ -969,7 +880,7 @@ involution_transform::forward_parks (gcall *bundle, basic_block bb)
 void
 involution_transform::dse_parks (basic_block bb)
 {
-  bool state = in_state_of_bb (m_fn, bb, m_clean_in);
+  rvtt_gimple_lane_facts lane_facts (m_fn);
   /* Collect (stmt, class) linearly with running lane state at each
      store.  */
   struct entry { gimple *stmt; classified c; bool state_after; };
@@ -979,18 +890,7 @@ involution_transform::dse_parks (basic_block bb)
     {
       gimple *stmt = gsi_stmt (gsi);
       classified c = classify_stmt (stmt);
-      switch (c.cls)
-	{
-	case SC_ENCC_ALL: case SC_GATHER:
-	  state = c.cls == SC_ENCC_ALL ? true : state;
-	  break;
-	case SC_SKIP: case SC_SAFE: case SC_DST_READ: case SC_DST_WRITE:
-	  break;
-	default:
-	  state = false;
-	  break;
-	}
-      line.push_back ({ stmt, c, state });
+      line.push_back ({ stmt, c, lane_facts.after (stmt) == RVTT_LANE_ALL });
     }
 
   for (unsigned i = 0; i != line.size (); ++i)
@@ -1078,38 +978,14 @@ involution_transform::run ()
   if (m_cands.empty ())
     return false;
 
-  compute_lane_states ();
-
-  /* Decide encc placement per candidate in program order per block.  */
-  FOR_EACH_BB_FN (bb, m_fn)
-    {
-      bool state = in_state_of_bb (m_fn, bb, m_clean_in);
-      for (gimple_stmt_iterator gsi = gsi_start_bb (bb); !gsi_end_p (gsi);
-	   gsi_next (&gsi))
-	{
-	  gimple *stmt = gsi_stmt (gsi);
-	  candidate *cand = nullptr;
-	  for (candidate &c : m_cands)
-	    if (c.transp == stmt)
-	      {
-		cand = &c;
-		break;
-	      }
-	  if (cand)
-	    {
-	      cand->needs_encc = !state;
-	      state = true;
-	      continue;
-	    }
-	  classified c = classify_stmt (stmt);
-	  if (c.cls == SC_ENCC_ALL)
-	    state = true;
-	  else if (c.cls != SC_SKIP && c.cls != SC_SAFE
-		   && c.cls != SC_DST_READ && c.cls != SC_DST_WRITE
-		   && c.cls != SC_GATHER)
-	    state = false;
-	}
-    }
+  /* A synthetic ENCC repairs flags only; find_candidates already proved
+     ROW_MASK independently.  Query the shared facts at the actual group
+     head instead of maintaining a second, inconsistent lane-state model.  */
+  {
+    rvtt_gimple_lane_facts facts (m_fn);
+    for (candidate &cand : m_cands)
+      cand.needs_encc = facts.before (cand.group_head) != RVTT_LANE_ALL;
+  }
 
   /* Rewrite + local elision.  */
   std::vector<std::pair<gcall *, basic_block>> bundles;

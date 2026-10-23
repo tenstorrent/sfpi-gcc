@@ -33,6 +33,8 @@ static inline void gathered_quad (wide_lane_value &alpha, wide_lane_value &beta,
 
 void reduce_over_lanes ()
 {
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   auto alpha = __builtin_rvtt_sfpreadlreg (9);
   auto beta = __builtin_rvtt_sfpreadlreg (9);
   gathered_quad (alpha, beta, 0);
