@@ -11,6 +11,8 @@
 
 void fold_reserve_fire (void)
 {
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   for (unsigned ix = 0; ix != 16; ++ix)
     {
       auto k  = __builtin_rvtt_sfpxloadi (nullptr, 0x3e4b1a3d, 0, 0, 31);

@@ -18,6 +18,8 @@ using namespace sfpi;
 __attribute__((noinline)) void
 setrwc_between ()
 {
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   vFloat in = dst_reg[0];
   vFloat r = in + 1.0f;
   lltt::setrwc<0, 4, 8, 0, 0, 4> ();	// typed counter write

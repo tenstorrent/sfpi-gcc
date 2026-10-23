@@ -11,6 +11,7 @@ using namespace sfpi;
 __attribute__((noinline)) void
 pressure_reload ()
 {
+  dst_ownership_enable_all_lanes ();
   vFloat in = dst_reg[0];
   vFloat a = in * 1.5f;			// in dies here
   vFloat b = a + 1.0f;

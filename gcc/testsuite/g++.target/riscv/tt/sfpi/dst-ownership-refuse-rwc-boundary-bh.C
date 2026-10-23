@@ -11,6 +11,7 @@ using namespace sfpi;
 __attribute__((noinline)) void
 rwc_boundary_between ()
 {
+  dst_ownership_enable_all_lanes ();
   vFloat in = dst_reg[0];
   vFloat r = in * 0.5f + 0.25f;
   dst_reg++;				// RWC boundary: base moved

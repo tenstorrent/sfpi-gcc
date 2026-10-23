@@ -96,6 +96,7 @@
 #include "regs.h"
 #include "rvtt.h"
 #include "rvtt-effects.h"
+#include "rvtt-rtl-lane-state.h"
 #include "rvtt-refuse.h"
 
 namespace {
@@ -115,7 +116,7 @@ struct dstown_state : rvtt_cc_lattice
     dstown_state s = {};
     s.rwc_epoch = 0;
     s.layout_epoch = 0;
-    s.cc = RVTT_CC_ALL;
+    s.cc = RVTT_CC_UNPROVED;
     s.cc_depth = 0;
     s.reached = true;
     return s;
@@ -275,14 +276,8 @@ transfer_insn (dstown_state &s, const insn_facts &f, rtx_insn *insn)
 {
   if (f.poison)
     {
-      /* Opacity is a hard boundary for RWC counters, layout and (via the
-	 record kill in the scan below) Dst contents, but it is
-	 CC-transparent.  CC synthesis in gimple-rvtt-cc.cc pairs v_if
-	 brackets across raw asm statements and rewrites the outermost
-	 restore to the all-lanes SFPENCC regardless of surrounding raw
-	 code, so the compiler already assumes that raw sequences never
-	 hand narrowed lanes to typed code; this pass relies on the same
-	 assumption.  */
+      /* No opaque instruction has a lane-state ABI guarantee.  */
+      s.poison_cc ();
       s.rwc_epoch = INSN_UID (insn) * 4 + 1;
       s.layout_epoch = INSN_UID (insn) * 4 + 2;
       return;
@@ -678,6 +673,7 @@ static unsigned
 dst_ownership (function *fn)
 {
   const bool transform = riscv_tt_opt_dst_ownership;
+  rvtt_rtl_lane_facts lanes (fn);
 
   /* QSR's unified RWC counter field has no faithful typed model, so the
      pass refuses on QSR.  */
@@ -857,7 +853,8 @@ dst_ownership (function *fn)
 		     lanes: any later reload's lane set is then a
 		     subset, whatever CC narrows to in between.  */
 		  r.dead_reason
-		    = s.cc == RVTT_CC_ALL ? NULL : "cc-enable-unproved";
+		    = lanes.before (insn) == RVTT_RTL_ALL_LANES
+		? NULL : "cc-enable-unproved";
 		  /* Address carried in a register: the record dies if
 		     that register is redefined (checked below via the
 		     generic writes scan).  */

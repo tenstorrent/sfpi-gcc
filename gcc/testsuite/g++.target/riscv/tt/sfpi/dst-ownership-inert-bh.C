@@ -12,6 +12,7 @@ using namespace sfpi;
 __attribute__((noinline)) void
 inert_reload ()
 {
+  dst_ownership_enable_all_lanes ();
   vFloat in = dst_reg[0];
   vFloat r = in * 0.30102999f + 1.25f;
   vFloat in2 = dst_reg[0];

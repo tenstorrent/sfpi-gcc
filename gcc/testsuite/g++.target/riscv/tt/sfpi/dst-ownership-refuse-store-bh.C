@@ -11,6 +11,7 @@ using namespace sfpi;
 __attribute__((noinline)) void
 store_then_reload ()
 {
+  dst_ownership_enable_all_lanes ();
   vFloat in = dst_reg[0];
   vFloat r = in * 2.0f + 3.0f;
   dst_reg[0] = r;			// intervening Dst writer
