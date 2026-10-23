@@ -5,10 +5,13 @@
 // { dg-final { scan-tree-dump-times "reclaiming DEAD-claimed PRGM L14 for 0x419d70a4 .loop class" 1 "rvtt_prgm_const" } }
 // { dg-final { scan-tree-dump-times "refused .prgm-exhausted." 1 "rvtt_prgm_const" } }
 // { dg-final { scan-tree-dump-times "allocated PRGM L1\\d for constant 0x\[0-9a-f\]+ .loop class" 4 "rvtt_prgm_const" } }
-// { dg-final { scan-assembler-times "SFPCONFIG" 7 } }
+// { dg-final { scan-assembler-times "SFPCONFIG" 9 } }
 
 void audit_ip_claimer (void)
 {
+  // Prove physical full lanes; do not infer an entry-state ABI.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   auto s0 = __builtin_rvtt_sfpxloadi (nullptr, 0x3ca3d70a, 0, 0, 31);
   __builtin_rvtt_sfpwriteconfig_v (s0, 0, 12);
   auto s1 = __builtin_rvtt_sfpxloadi (nullptr, 0x3d4ccccd, 0, 0, 31);
@@ -19,6 +22,9 @@ void audit_ip_claimer (void)
 
 void audit_ip_row_body (void)
 {
+  // Prove physical full lanes; do not infer an entry-state ABI.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   auto z = __builtin_rvtt_sfpreadlreg (1);
   for (unsigned lap = 0; lap != 21; ++lap)
     {

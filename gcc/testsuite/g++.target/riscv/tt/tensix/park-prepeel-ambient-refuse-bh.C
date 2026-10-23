@@ -3,10 +3,13 @@
 // { dg-final { scan-tree-dump "park-prepeel-ambient-unproven" "rvtt_prgm_const" } }
 // { dg-final { scan-tree-dump-times "pressure-park: hoisted invariant materialization to a free LREG at the programming point .preheader bb \\d+." 1 "rvtt_prgm_const" } }
 // { dg-final { scan-tree-dump-not "pre-peel entry" "rvtt_prgm_const" } }
-// { dg-final { scan-assembler-times "SFPCONFIG" 3 } }
+// { dg-final { scan-assembler-times "SFPCONFIG" 4 } }
 
 void ambient_refuse (int faces)
 {
+  // Establish physical full lanes independently of the entry ABI.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   auto x = __builtin_rvtt_sfpreadlreg (0);
   for (int face = 0; face != faces; ++face)
     {

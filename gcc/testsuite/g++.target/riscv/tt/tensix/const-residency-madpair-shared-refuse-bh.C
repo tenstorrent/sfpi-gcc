@@ -4,10 +4,13 @@
 // { dg-final { scan-tree-dump-not "madpair class" "rvtt_prgm_const" } }
 // { dg-final { scan-assembler-times "SFPADDI" 2 } }
 // { dg-final { scan-assembler-not "SFPMAD\[^I\]" } }
-// { dg-final { scan-assembler-not "SFPCONFIG" } }
+// { dg-final { scan-assembler-times "SFPCONFIG" 1 } }
 
 void madpair_shared_refuse (void)
 {
+  // Prove physical full lanes; do not infer an entry-state ABI.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   auto x = __builtin_rvtt_sfpreadlreg (0);
   auto y = __builtin_rvtt_sfpreadlreg (1);
   auto g1 = __builtin_rvtt_sfpxloadi (nullptr, 0x3e2aaaab, 0, 0, 31);

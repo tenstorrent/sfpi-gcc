@@ -4,10 +4,13 @@
 // { dg-final { scan-tree-dump-not "cc-peel placement lifted" "rvtt_prgm_const" } }
 // { dg-final { scan-tree-dump-times "peeled first iteration" 1 "rvtt_prgm_const" } }
 // { dg-final { scan-tree-dump-times "allocated PRGM L1\\d for constant 0x\[0-9a-f\]+ .loop class" 1 "rvtt_prgm_const" } }
-// { dg-final { scan-assembler-times "SFPCONFIG" 1 } }
+// { dg-final { scan-assembler-times "SFPCONFIG" 2 } }
 
 void ccpeel_entrycc_refuse (int tiles)
 {
+  // Prove physical full lanes; do not infer an entry-state ABI.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   /* A bare lane-enable rewrite ahead of the tile loop (a raw sfpsetcc
      outside pushc/popc is a check-pass error).  Any CC writer that reaches
      the lifted point blocks the lift, whatever value it writes.  */

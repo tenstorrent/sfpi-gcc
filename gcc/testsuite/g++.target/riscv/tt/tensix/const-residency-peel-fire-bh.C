@@ -3,12 +3,15 @@
 // { dg-final { scan-tree-dump-times "admits the CC-canonical peel" 2 "rvtt_prgm_const" } }
 // { dg-final { scan-tree-dump-times "peeled first iteration" 2 "rvtt_prgm_const" } }
 // { dg-final { scan-tree-dump-times "allocated PRGM L1\\d for constant 0x\[0-9a-f\]+ .loop class" 2 "rvtt_prgm_const" } }
-// { dg-final { scan-assembler-times "SFPCONFIG" 2 } }
+// { dg-final { scan-assembler-times "SFPCONFIG" 4 } }
 // Only the peeled first iterations and the staging loads keep SFPLOADI pairs.
 // { dg-final { scan-assembler-times "SFPLOADI" 8 } }
 
 void peel_fire (void)
 {
+  // Prove physical full lanes; do not infer an entry-state ABI.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   auto x = __builtin_rvtt_sfpreadlreg (0);
   __builtin_rvtt_sfpencc (10, 0);
   for (unsigned ix = 0; ix != 32; ++ix)
@@ -24,6 +27,9 @@ void peel_fire (void)
 
 void renamed_varied_scale (void)
 {
+  // Prove physical full lanes; do not infer an entry-state ABI.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   auto west = __builtin_rvtt_sfpreadlreg (2);
   __builtin_rvtt_sfpencc (10, 0);
   for (unsigned step = 0; step != 12; ++step)

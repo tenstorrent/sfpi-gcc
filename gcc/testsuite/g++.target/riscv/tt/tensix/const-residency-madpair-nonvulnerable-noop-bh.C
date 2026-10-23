@@ -2,10 +2,13 @@
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-unroll-loops -mtt-tensix-optimize-const-residency -fdump-tree-rvtt_prgm_const-details" }
 // { dg-final { scan-tree-dump-not "madpair" "rvtt_prgm_const" } }
 // { dg-final { scan-assembler-times "SFPMAD" 1 } }
-// { dg-final { scan-assembler-not "SFPCONFIG" } }
+// { dg-final { scan-assembler-times "SFPCONFIG" 1 } }
 
 void nonvulnerable_pair_noop (void)
 {
+  // Prove physical full lanes; do not infer an entry-state ABI.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   auto x = __builtin_rvtt_sfpreadlreg (0);
   auto gain = __builtin_rvtt_sfpxloadi (nullptr, 0x3e2aaaab, 0, 0, 31);
   auto bias = __builtin_rvtt_sfpxloadi (nullptr, 0x3f317218, 0, 0, 31);

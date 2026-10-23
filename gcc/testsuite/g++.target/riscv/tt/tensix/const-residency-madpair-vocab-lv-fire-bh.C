@@ -9,6 +9,9 @@
 
 void vocab_lv_fire (void)
 {
+  // Prove physical full lanes; do not infer an entry-state ABI.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   auto x = __builtin_rvtt_sfpreadlreg (0);
   auto keep = __builtin_rvtt_sfpreadlreg (1);
   auto gain = __builtin_rvtt_sfpxloadi (nullptr, 0x3f100000, 0, 0, 31);
@@ -26,6 +29,9 @@ void vocab_lv_fire (void)
 
 void renamed_masked_ramp (void)
 {
+  // Prove physical full lanes; do not infer an entry-state ABI.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   auto acc = __builtin_rvtt_sfpreadlreg (2);
   auto park = __builtin_rvtt_sfpreadlreg (3);
   auto slope = __builtin_rvtt_sfpxloadi (nullptr, 0x3e900000, 0, 0, 31);

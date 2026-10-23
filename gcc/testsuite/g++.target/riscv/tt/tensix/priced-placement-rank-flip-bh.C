@@ -8,6 +8,8 @@
 
 void rank_priced_flip (void)
 {
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   for (unsigned ix = 0; ix != 32; ++ix)
     {
       auto hot = __builtin_rvtt_sfpxloadi (nullptr, 0x40a90fdb, 0, 0, 31);

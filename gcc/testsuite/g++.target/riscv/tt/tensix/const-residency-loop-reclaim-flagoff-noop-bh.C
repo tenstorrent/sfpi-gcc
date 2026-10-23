@@ -6,10 +6,13 @@
 // { dg-final { scan-tree-dump-times "refused .prgm-exhausted" 4 "rvtt_prgm_const" } }
 // The init's three SFPCONFIGs plus one programming shared by the
 // value-identical pair.
-// { dg-final { scan-assembler-times "SFPCONFIG" 4 } }
+// { dg-final { scan-assembler-times "SFPCONFIG" 6 } }
 
 void owner_init (void)
 {
+  // Prove physical full lanes; do not infer an entry-state ABI.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   auto c0 = __builtin_rvtt_sfpxloadi (nullptr, 0x3e317218, 0, 0, 31);
   __builtin_rvtt_sfpwriteconfig_v (c0, 0, 12);
   auto k1 = __builtin_rvtt_sfpxloadi (nullptr, 0x3dd8adac, 0, 0, 31);
@@ -20,6 +23,9 @@ void owner_init (void)
 
 void kernel_inloop (void)
 {
+  // Prove physical full lanes; do not infer an entry-state ABI.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   auto x = __builtin_rvtt_sfpreadlreg (0);
   for (unsigned ix = 0; ix != 32; ++ix)
     {

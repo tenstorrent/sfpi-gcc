@@ -3,12 +3,15 @@
 // { dg-final { scan-tree-dump-not "Invariant load candidate" "rvtt_invariant" } }
 // { dg-final { scan-tree-dump-not "allocated PRGM" "rvtt_prgm_const" } }
 // { dg-final { scan-tree-dump-not "hoisted across" "rvtt_crossloop" } }
-// { dg-final { scan-assembler-not "SFPCONFIG" } }
+// { dg-final { scan-assembler-times "SFPCONFIG" 1 } }
 // { dg-final { scan-assembler-times "SFPLOADI" 2 } }
 
 void
 shared_root_and_tail (unsigned tiles)
 {
+  // Prove physical full lanes; do not infer an entry-state ABI.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   auto x = __builtin_rvtt_sfpreadlreg (0);
   for (unsigned tile = 0; tile != tiles; ++tile)
     {

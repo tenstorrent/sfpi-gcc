@@ -6,10 +6,13 @@
 // { dg-final { scan-tree-dump-times "programmed on its all-lanes entry edge" 1 "rvtt_prgm_const" } }
 // { dg-final { scan-tree-dump-times "pressure-park: hoisted invariant materialization to a free LREG at the programming point" 1 "rvtt_prgm_const" } }
 // { dg-final { scan-tree-dump-not "peeled first iteration" "rvtt_prgm_const" } }
-// { dg-final { scan-assembler-times "SFPCONFIG" 3 } }
+// { dg-final { scan-assembler-times "SFPCONFIG" 4 } }
 
 void park_prepeel_fire (void)
 {
+  // Establish physical full lanes independently of the entry ABI.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   auto x = __builtin_rvtt_sfpreadlreg (0);
   __builtin_rvtt_sfppushc (0);
   __builtin_rvtt_sfpsetcc (x, 0);

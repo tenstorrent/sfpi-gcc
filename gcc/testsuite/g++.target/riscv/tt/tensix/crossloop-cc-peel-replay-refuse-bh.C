@@ -1,18 +1,25 @@
-// Check that a REPLAY word in the tile loop stops the walk and keeps the peel.
-// The tile loop's partial-lane SFPENCC keeps the inner loop's entry
-// state unproven, so its CC-canonical body still needs the peel.
+// Unknown playback can itself contain a recorder. Even explicit flag/config
+// resets after it do not prove that subsequent words execute rather than being
+// captured. Refuse the inner programming and peel, not just outer placement.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-unroll-loops -mtt-tensix-optimize-const-residency -mtt-tensix-optimize-pressure-park -mtt-tensix-optimize-crossloop-hoist -mtt-tensix-optimize-crossloop-cc-peel -fdump-tree-rvtt_prgm_const-details" }
-// { dg-final { scan-tree-dump "placement walk stops at loop bb \\d+ .crossloop-replay-unproven." "rvtt_prgm_const" } }
+// { dg-final { scan-tree-dump "const-residency: loop bb \\d+ refused .sfpu-barrier." "rvtt_prgm_const" } }
 // { dg-final { scan-tree-dump-not "cc-peel placement lifted" "rvtt_prgm_const" } }
-// { dg-final { scan-tree-dump-times "peeled first iteration" 1 "rvtt_prgm_const" } }
-// { dg-final { scan-tree-dump-times "allocated PRGM L1\\d for constant 0x\[0-9a-f\]+ .loop class" 1 "rvtt_prgm_const" } }
-// { dg-final { scan-assembler-times "SFPCONFIG" 1 } }
+// { dg-final { scan-tree-dump-not "peeled first iteration" "rvtt_prgm_const" } }
+// { dg-final { scan-tree-dump-not "allocated PRGM" "rvtt_prgm_const" } }
+// The two explicit resets only; no speculative PRGM programming.
+// { dg-final { scan-assembler-times "SFPCONFIG" 2 } }
 
 void ccpeel_replay_refuse (int tiles)
 {
+  // Prove physical full lanes; do not infer an entry-state ABI.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   for (int t = 0; t != tiles; ++t)
     {
       __builtin_rvtt_ttreplay (nullptr, 4, 0, 0, 0, 0, 0);
+      // An unknown replay may alter both flags and LaneConfig.
+      __builtin_rvtt_sfpencc_all_lanes ();
+      __builtin_rvtt_sfpconfig_i (0, 15, 1);
       __builtin_rvtt_sfpencc (10, 0);
       for (int row = 0; row != 8; ++row)
 	{

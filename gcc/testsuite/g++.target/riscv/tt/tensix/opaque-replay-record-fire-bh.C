@@ -5,7 +5,7 @@
 // { dg-final { scan-tree-dump-not "opaque-region-undeclared" "rvtt_prgm_const" } }
 // { dg-final { scan-tree-dump-not "unaudited raw opcode" "rvtt_prgm_const" } }
 // { dg-final { scan-tree-dump-times "allocated PRGM L1\\d for constant 0x\[0-9a-f\]+ .loop class" 2 "rvtt_prgm_const" } }
-// { dg-final { scan-assembler-times "SFPCONFIG" 2 } }
+// { dg-final { scan-assembler-times "SFPCONFIG" 4 } }
 
 static void record_region_init ()
 {
@@ -29,6 +29,9 @@ static void record_region_init ()
 void orr_fire (int tiles)
 {
   record_region_init ();
+  // Reset only after the complete owned recording window.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   for (int t = 0; t != tiles; ++t)
     {
       __asm__ __volatile__ (".ttinsn %0" : : "n" (0x37000104));
@@ -63,6 +66,9 @@ static void varied_window_setup ()
 void renamed_varied_scale (int faces)
 {
   varied_window_setup ();
+  // Reset only after the complete owned recording window.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   for (int face = 0; face != faces; ++face)
     {
       __asm__ __volatile__ (".ttinsn %0" : : "n" (0x37000104));

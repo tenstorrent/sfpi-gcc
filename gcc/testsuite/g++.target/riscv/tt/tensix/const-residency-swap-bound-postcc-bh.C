@@ -7,6 +7,9 @@
 
 void swap_bound_vc_fire (void)
 {
+  // Prove physical full lanes; do not infer an entry-state ABI.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   auto x = __builtin_rvtt_sfpreadlreg (0);
   __builtin_rvtt_sfppushc (0);
   __builtin_rvtt_sfpsetcc (x, 0);
@@ -25,6 +28,9 @@ void swap_bound_vc_fire (void)
 
 void swap_bound_vd_refuse (void)
 {
+  // Prove physical full lanes; do not infer an entry-state ABI.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   auto x = __builtin_rvtt_sfpreadlreg (1);
   __builtin_rvtt_sfppushc (0);
   __builtin_rvtt_sfpsetcc (x, 0);
@@ -43,6 +49,9 @@ void swap_bound_vd_refuse (void)
 
 void swap_bound_both_halves_refuse (void)
 {
+  // Prove physical full lanes; do not infer an entry-state ABI.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   auto x = __builtin_rvtt_sfpreadlreg (2);
   auto y = __builtin_rvtt_sfpreadlreg (3);
   __builtin_rvtt_sfppushc (0);

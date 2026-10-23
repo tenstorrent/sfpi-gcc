@@ -8,6 +8,8 @@
 
 void tier_exhausted_park (void)
 {
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   auto a0 = __builtin_rvtt_sfpreadlreg (0);
   auto a1 = __builtin_rvtt_sfpreadlreg (1);
   auto a2 = __builtin_rvtt_sfpreadlreg (2);

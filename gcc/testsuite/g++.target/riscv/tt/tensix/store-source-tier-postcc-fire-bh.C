@@ -5,10 +5,13 @@
 // { dg-final { scan-tree-dump-times "peeled first iteration" 1 "rvtt_prgm_const" } }
 // { dg-final { scan-tree-dump-times "pressure-park: hoisted invariant materialization to a free LREG" 1 "rvtt_prgm_const" } }
 // { dg-final { scan-tree-dump-not "allocated PRGM" "rvtt_prgm_const" } }
-// { dg-final { scan-assembler-not "SFPCONFIG" } }
+// Only the explicit LaneConfig reset; no PRGM programming.
+// { dg-final { scan-assembler-times "SFPCONFIG" 1 } }
 
 void tier_postcc_fire (void)
 {
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   auto x = __builtin_rvtt_sfpreadlreg (0);
   __builtin_rvtt_sfpencc (10, 0);
   for (unsigned ix = 0; ix != 32; ++ix)

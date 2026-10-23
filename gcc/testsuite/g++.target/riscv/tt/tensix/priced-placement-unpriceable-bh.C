@@ -8,6 +8,8 @@
 
 void rank_unpriceable (unsigned n)
 {
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   for (unsigned ix = 0; ix != n; ++ix)
     {
       auto a = __builtin_rvtt_sfpxloadi (nullptr, 0x40c90fdb, 0, 0, 31);
