@@ -1124,6 +1124,11 @@ resolve_contract_chain (function *callee_fn,
     };
   if (!cn)
     return closure_why ("no-node");
+  compute_tu_facts ();
+  if (TREE_PUBLIC (callee_fn->decl) || tu_facts.scan_unrooted
+      || !tu_facts.entry_roots
+      || tu_facts.entry_roots->contains (cn))
+    return closure_why ("callee-entry-unproved");
   if (!cn->definition)
     return closure_why ("no-definition");
   if (cn->address_taken)
@@ -1279,6 +1284,15 @@ rvtt_crosscall_init_hoist (function *callee_fn,
   ctx.c = c;
   ctx.callee_decl = callee_fn->decl;
   ctx.chain_decls = &chain_decls;
+  if (!result)
+    {
+      /* The hoisted prefix emits ENCC, which resets column flags only.
+	 It must not change a masked caller's programming into an apparent
+	 full-register definition when LaneConfig is unproved.  */
+      rvtt_gimple_lane_facts lanes (cfn);
+      if (!(lanes.block_out (entry->src) & RVTT_LANE_ROW_MASK_CLEAR))
+	result = "drain-init-row-mask-unproved";
+    }
   if (!result)
     {
       basic_block *body = get_loop_body (loop);

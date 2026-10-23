@@ -12,7 +12,7 @@ cam_row (unsigned addr)
   __builtin_rvtt_ttincrwc (0, CAM_STRIDE, 0, 0);
 }
 
-__attribute__((noinline)) void
+static __attribute__((noinline)) void
 cam_callee ()
 {
 #if CAM_ROWS >= 1
@@ -50,6 +50,8 @@ int cam_pace;
 void
 cam_caller (int tiles)
 {
+  /* SETC16 is not lane-predicated.  This contract preserves the
+     caller's incoming CC/LaneConfig state and requires no lane reset.  */
   for (int t = 0; t != tiles; ++t)
     {
 #ifdef CAM_CALLER_EXTRA
