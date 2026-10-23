@@ -63,6 +63,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree-into-ssa.h"
 #include "diagnostic-core.h"
 #include "rvtt.h"
+#include "rvtt-effects.h"
 
 /* Is TYPE an SFPU vector type?  */
 
@@ -426,6 +427,54 @@ const pass_data pass_data_rvtt_check_early =
   0, /* todo_flags_finish */
 };
 
+/* Current SFPI comparison objects carry both operands through concat/select
+   identities.  Expose their scalar vector operands before the structured
+   optimizers run; waiting until immvar expansion hides constants and carried
+   values from those analyses.  The same identities are folded again by the
+   late immvar pass for plumbing introduced after this point.  */
+static bool
+fold_concat_select (function *fn)
+{
+  bool changed = false;
+  basic_block bb;
+  FOR_EACH_BB_FN (bb, fn)
+    for (gimple_stmt_iterator gsi = gsi_start_bb (bb); !gsi_end_p (gsi);)
+      {
+	auto *insnd = rvtt_get_insn_data (*gsi);
+	if (insnd && insnd->id == rvtt_insn_data::sfpselect2)
+	  {
+	    gcall *select = as_a <gcall *> (*gsi);
+	    tree aggregate = gimple_call_arg (select, 0);
+	    tree index = gimple_call_arg (select, 1);
+	    if (TREE_CODE (aggregate) == SSA_NAME
+		&& TREE_CODE (index) == INTEGER_CST
+		&& tree_fits_uhwi_p (index) && tree_to_uhwi (index) < 2
+		&& gimple_call_lhs (select))
+	      {
+		gimple *concat = SSA_NAME_DEF_STMT (aggregate);
+		auto *concat_data = rvtt_get_insn_data (concat);
+		if (concat_data && concat_data->id == rvtt_insn_data::sfpconcat2)
+		  {
+		    tree value = gimple_call_arg (concat, tree_to_uhwi (index));
+		    rvtt_substitute_value (gimple_call_lhs (select), value);
+		    unlink_stmt_vdef (select);
+		    gsi_remove (&gsi, true);
+		    if (has_zero_uses (aggregate))
+		      {
+			unlink_stmt_vdef (concat);
+			gimple_stmt_iterator concat_gsi = gsi_for_stmt (concat);
+			gsi_remove (&concat_gsi, true);
+		      }
+		    changed = true;
+		    continue;
+		  }
+	      }
+	  }
+	gsi_next (&gsi);
+      }
+  return changed;
+}
+
 class pass_rvtt_check_early : public gimple_opt_pass
 {
 public:
@@ -440,7 +489,10 @@ public:
   virtual unsigned execute (function *fn) override
   {
     check_function_type (DECL_SOURCE_LOCATION (fn->decl), TREE_TYPE (fn->decl), false);
-    return check_early (fn);
+    unsigned todo = check_early (fn);
+    if (fold_concat_select (fn))
+      todo |= TODO_update_ssa;
+    return todo;
   }
 };
 
@@ -480,7 +532,11 @@ public:
   }
   virtual unsigned execute (function *fn) override
   {
-    return check_late (fn);
+    unsigned todo = check_late (fn);
+    /* Retain the audited no-user-recorder fact before this body's GIMPLE
+       is expanded; a later caller may only see the bound RTL function.  */
+    rvtt_gimple_direct_issue_p (fn);
+    return todo;
   }
 };
 

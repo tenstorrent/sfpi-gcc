@@ -117,6 +117,79 @@ extern bool rvtt_dst_inert_compute_id_p (rvtt_insn_data::insn_id id);
    when Dst contents must also be left untouched.  */
 extern bool rvtt_cc_quiet_compute_id_p (rvtt_insn_data::insn_id id);
 
+/* LaneEnabled depends independently on column flags and LaneConfig.  An
+   SFPENCC reset establishes only FLAGS_ALL; ROW_MASK_CLEAR needs an exact
+   zero LaneConfig write while every column flag is enabled.  Neither fact
+   is part of the function-entry ABI.  Keep this proof shared by GIMPLE
+   consumers rather than treating the name "all_lanes" as a hardware reset.
+   Facts are must-facts: CFG joins intersect, opaque effects drop them, and
+   replay/runtime issuance cannot establish them.  Rebuild after mutation.  */
+enum rvtt_lane_fact
+{
+  RVTT_LANE_FLAGS_ALL = 1,
+  RVTT_LANE_ROW_MASK_CLEAR = 2,
+  RVTT_LANE_ALL = 3
+};
+
+class rvtt_gimple_lane_facts
+{
+public:
+  /* Nonnegative contracts are for conditional body-summary construction
+     only, never a function-entry ABI assertion at an optimization site.  */
+  explicit rvtt_gimple_lane_facts (function *, int = -1, int = -1);
+  unsigned before (gimple *) const;
+  unsigned after (gimple *) const;
+  unsigned block_in (basic_block) const;
+  unsigned block_out (basic_block bb) const
+  {
+    return bb == ENTRY_BLOCK_PTR_FOR_FN (m_fn) ? m_entry : m_out[bb->index];
+  }
+private:
+  unsigned transfer (gimple *, unsigned) const;
+  function *m_fn;
+  unsigned m_entry;
+  bool m_direct_issue;
+  bool m_mop_initialized;
+  auto_vec<unsigned> m_out;
+};
+
+extern bool rvtt_gimple_all_lanes_after_p (gimple *);
+/* Retain a parameter-independent no-recorder body digest before expansion;
+   unlike lane facts it says nothing about the callee's incoming/outgoing
+   flags or ROW_MASK.  Opaque/recursive bodies never supply a positive.  */
+extern bool rvtt_gimple_direct_issue_p (function *);
+extern void rvtt_gimple_direct_issue_invalidate (function *);
+/* Retained callee-body contracts for RTL.  No new source scan is started;
+   a still-mutable GIMPLE body cannot supply this frozen contract.  FULL
+   selects the conditional FULL-to-FULL summary, not an incoming ABI.  */
+extern bool rvtt_callee_direct_issue_p (tree);
+extern bool rvtt_callee_preserves_lanes_p (tree, bool);
+/* Existing complete TU template audit, consulted without starting a scan.
+   True only for an audited closure member whose MOP templates have no
+   lane-state writes, nested launch, or recorder/playback instruction.  */
+extern bool rvtt_gimple_mop_preserves_lanes_p (function *);
+/* Current-body MUST proof only: every actual launch has all nine safe
+   template slots initialized on every incoming path.  No MAY hook is
+   consulted, so complete-TU producers can validate each audited body
+   without recursively granting their own still-incomplete permission.  */
+extern bool rvtt_gimple_mop_initialized_p (function *);
+/* Narrow current-template value contract, shared by GIMPLE and RTL.  */
+extern bool rvtt_mop_lane_slot_word_p (unsigned, uint32_t);
+/* Registered by the later TU-template analysis.  Before it exists or
+   computes a complete audit, the common substrate must fail closed.  */
+extern bool (*rvtt_mop_lane_proof_hook) (function *);
+/* Separate complete-TU proofs: absence of any recorder, and preservation
+   by opaque delivery channels.  Neither supplies an incoming lane ABI.  */
+extern bool (*rvtt_tu_no_recorder_hook) (function *);
+extern bool (*rvtt_tu_opaque_lane_hook) (function *);
+/* Current-position record audit: -1 unknown, 0 swallowed without
+   execution, 1 delivered outside all fully owned capture windows.  */
+extern int (*rvtt_tu_stmt_issue_hook) (function *, gimple *);
+/* Conservative unsigned 32-bit bounds for a delivered instruction word.
+   Unknown operands span all bits; arithmetic overflow is never assumed
+   absent merely because the source resembles a TT_OP macro.  */
+extern bool rvtt_gimple_word_bounds (tree, uint32_t *, uint32_t *, unsigned = 0);
+
 /* Argument N of CALL as a host integer, or -1 when it is not a literal
    INTEGER_CST.  */
 extern long rvtt_call_int_arg (const gcall *call, unsigned n);

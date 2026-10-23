@@ -39,6 +39,11 @@ struct rvtt_mop_derive_state
      word then fails with SLOT_REASON.  */
   bool slots_refused = false;
   char slot_reason[192];
+  // Preserve diagnostic-only refusal text when a lane consumer demands
+  // the audit before the PRGM pass opens its dump.  No GIMPLE pointers
+  // or additional permissions are retained here.
+  struct slot_refusal { char text[192]; };
+  auto_vec<slot_refusal, 8> slot_refusals;
 
   /* The TU-wide CC/lane-enable check uses the same scan.  Every
      refusal marks the TU CC-dirty unless the refused statement is a
@@ -131,6 +136,19 @@ extern bool rvtt_mop_derive_store (gimple *stmt, unsigned *claimed,
    idiom (store, reload, consume), which classifies like a plain
    store.  */
 extern bool rvtt_mop_blocking_store_asm_p (const gasm *stmt);
+/* Exact operands shared by MAY admission and the current-CFG MUST proof. */
+extern bool rvtt_mop_blocking_store_operands (const gasm *, tree *, tree *);
+enum rvtt_mop_delivery_event
+{
+  RVTT_MOP_NO_DELIVERY,
+  RVTT_MOP_PROVEN_NON_MOP,
+  RVTT_MOP_MAY_LAUNCH,
+  RVTT_MOP_DELIVERY_UNKNOWN
+};
+/* PURE classification of all admitted delivery channels.  UNKNOWN vetoes
+   the entire initialization certificate; it is not evidence of no launch.
+   No complete-TU scan or callback is consulted or started. */
+extern rvtt_mop_delivery_event rvtt_mop_gimple_delivery (gimple *);
 extern bool rvtt_mop_derive_asm_store (const gasm *stmt, unsigned *claimed,
 				       const char **why,
 				       rvtt_mop_derive_state *st);

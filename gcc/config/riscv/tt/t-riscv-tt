@@ -48,6 +48,7 @@ MULTILIB_EXTRA_OPTS :=
 RVTT_OBJS := rvtt.o \
 	rvtt-refuse.o \
 	rvtt-effects.o \
+	rvtt-rtl-lane-state.o \
 	rvtt-raw-boundary.o \
 	rvtt-macro-ownership.o \
 	rvtt-macro-tables.o \

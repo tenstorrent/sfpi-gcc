@@ -8,6 +8,6 @@ void foo () {
 **_Z3foov:
 **	SFPLOADI	L0, 4368, 2
 **	SFPLOADI	L0, 16256, 8	# LV:L0
-**	SFPCONFIG	0, 0, 0	# R:L0 CFG:0
+**	SFPCONFIG	6, 0, 0	# R:L0 CFG:6
 **	ret
 */

@@ -30,8 +30,9 @@ along with GCC; see the file COPYING3.  If not see
    programmable in this TU touches owned state unaudited.  Slots 0..1
    are loop lengths or flags under both MOP types and never expand as
    instructions; every value stored in slots 2..8 must decode through
-   the audited table (rvtt-mop-tables.h).  A MOP that runs with no
-   in-TU programming expands the audited thread-entry template state.
+   the audited table (rvtt-mop-tables.h).  This MAY audit supplies no
+   thread-entry template state: a separate current-CFG MUST proof is
+   required before an actual launch can certify physical issuance.
 
    A volatile store of a raw instruction word delivers or programs
    Tensix work just as a `.ttinsn' word does, so stores are scanned
@@ -46,10 +47,9 @@ along with GCC; see the file COPYING3.  If not see
    is the FIFO and its stored word is classified; any other address
    refuses.
 
-   Runtime-composed words classify by the constant opcode base of
-   their PLUS/BIT_IOR composition, and are admissible only for opcode
-   classes the table admits for every field value (AXIOM
-   tt-op-field-discipline, rvtt-mop-tables.h).
+   Runtime-composed words require unsigned bounds proving that their
+   opcode cannot change, and an opcode class the table admits for every
+   remaining field value.  No field-discipline axiom supplies a bound.
 
    The C runtime's init-array walk is an indirect call that would
    otherwise refuse the TU; rvtt_mop_init_array_call_p admits it when
@@ -351,10 +351,9 @@ scanned_field_ref (tree ref, rvtt_mop_scan_ctx *ctx, tree *var, tree *field)
   return false;
 }
 
-/* Classify the 32-bit word VAL by the constant opcode base of its
-   PLUS / BIT_IOR composition (AXIOM tt-op-field-discipline,
-   rvtt-mop-tables.h).  Returns the frontend opcode byte, or -1 when no
-   constant base pins it.  */
+/* Classify only when actual unsigned bounds pin the opcode byte.
+   Source macro field discipline is not a proof: an unmasked operand
+   can carry into the opcode and deliver a recorder instruction.  */
 
 static int
 pushed_word_opcode_byte (tree val, unsigned depth = 0,
@@ -368,52 +367,15 @@ pushed_word_opcode_byte (tree val, unsigned depth = 0,
     if (bound != val)
       return pushed_word_opcode_byte (bound, depth + 1, c);
   }
-  if (TREE_CODE (val) == INTEGER_CST)
-    {
-      if (!tree_fits_uhwi_p (val) && !tree_fits_shwi_p (val))
-	return -1;
-      unsigned HOST_WIDE_INT w = TREE_INT_CST_LOW (val) & 0xffffffff;
-      return (int) (w >> 24);
-    }
-  if (TREE_CODE (val) == SSA_NAME)
-    {
-      gimple *def = SSA_NAME_DEF_STMT (val);
-      if (!def || !is_gimple_assign (def))
-	return -1;
-      tree_code code = gimple_assign_rhs_code (def);
-      if (code == PLUS_EXPR || code == BIT_IOR_EXPR)
-	{
-	  int a = pushed_word_opcode_byte (gimple_assign_rhs1 (def),
-					   depth + 1, ctx);
-	  int b = pushed_word_opcode_byte (gimple_assign_rhs2 (def),
-					   depth + 1, ctx);
-	  /* Exactly one side carries the opcode base; two competing
-	     bases (or none) leave the word unclassified.  */
-	  if (a > 0 && b <= 0)
-	    return a;
-	  if (b > 0 && a <= 0)
-	    return b;
-	  if (a == 0 && b == 0)
-	    return 0;
-	  return -1;
-	}
-      if (CONVERT_EXPR_CODE_P (code) || code == SSA_NAME || code == NOP_EXPR)
-	return pushed_word_opcode_byte (gimple_assign_rhs1 (def),
-					depth + 1, ctx);
-      /* Shifted single fields below the opcode byte cannot construct
-	 an opcode by themselves under the discipline axiom.  */
-      if (code == LSHIFT_EXPR || code == BIT_AND_EXPR || code == RSHIFT_EXPR)
-	return 0;
-      return -1;
-    }
-  return -1;
+  uint32_t lo, hi;
+  return rvtt_gimple_word_bounds (val, &lo, &hi)
+    && (lo >> 24) == (hi >> 24) ? (int) (lo >> 24) : -1;
 }
 
 /* A composed (non-constant) word with constant opcode base BASE is
    admissible exactly when the audited table admits opcode BASE for
-   every field value: under the field-discipline axiom the runtime
-   operands stay inside their bit fields, but which fields they occupy
-   is unknown, so any field the table reads (SFPLOADI dest, SFPCONFIG
+   every field value.  Bounds pin the opcode, but which lower fields
+   runtime operands occupy is unknown, so any field the table reads (SFPLOADI dest, SFPCONFIG
    dest/mod/imm) could be runtime and the class refuses.  */
 
 static bool
@@ -581,9 +543,11 @@ record_slot_refusal (rvtt_mop_derive_state *st, unsigned slot,
 	      (unsigned) (tree_to_uhwi (value) & 0xffffffff));
   else
     snprintf (out, outsz, "%s%s (template slot %u)", pfx, why, slot);
+  rvtt_mop_derive_state::slot_refusal diagnostic;
+  snprintf (diagnostic.text, sizeof diagnostic.text, "%s", out);
+  st->slot_refusals.safe_push (diagnostic);
   if (dump_file)
     {
-      fprintf (dump_file, "prgm-const: mop-derive: %s\n", out);
       if (value)
 	{
 	  fprintf (dump_file, "prgm-const: mop-derive: refusing value: ");
@@ -684,12 +648,9 @@ static addr_class classify_pointer_base (tree ptr, hash_set<tree> &visiting,
 					 hash_set<tree> *parm_visiting
 					   = nullptr);
 
-/* Caller-closure join for a pointer PARAMETER: the parameter's targets
-   are DATA if every call site in the TU passes a DATA-class argument.
-   This is sound because the function is not address-taken, so every
-   call is a direct cgraph edge, and under AXIOM kernel-single-TU no
-   other translation unit can call it.  Recursion through a caller's
-   own parameter is depth-limited and cycle-refused.  */
+/* Caller-closure join for a genuinely private bound pointer parameter.
+   Public/forced entry bodies have unenumerable external sites, and an
+   empty caller set supplies no nonvacuous argument proof.  */
 
 static bool
 param_points_to_data_p (tree parm, hash_set<tree> &parm_visiting,
@@ -701,8 +662,12 @@ param_points_to_data_p (tree parm, hash_set<tree> &parm_visiting,
   if (!fndecl || TREE_CODE (fndecl) != FUNCTION_DECL)
     return false;
   cgraph_node *cn = cgraph_node::get (fndecl);
-  if (!cn || !cn->definition || cn->address_taken || cn->alias
-      || cn->thunk || cn->clones)
+  if (!cn || TREE_PUBLIC (fndecl) || !cn->definition
+      || !cn->binds_to_current_def_p () || cn->address_taken || cn->alias
+      || cn->thunk || cn->clones || !cn->callers || cn->force_output
+      || cn->forced_by_abi || DECL_PRESERVE_P (fndecl)
+      || DECL_STATIC_CONSTRUCTOR (fndecl) || DECL_STATIC_DESTRUCTOR (fndecl)
+      || lookup_attribute ("interrupt", DECL_ATTRIBUTES (fndecl)))
     return false;
   int idx = -1, i = 0;
   for (tree p = DECL_ARGUMENTS (fndecl); p; p = DECL_CHAIN (p), ++i)
@@ -713,8 +678,6 @@ param_points_to_data_p (tree parm, hash_set<tree> &parm_visiting,
       }
   if (idx < 0)
     return false;
-  /* No callers: the function body is unreachable and the store never
-     executes -- vacuously safe.  */
   for (cgraph_edge *e = cn->callers; e; e = e->next_caller)
     {
       if (!e->call_stmt
@@ -1268,15 +1231,29 @@ rvtt_mop_blocking_store_asm_p (const gasm *stmt)
    outputs of the word classifiers.  */
 
 bool
+rvtt_mop_blocking_store_operands (const gasm *stmt, tree *value, tree *addr)
+{
+  if (!rvtt_mop_blocking_store_asm_p (stmt))
+    return false;
+  const char *s = gimple_asm_string (stmt);
+  bool named = strchr (s, '[') != nullptr;
+  *value = named ? asm_operand_value (stmt, "[raw]", 5)
+		     : asm_operand_value (stmt, "0", 1);
+  *addr = named ? asm_operand_value (stmt, "[ptr]", 5)
+		    : asm_operand_value (stmt, "1", 1);
+  return true;
+}
+
+bool
 rvtt_mop_derive_asm_store (const gasm *stmt, unsigned *claimed,
 			   const char **why, rvtt_mop_derive_state *st)
 {
-  const char *s = gimple_asm_string (stmt);
-  bool named = strchr (s, '[') != nullptr;
-  tree value = named ? asm_operand_value (stmt, "[raw]", 5)
-		     : asm_operand_value (stmt, "0", 1);
-  tree addr = named ? asm_operand_value (stmt, "[ptr]", 5)
-		    : asm_operand_value (stmt, "1", 1);
+  tree value = NULL_TREE, addr = NULL_TREE;
+  if (!rvtt_mop_blocking_store_operands (stmt, &value, &addr))
+    {
+      *why = "unrecognized blocking-store shape";
+      return false;
+    }
   if (!addr)
     {
       *why = "blocking-store address unresolvable";
@@ -1298,6 +1275,303 @@ rvtt_mop_derive_asm_store (const gasm *stmt, unsigned *claimed,
 	     "proven outside the instruction FIFOs";
       return false;
     }
+}
+
+/* Independent delivery extraction for the MUST proof.  It deliberately
+   shares address/operand parsing with MAY admission, but never calls an
+   admission callback or assumes an unresolved word is non-MOP.  */
+
+static rvtt_mop_delivery_event
+mop_delivery_word (tree value, hash_set<tree> &active, unsigned depth = 0)
+{
+  if (!value || depth > 24 || active.add (value))
+    return RVTT_MOP_DELIVERY_UNKNOWN;
+  auto join = [] (rvtt_mop_delivery_event a, rvtt_mop_delivery_event b) {
+    if (a == RVTT_MOP_DELIVERY_UNKNOWN || b == RVTT_MOP_DELIVERY_UNKNOWN)
+      return RVTT_MOP_DELIVERY_UNKNOWN;
+    return a == RVTT_MOP_MAY_LAUNCH || b == RVTT_MOP_MAY_LAUNCH
+      ? RVTT_MOP_MAY_LAUNCH : RVTT_MOP_PROVEN_NON_MOP;
+  };
+  rvtt_mop_delivery_event result = RVTT_MOP_DELIVERY_UNKNOWN;
+  gimple *def = TREE_CODE (value) == SSA_NAME ? SSA_NAME_DEF_STMT (value) : nullptr;
+  if (gphi *phi = def ? dyn_cast<gphi *> (def) : nullptr)
+    {
+      result = RVTT_MOP_PROVEN_NON_MOP;
+      if (!gimple_phi_num_args (phi))
+	result = RVTT_MOP_DELIVERY_UNKNOWN;
+      for (unsigned i = 0; i != gimple_phi_num_args (phi); ++i)
+	result = join (result, mop_delivery_word (gimple_phi_arg_def (phi, i),
+						active, depth + 1));
+    }
+  else if (def && is_gimple_assign (def)
+	   && gimple_assign_rhs_code (def) == COND_EXPR)
+    result = join (mop_delivery_word (gimple_assign_rhs2 (def), active, depth + 1),
+		   mop_delivery_word (gimple_assign_rhs3 (def), active, depth + 1));
+  else if (TREE_CODE (value) == COND_EXPR)
+    result = join (mop_delivery_word (TREE_OPERAND (value, 1), active, depth + 1),
+		   mop_delivery_word (TREE_OPERAND (value, 2), active, depth + 1));
+  else
+    {
+      uint32_t lo, hi;
+      if (rvtt_gimple_word_bounds (value, &lo, &hi))
+	{
+	  if ((lo >> 24) == XTT_MOP_OPCODE && (hi >> 24) == XTT_MOP_OPCODE)
+	    result = RVTT_MOP_MAY_LAUNCH;
+	  else if ((lo >> 24) > XTT_MOP_OPCODE || (hi >> 24) < XTT_MOP_OPCODE)
+	    result = RVTT_MOP_PROVEN_NON_MOP;
+	  /* An unbounded parameter or an unrecognized composition can include
+	     recorder setup as well as MOP.  Its delivery remains UNKNOWN. */
+	}
+    }
+  active.remove (value);
+  return result;
+}
+
+static rvtt_mop_delivery_event
+mop_delivery_at_address (tree value, unsigned HOST_WIDE_INT address)
+{
+  if (address > UINT32_MAX - 3)
+    return RVTT_MOP_DELIVERY_UNKNOWN;
+  if ((address & 3) && !store_range_inert_p (address, address + 3))
+    return RVTT_MOP_DELIVERY_UNKNOWN;
+  if (address >= XTT_INSTRN_BUF_MMIO_BASE && address <= XTT_INSTRN_BUF_MMIO_LIMIT)
+    {
+      if (address != XTT_INSTRN_BUF_MMIO_BASE)
+	return RVTT_MOP_DELIVERY_UNKNOWN;
+      hash_set<tree> active;
+      return mop_delivery_word (value, active);
+    }
+  if (address >= XTT_DEBUG_REGS_MMIO_BASE && address <= XTT_DEBUG_REGS_MMIO_LIMIT)
+    return RVTT_MOP_DELIVERY_UNKNOWN;
+  /* Template writes program future words; PC_BUF writes do not deliver
+     instructions (MAY admission independently checks their allowed offsets). */
+  return RVTT_MOP_NO_DELIVERY;
+}
+
+static bool mop_fifo_buffer_p (tree, unsigned = 0);
+
+static rvtt_mop_delivery_event
+mop_delivery_at_pointer (tree value, tree address)
+{
+  if (!address)
+    return RVTT_MOP_DELIVERY_UNKNOWN;
+  unsigned HOST_WIDE_INT addr;
+  if (pointer_constant_address (address, &addr))
+    return mop_delivery_at_address (value, addr);
+  hash_set<tree> visiting;
+  switch (classify_pointer_base (address, visiting))
+    {
+    case ADDR_DATA:
+      return RVTT_MOP_NO_DELIVERY;
+    case ADDR_INSTRN_FIFO:
+      {
+	if (!mop_fifo_buffer_p (address))
+	  return RVTT_MOP_DELIVERY_UNKNOWN;
+	hash_set<tree> active;
+	return mop_delivery_word (value, active);
+      }
+    default:
+      return RVTT_MOP_DELIVERY_UNKNOWN;
+    }
+}
+
+static bool
+mop_fifo_buffer_p (tree address, unsigned depth)
+{
+  if (!address || depth > 16)
+    return false;
+  if (rvtt_canonical_buffer_arg_p (address))
+    return true;
+  unsigned HOST_WIDE_INT numeric;
+  if (pointer_constant_address (address, &numeric))
+    return numeric == XTT_INSTRN_BUF_MMIO_BASE;
+  STRIP_NOPS (address);
+  if (TREE_CODE (address) == SSA_NAME)
+    {
+      gimple *def = SSA_NAME_DEF_STMT (address);
+      if (def && is_gimple_assign (def)
+	  && (CONVERT_EXPR_CODE_P (gimple_assign_rhs_code (def))
+	      || gimple_assign_rhs_code (def) == SSA_NAME
+	      || gimple_assign_rhs_code (def) == ADDR_EXPR))
+	return mop_fifo_buffer_p (gimple_assign_rhs1 (def), depth + 1);
+      if (def && is_gimple_assign (def)
+	  && gimple_assign_rhs_code (def) == POINTER_PLUS_EXPR
+	  && integer_zerop (gimple_assign_rhs2 (def)))
+	return mop_fifo_buffer_p (gimple_assign_rhs1 (def), depth + 1);
+    }
+  return false;
+}
+
+static bool
+mop_full_word_ref_p (tree lhs)
+{
+  poly_int64 bitsize, bitpos;
+  tree offset;
+  machine_mode mode;
+  int unsignedp, reversep, volatilep = 0;
+  get_inner_reference (lhs, &bitsize, &bitpos, &offset, &mode,
+		       &unsignedp, &reversep, &volatilep);
+  HOST_WIDE_INT size, pos;
+  /* TYPE_SIZE_UNIT describes the bitfield's container, not the actual
+     access.  A partial FIFO write lowers to a read/modify/write whose
+     delivered instruction is not the GIMPLE right-hand-side value. */
+  return bitsize.is_constant (&size) && size == 32
+    && bitpos.is_constant (&pos) && (pos & 7) == 0 && !reversep;
+}
+
+static bool
+mop_store_extent_proven_p (tree lhs, unsigned HOST_WIDE_INT address)
+{
+  tree size = TYPE_SIZE_UNIT (TREE_TYPE (lhs));
+  if (!size || !tree_fits_uhwi_p (size))
+    return false;
+  unsigned HOST_WIDE_INT bytes = tree_to_uhwi (size);
+  if (!bytes || bytes > UINT32_MAX || address > UINT32_MAX - (bytes - 1))
+    return false;
+  unsigned HOST_WIDE_INT end = address + bytes - 1;
+  auto overlap = [&] (unsigned HOST_WIDE_INT base, unsigned HOST_WIDE_INT last) {
+    return address <= last && end >= base;
+  };
+  bool mmio = overlap (XTT_INSTRN_BUF_MMIO_BASE, XTT_INSTRN_BUF_MMIO_LIMIT)
+    || overlap (XTT_MOP_CFG_MMIO_BASE, XTT_MOP_CFG_MMIO_LIMIT)
+    || overlap (XTT_PC_BUF_MMIO_BASE, XTT_PC_BUF_MMIO_LIMIT)
+    || overlap (XTT_DEBUG_REGS_MMIO_BASE, XTT_DEBUG_REGS_MMIO_LIMIT);
+  /* A wide or straddling store can deliver a high half to FIFO word zero
+     or overwrite a template slot even when its starting address is inert. */
+  return !mmio || (bytes == 4 && (address & 3) == 0
+		   && mop_full_word_ref_p (lhs));
+}
+
+rvtt_mop_delivery_event
+rvtt_mop_gimple_delivery (gimple *stmt)
+{
+  if (gasm *a = dyn_cast<gasm *> (stmt))
+    {
+      uint32_t word;
+      if (rvtt_raw_ttinsn_word_p (a, &word))
+	return (word >> 24) == XTT_MOP_OPCODE
+	  ? RVTT_MOP_MAY_LAUNCH : RVTT_MOP_PROVEN_NON_MOP;
+      tree value = NULL_TREE, address = NULL_TREE;
+      if (rvtt_mop_blocking_store_operands (a, &value, &address))
+	return mop_delivery_at_pointer (value, address);
+      const char *s = gimple_asm_string (a);
+      s += strspn (s, " \t");
+      if (!*s || !strcmp (s, "fence") || !strcmp (s, "fence rw,rw")
+	  || !strcmp (s, "ebreak") || !strcmp (s, "la sp, %0")
+	  || !strcmp (s, ".option push\n.option norelax\n"
+		      "la gp, __global_pointer$\n.option pop"))
+	return RVTT_MOP_NO_DELIVERY;
+      return RVTT_MOP_DELIVERY_UNKNOWN;
+    }
+  if (gcall *call = dyn_cast<gcall *> (stmt))
+    {
+      const rvtt_insn_data *id = rvtt_get_insn_data (call);
+      if (id)
+	for (unsigned i = 0; i != gimple_call_num_args (call); ++i)
+	  if (POINTER_TYPE_P (TREE_TYPE (gimple_call_arg (call, i)))
+	      && !mop_fifo_buffer_p (gimple_call_arg (call, i)))
+	    return RVTT_MOP_DELIVERY_UNKNOWN;
+      if (id && id->id == rvtt_insn_data::ttinsn)
+	{
+	  hash_set<tree> active;
+	  return mop_delivery_word (gimple_call_arg (call, 1), active);
+	}
+      tree callee = gimple_call_fndecl (call);
+      if (!id && (gimple_call_internal_p (call)
+		  || (callee && fndecl_built_in_p (callee))))
+	{
+	  /* The TU body walk does not expand compiler/internal builtins.
+	     Atomic stores and memory intrinsics can lower to real FIFO
+	     writes, without an available callee body to audit separately.
+	     Until their delivery targets are modeled, only genuinely
+	     read-only/constant calls have a no-delivery certificate. */
+	  if (gimple_vdef (call)
+	      || !(gimple_call_flags (call) & (ECF_CONST | ECF_PURE)))
+	    return RVTT_MOP_DELIVERY_UNKNOWN;
+	  return RVTT_MOP_NO_DELIVERY;
+	}
+      /* Ordinary calls are not direct stores here.  They still clear the
+	 local template mask unless independently preserving, and a complete
+	 certificate requires their separately audited available bodies. */
+      return RVTT_MOP_NO_DELIVERY;
+    }
+  if (!is_gimple_assign (stmt))
+    {
+      switch (gimple_code (stmt))
+	{
+	case GIMPLE_COND: case GIMPLE_GOTO: case GIMPLE_SWITCH:
+	case GIMPLE_RETURN: case GIMPLE_LABEL: case GIMPLE_NOP:
+	case GIMPLE_PREDICT: case GIMPLE_DEBUG:
+	  return RVTT_MOP_NO_DELIVERY;
+	default:
+	  /* Atomic, transactional and future unmodeled statement forms have
+	     no implicit permission to hide an instruction-delivery store. */
+	  return RVTT_MOP_DELIVERY_UNKNOWN;
+	}
+    }
+  if (!gimple_store_p (stmt) || gimple_clobber_p (stmt))
+    return RVTT_MOP_NO_DELIVERY;
+  tree lhs = gimple_assign_lhs (stmt), value = gimple_assign_rhs1 (stmt);
+  unsigned HOST_WIDE_INT address;
+  rvtt_mop_delivery_event result;
+  if (ref_constant_address (lhs, &address))
+    {
+      if (!mop_store_extent_proven_p (lhs, address))
+	return RVTT_MOP_DELIVERY_UNKNOWN;
+      result = mop_delivery_at_address (value, address);
+    }
+  else
+    {
+      tree base = get_base_address (lhs);
+      if (!TREE_THIS_VOLATILE (lhs)
+	  && (!base || !DECL_P (base) || !TREE_THIS_VOLATILE (base)))
+	return RVTT_MOP_NO_DELIVERY;
+      if (base && DECL_P (base))
+	{
+	  addr_class cls = classify_decl_base (base);
+	  if (cls == ADDR_INSTRN_FIFO)
+	    {
+	      hash_set<tree> active;
+	      result = mop_delivery_word (value, active);
+	    }
+	  else
+	    result = cls == ADDR_DATA ? RVTT_MOP_NO_DELIVERY
+	      : RVTT_MOP_DELIVERY_UNKNOWN;
+	}
+      else if (base && TREE_CODE (base) == MEM_REF)
+	result = mop_delivery_at_pointer (value, TREE_OPERAND (base, 0));
+      else
+	result = RVTT_MOP_DELIVERY_UNKNOWN;
+      if (result == RVTT_MOP_DELIVERY_UNKNOWN)
+	{
+	  unsigned HOST_WIDE_INT lo, hi;
+	  if (bounded_iv_store_range (stmt, lhs, &lo, &hi) && store_range_inert_p (lo, hi))
+	    return RVTT_MOP_NO_DELIVERY;
+	}
+      if (result == RVTT_MOP_MAY_LAUNCH || result == RVTT_MOP_PROVEN_NON_MOP)
+	{
+	  poly_int64 bitsize, bitpos;
+	  tree offset;
+	  machine_mode mode;
+	  int unsignedp, reversep, volatilep = 0;
+	  tree inner = get_inner_reference (lhs, &bitsize, &bitpos, &offset,
+					  &mode, &unsignedp, &reversep, &volatilep);
+	  HOST_WIDE_INT pos;
+	  if (offset || !bitpos.is_constant (&pos) || pos != 0 || !inner
+	      || (TREE_CODE (inner) == MEM_REF
+		  && !integer_zerop (TREE_OPERAND (inner, 1))))
+	    return RVTT_MOP_DELIVERY_UNKNOWN;
+	}
+    }
+  if (result != RVTT_MOP_NO_DELIVERY)
+    {
+      tree size = TYPE_SIZE_UNIT (TREE_TYPE (lhs));
+
+      if (!size || !tree_fits_uhwi_p (size) || tree_to_uhwi (size) != 4
+	  || !mop_full_word_ref_p (lhs))
+	return RVTT_MOP_DELIVERY_UNKNOWN;
+    }
+  return result;
 }
 
 /* ------------------------------------------------------------------ */

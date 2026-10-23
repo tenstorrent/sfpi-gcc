@@ -135,7 +135,9 @@ struct rvtt_cc_canonical_body
 extern rvtt_cc_canonical_body rvtt_loop_cc_canonical_body (class loop *loop);
 
 /* Return true if STMT is an SFPENCC whose encoded word equals
-   rvtt_macro::sfpencc_all_lanes_word.  */
+   rvtt_macro::sfpencc_all_lanes_word AND the independent ROW_MASK proof
+   establishes that every lane is enabled after it.  For the encoding-only
+   predicate use rvtt_encc_all_lanes_call_p; it proves column flags only.  */
 extern bool rvtt_all_lanes_encc_p (gimple *stmt);
 
 /* Return true if CALL is an SFPU immediate load (sfpxloadi of constant
