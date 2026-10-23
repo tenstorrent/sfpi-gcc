@@ -1,10 +1,12 @@
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -fno-unroll-loops -mtt-tensix-optimize-invariant-loadi -mtt-tensix-optimize-crossloop-hoist -fdump-tree-rvtt_crossloop" }
-// Check that the hoist refuses to edit a function outside the rooted closure (an
-// orphan the scan never audited).
-// { dg-final { scan-tree-dump "refused .crossloop-caller-unrooted." "rvtt_crossloop" } }
+// A genuinely private unreferenced body is dead, not another public ABI entry.
 // { dg-final { scan-tree-dump-not "hoisted across" "rvtt_crossloop" } }
+// { dg-final { scan-assembler-not "_Z11xlho_kerneli" } }
 
-__attribute__((noinline)) void
+#ifndef XLHO_KERNEL_LINKAGE
+#define XLHO_KERNEL_LINKAGE static
+#endif
+__attribute__((noinline)) XLHO_KERNEL_LINKAGE void
 xlho_kernel (int tiles)
 {
   for (int t = 0; t != tiles; ++t)
@@ -22,7 +24,6 @@ xlho_kernel (int tiles)
     }
 }
 
-// The anchor: with an in-TU `_start' the reset vector is the image's
-// only external entry, so the uncalled public kernel above is outside
-// the rooted closure (an orphaned body under the scan model).
+// An anchor does not hide other public definitions. The paired public-entry
+// fixture requires actual hoisting in the otherwise identical live body.
 extern "C" void _start () { }

@@ -10,9 +10,11 @@ extern volatile unsigned long __instrn_buffer[];
 void
 xlh_ccgeneral_fire (int tiles)
 {
-  /* Entry-state spoiler: a balanced frame BEFORE the loops leaves the
-     backward all-lanes proof unproven (its block's last CC event is a
-     popc, not an all-lanes reset).  */
+  // Prove physical full lanes; do not infer an entry-state ABI.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
+  /* A balanced frame is not itself a lane-state spoiler: POP restores
+     the proven full state.  Establish partial flags explicitly below.  */
   {
     auto xs = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 6, 7);
     __builtin_rvtt_sfppushc (0);
@@ -21,6 +23,7 @@ xlh_ccgeneral_fire (int tiles)
     __builtin_rvtt_sfpstore (nullptr, zs, 0, 0, 0, 6, 7);
     __builtin_rvtt_sfppopc (0);
   }
+  __builtin_rvtt_sfpencc (10, 0);
   for (int t = 0; t != tiles; ++t)
     {
       __asm__ __volatile__ (".ttinsn %0" : : "n" (0x37000104));
