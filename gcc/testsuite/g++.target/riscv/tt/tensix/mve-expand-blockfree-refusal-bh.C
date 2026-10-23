@@ -6,6 +6,9 @@
 
 void mve_blockfree_row ()
 {
+  // Establish physical full lanes independently of the entry ABI.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   for (unsigned r = 0; r != 32; ++r)
     {
       auto x = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 7);

@@ -77,6 +77,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt.h"
 #include "tm-preds.h"
 #include "rvtt-effects.h"
+#include "rvtt-rtl-lane-state.h"
 #include "rvtt-macro-tables.h"
 #include "rvtt-raw-boundary.h"
 #include "rvtt-macro-region.h"
@@ -2512,48 +2513,13 @@ crp_node (basic_block bb, rtx_insn *insn, ls_node *node)
   return true;
 }
 
-/* Return true if all lanes are enabled at the loop's entry: walking
-   backwards from the loop's preheader through single-predecessor blocks,
-   the nearest CC writer must be the all-lanes restore, or the walk
-   reaches the function entry.  Anything else is refused.  */
-
+/* A loop-entry proof needs flags and ROW_MASK, not just an ENCC word.  */
 static bool
 crp_entry_all_lanes_p (basic_block bb, basic_block preheader)
 {
-  basic_block cur = preheader;
-  while (true)
-    {
-      for (rtx_insn *insn = BB_END (cur);
-	   insn && insn != PREV_INSN (BB_HEAD (cur));
-	   insn = PREV_INSN (insn))
-	{
-	  if (!NONDEBUG_INSN_P (insn))
-	    continue;
-	  if (CALL_P (insn) || asm_noperands (PATTERN (insn)) >= 0)
-	    return crp_refuse (bb, "crossrow-pairing-entry-cc-unproven", insn);
-	  if (GET_CODE (insn) != INSN
-	      || GET_CODE (PATTERN (insn)) == USE
-	      || GET_CODE (PATTERN (insn)) == CLOBBER)
-	    continue;
-	  if (recog_memoized (insn) < 0
-	      || get_attr_type (insn) != TYPE_TENSIX)
-	    continue;	/* scalar insns do not touch lane state */
-	  if (!get_attr_length (insn))
-	    continue;	/* zero-length marker */
-	  xtt_effect_set e = rvtt_insn_effects (insn);
-	  if (e.opaque)
-	    return crp_refuse (bb, "crossrow-pairing-entry-cc-unproven", insn);
-	  if (e.cc_write_all_lanes)
-	    return true;
-	  if (e.cc_write)
-	    return crp_refuse (bb, "crossrow-pairing-entry-cc-unproven", insn);
-	}
-      if (!single_pred_p (cur))
-	return crp_refuse (bb, "crossrow-pairing-entry-cc-unproven");
-      cur = single_pred (cur);
-      if (cur == ENTRY_BLOCK_PTR_FOR_FN (cfun))
-	return true;
-    }
+  rvtt_rtl_lane_facts lanes (cfun);
+  return lanes.block_out (preheader) == RVTT_RTL_ALL_LANES
+    || crp_refuse (bb, "crossrow-pairing-entry-cc-unproven");
 }
 
 /* Check the structure of the whole loop.  Refuse silently only when BB

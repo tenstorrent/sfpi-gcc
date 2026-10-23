@@ -7,6 +7,8 @@
 
 void arbitrary_packet_transform ()
 {
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   for (unsigned packet = 0; packet != 24; ++packet)
     {
       auto north = __builtin_rvtt_sfpload (nullptr, 4, 0, 0, 0, 7);

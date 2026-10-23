@@ -9,6 +9,8 @@
 
 void owner_init (void)
 {
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   auto c6 = __builtin_rvtt_sfpxloadi (nullptr, 0x3bc0919e, 0, 0, 31);
   __builtin_rvtt_sfpwriteconfig_v (c6, 0, 12);
   auto c5 = __builtin_rvtt_sfpxloadi (nullptr, 0xbd887f48, 0, 0, 31);
@@ -19,6 +21,8 @@ void owner_init (void)
 
 void tanh_row (void)
 {
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   auto c6 = __builtin_rvtt_sfpxloadi (nullptr, 0x3bc0919e, 0, 0, 31);
   auto c5 = __builtin_rvtt_sfpxloadi (nullptr, 0xbd887f48, 0, 0, 31);
   auto c4 = __builtin_rvtt_sfpxloadi (nullptr, 0x3e905782, 0, 0, 31);

@@ -5,6 +5,8 @@
 
 void carried_accumulator_row (void)
 {
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   auto acc = __builtin_rvtt_sfpxloadi (nullptr, 0x3f800000, 0, 0, 31);
   auto k5 = __builtin_rvtt_sfpxloadi (nullptr, 0x3f000000, 0, 0, 31);
   auto k6 = __builtin_rvtt_sfpxloadi (nullptr, 0x3e800000, 0, 0, 31);

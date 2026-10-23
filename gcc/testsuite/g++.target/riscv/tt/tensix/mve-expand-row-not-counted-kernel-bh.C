@@ -6,6 +6,9 @@
 
 void mve_region_owed ()
 {
+  // Establish physical full lanes independently of the entry ABI.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   for (int d = 0; d < 32; ++d)
     {
       auto v = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 7);
