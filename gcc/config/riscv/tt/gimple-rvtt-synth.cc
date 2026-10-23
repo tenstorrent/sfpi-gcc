@@ -393,6 +393,10 @@ cse (function *fn)
 static unsigned
 renumber (function *fn)
 {
+  // FIXME: bailout until we can get this better.
+  static bool too_complex = false;
+  too_complex = false;
+
   struct node_t
   {
     gimple *stmt;
@@ -447,12 +451,14 @@ renumber (function *fn)
 	  }
 	else if (auto *add_stmt = dyn_cast <gassign *> (use_stmt))
 	  {
-	    // an add
-	    gcc_assert (gimple_assign_rhs_code (add_stmt) == PLUS_EXPR);
+	    // an add (or subtract)
+	    auto code = gimple_assign_rhs_code (add_stmt);
+	    gcc_assert (code == PLUS_EXPR || code == MINUS_EXPR);
 	    tree opcode_arg = gimple_assign_rhs1 (add_stmt);
 	    bool is_op2 = opcode_arg != ssa_var;
 	    gcc_assert (!is_op2
-			|| gimple_assign_rhs2 (add_stmt) == ssa_var);
+			|| (code == PLUS_EXPR
+			    && gimple_assign_rhs2 (add_stmt) == ssa_var));
 
 	    unsigned this_add_ix = graph.size ();
 	    unsigned this_first_add_ix = this_add_ix;
@@ -462,19 +468,26 @@ renumber (function *fn)
 	    if (TREE_CODE (other) == INTEGER_CST)
 	      {
 		gcc_assert (first_add_ix || !this_addend);
-		this_addend += TREE_INT_CST_LOW (other);
+		auto val = TREE_INT_CST_LOW (other);
+		if (code == MINUS_EXPR)
+		  val = -val;
+		this_addend += val;
 		this_first_add_ix = first_add_ix;
 	      }
 	    else
 	      {
-		gcc_assert (!first_add_ix);
-		if (this_addend)
+		if (first_add_ix)
+		  too_complex = true;
+		else if (this_addend)
 		  self_add_ix = this_add_ix;
 	      }
+
 	    if (dump_file)
 	      {
-		fprintf (dump_file, "%u:Add of %u, via %u ",
-			 unsigned (graph.size ()), opcode_ix, self_add_ix);
+		fprintf (dump_file, "%u:%s of %u, via %u ",
+			 unsigned (graph.size ()),
+			 code == PLUS_EXPR ? "Add" : "Sub",
+			 opcode_ix, self_add_ix);
 		print_gimple_stmt (dump_file, add_stmt, 0);
 	      }
 	    graph.emplace_back (node_t::add (add_stmt, opcode_ix, self_add_ix,
@@ -506,6 +519,7 @@ renumber (function *fn)
 		// The PHI is merging synth_opcode values themselves. Stop
 		// following, and then we'll not touch qnything here.
 	      }
+
 	    if (dump_file)
 	      {
 		fprintf (dump_file, "Phi use of %s %u ", first_add_ix ? "add" : "opcode",
@@ -546,6 +560,12 @@ renumber (function *fn)
 	    }
 	}
 
+  if (too_complex)
+    {
+      if (dump_file)
+	fprintf (dump_file, "\nGraph is too complex\n");
+      return 0;
+    }
   if (dump_file)
     fprintf (dump_file, "\nProcessing graph\n");
 
@@ -559,10 +579,6 @@ renumber (function *fn)
       gcc_assert (node.used);
       if (!node.add_ix && !node.addend)
 	{
-	  if (node.phi_use)
-	    // Has a phi_use, do not alter this add
-	    continue;
-
 	  auto &opcode_slot = graph[node.opcode_ix];
 	  if (!--opcode_slot.addend)
 	    {
