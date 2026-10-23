@@ -313,37 +313,11 @@ private:
 void
 crosslane_transform::compute_lane_states ()
 {
-  bool changed = true;
-  while (changed)
-    {
-      changed = false;
-      basic_block bb;
-      FOR_EACH_BB_FN (bb, m_fn)
-	{
-	  bool state = bb_in_clean (bb);
-	  for (gimple_stmt_iterator gsi = gsi_start_bb (bb); !gsi_end_p (gsi);
-	       gsi_next (&gsi))
-	    switch (classify_stmt (gsi_stmt (gsi)))
-	      {
-	      case SC_SKIP: case SC_SAFE:
-		break;
-	      case SC_ENCC_ALL:
-		state = true;
-		break;
-	      default:
-		state = false;
-		break;
-	      }
-	  if (state != bitmap_bit_p (m_clean_out, bb->index))
-	    {
-	      if (state)
-		bitmap_set_bit (m_clean_out, bb->index);
-	      else
-		bitmap_clear_bit (m_clean_out, bb->index);
-	      changed = true;
-	    }
-	}
-    }
+  rvtt_gimple_lane_facts facts (m_fn);
+  basic_block bb;
+  FOR_EACH_BB_FN (bb, m_fn)
+    if (facts.block_out (bb) == RVTT_LANE_ALL)
+      bitmap_set_bit (m_clean_out, bb->index);
 }
 
 /* IN lane state of BB from the current OUT solution: proven
@@ -369,26 +343,8 @@ crosslane_transform::bb_in_clean (basic_block bb)
 bool
 crosslane_transform::lane_state_before (gimple *stmt)
 {
-  basic_block bb = gimple_bb (stmt);
-  bool state = bb_in_clean (bb);
-  for (gimple_stmt_iterator gsi = gsi_start_bb (bb); !gsi_end_p (gsi);
-       gsi_next (&gsi))
-    {
-      if (gsi_stmt (gsi) == stmt)
-	return state;
-      switch (classify_stmt (gsi_stmt (gsi)))
-	{
-	case SC_SKIP: case SC_SAFE:
-	  break;
-	case SC_ENCC_ALL:
-	  state = true;
-	  break;
-	default:
-	  state = false;
-	  break;
-	}
-    }
-  return false;
+  rvtt_gimple_lane_facts facts (m_fn);
+  return facts.before (stmt) == RVTT_LANE_ALL;
 }
 
 /* No CC-state change strictly between FROM and TO (same BB, FROM before
@@ -1109,9 +1065,11 @@ crosslane_transform::refold_swaps ()
    The dual-bank transpose is lowered as one inline frame
    (sfpi_crosslane.h transp8):
 
-     r = SFPTRANSP8 (v0, v1, v2, v3, c0, c1, c2, c3)
-     select4 (r, 0..3)  [each optionally threaded via assign_lv]
-     readlreg (4..7)    [each optionally threaded via assign_lv]
+     r = SFPTRANSP (v0, v1, v2, v3, c0, c1, c2, c3)
+     select8 (r, 0..7)  [each optionally threaded via assign_lv]
+
+   The earlier proprietary SFPTRANSP8/select4/readlreg frame is also
+   accepted for callers that have not moved to the upstream tuple API.
 
    The frame's eight outputs are the threaded lhs values; its inputs
    are the call operands.  */
@@ -1125,11 +1083,11 @@ struct transp8_frame
   gimple *last;			/* last constituent in program order */
 };
 
-/* Parse the canonical transp8 inline frame anchored at CALL into FR:
-   the SFPTRANSP8 call, the four bank-A selects on its tuple (each
-   optionally threaded through an assign), and up to four trailing
-   bank-B readlreg (4..7) reads.  Missing companion reads leave their
-   out[] slot null.  Returns false when the shape does not match; on
+/* Parse either transp8 inline frame anchored at CALL into FR: the
+   upstream eight-result tuple, or the legacy four-result tuple followed
+   by companion-bank reads.  Every select may be threaded through an
+   assign.  Missing companion outputs leave their out[] slot null.
+   Returns false when the shape does not match; on
    success FR lists every constituent statement and the last one in
    program order.  */
 
@@ -1137,8 +1095,10 @@ static bool
 match_transp8_frame (gcall *call, transp8_frame *fr)
 {
   const rvtt_insn_data *insnd = rvtt_get_insn_data (call);
-  if (!insnd || insnd->id != rvtt_insn_data::sfptransp8)
+  if (!insnd || (insnd->id != rvtt_insn_data::sfptransp8
+		 && insnd->id != rvtt_insn_data::sfptransp))
     return false;
+  const bool full_tuple = insnd->id == rvtt_insn_data::sfptransp;
   if (gimple_call_num_args (call) != 8 || !gimple_call_lhs (call))
     return false;
   fr->call = call;
@@ -1154,7 +1114,7 @@ match_transp8_frame (gcall *call, transp8_frame *fr)
   basic_block bb = gimple_bb (call);
   tree tup = gimple_call_lhs (call);
 
-  /* Bank A: the four selects on the tuple.  */
+  /* Tuple outputs: both banks upstream, bank A in the legacy form.  */
   {
     imm_use_iterator it;
     gimple *use;
@@ -1162,11 +1122,13 @@ match_transp8_frame (gcall *call, transp8_frame *fr)
       {
 	gcall *sel = dyn_cast <gcall *> (use);
 	const rvtt_insn_data *seld = sel ? rvtt_get_insn_data (sel) : nullptr;
-	if (!seld || seld->id != rvtt_insn_data::sfpselect4
+	if (!seld || seld->id != (full_tuple ? rvtt_insn_data::sfpselect8
+					  : rvtt_insn_data::sfpselect4)
 	    || gimple_bb (sel) != bb)
 	  return false;
 	unsigned idx;
-	if (!rvtt_call_const_uarg (sel, 1, &idx) || idx >= 4 || fr->out[idx])
+	if (!rvtt_call_const_uarg (sel, 1, &idx)
+	    || idx >= (full_tuple ? 8u : 4u) || fr->out[idx])
 	  return false;
 	tree v = gimple_call_lhs (sel);
 	fr->stmts.push_back (sel);
@@ -1180,6 +1142,8 @@ match_transp8_frame (gcall *call, transp8_frame *fr)
     if (!fr->out[i])
       return false;
 
+  /* Bank B of the upstream form is already represented by tuple selects.
+     Missing selects are dead outputs, not implicit hard-register reads.  */
   /* Bank B: the readlreg (4..7) reads following the call.  Dead
      companion outputs are DCE'd before this pass runs, so between zero
      and four reads appear; collect until the first statement that is
@@ -1187,7 +1151,7 @@ match_transp8_frame (gcall *call, transp8_frame *fr)
      (anything else could redefine the companion bank).  Missing reads
      leave their out[] slot null (an unused output).  */
   gimple_stmt_iterator gsi = gsi_for_stmt (call);
-  while (true)
+  while (!full_tuple)
     {
       gsi_next (&gsi);
       if (gsi_end_p (gsi))
@@ -1669,7 +1633,8 @@ crosslane_transform::collapse_zip_chains ()
 	{
 	  gcall *c = dyn_cast <gcall *> (gsi_stmt (gsi));
 	  const rvtt_insn_data *d = c ? rvtt_get_insn_data (c) : nullptr;
-	  if (!d || d->id != rvtt_insn_data::sfptransp8)
+	  if (!d || (d->id != rvtt_insn_data::sfptransp8
+		     && d->id != rvtt_insn_data::sfptransp))
 	    continue;
 	  zip_frame zf;
 	  if (match_zip_frame (c, &zf))

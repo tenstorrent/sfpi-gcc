@@ -8,6 +8,7 @@ using namespace sfpi;
 void zip_round_trip ()
 {
   __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   vFloat a = dst_reg[0], b = dst_reg[2];
   rowvec_zip (a, b);
   rowvec_zip (a, b);
@@ -20,6 +21,7 @@ void zip_round_trip ()
 void unzip_stays ()
 {
   __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   vFloat x = dst_reg[8], y = dst_reg[10];
   rowvec_unzip (x, y);
   dst_reg[12] = x;

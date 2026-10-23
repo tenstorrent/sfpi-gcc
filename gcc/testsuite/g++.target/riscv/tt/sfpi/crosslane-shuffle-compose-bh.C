@@ -8,6 +8,7 @@ using namespace sfpi;
 void shuffled_round_trip ()
 {
   __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   vFloat v = dst_reg[0];
   // rotation by 2: result[col] = v[(col - 2) & 7].
   vFloat a = shuffle<6, 7, 0, 1, 2, 3, 4, 5> (v);
@@ -19,6 +20,7 @@ void shuffled_round_trip ()
 void shuffled_compose ()
 {
   __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   vFloat w = dst_reg[4];
   vFloat c = shuffle<3, 4, 5, 6, 7, 0, 1, 2> (w);	// rot 5
   vFloat d = shuffle<7, 0, 1, 2, 3, 4, 5, 6> (c);	// rot 1

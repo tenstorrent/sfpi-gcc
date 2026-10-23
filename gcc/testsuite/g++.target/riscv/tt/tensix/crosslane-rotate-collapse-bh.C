@@ -7,6 +7,7 @@
 void full_turn ()
 {
   __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   auto v = __builtin_rvtt_sfpreadlreg (0);
   auto r = ROR1 (ROR1 (ROR1 (ROR1 (ROR1 (ROR1 (ROR1 (ROR1 (v))))))));
   __builtin_rvtt_sfpwritelreg (r, 1);
@@ -16,6 +17,7 @@ void full_turn ()
 void spun_thrice_plus_four ()
 {
   __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   auto seed = __builtin_rvtt_sfploadi (nullptr, 0x41c8, 0, 0, 0);
   auto q1 = ROR1 (ROR1 (ROR1 (ROR1 (seed))));
   auto q2 = ROR1 (ROR1 (ROR1 (ROR1 (q1))));
@@ -28,6 +30,7 @@ void spun_thrice_plus_four ()
 void five_stays ()
 {
   __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   auto w = __builtin_rvtt_sfpreadlreg (2);
   auto s = ROR1 (ROR1 (ROR1 (ROR1 (ROR1 (w)))));
   __builtin_rvtt_sfpwritelreg (s, 3);

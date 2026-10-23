@@ -4,6 +4,7 @@
 void there_and_back ()
 {
   __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   auto v0 = __builtin_rvtt_sfpreadlreg (0);
   auto v1 = __builtin_rvtt_sfpreadlreg (1);
   auto v2 = __builtin_rvtt_sfpreadlreg (2);

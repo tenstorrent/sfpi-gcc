@@ -8,6 +8,7 @@ using namespace sfpi;
 void slide_two ()
 {
   __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   vFloat v = dst_reg[0];
   vFloat r = subvec_rotr<2> (v);
   v_if (lane_col () < 2) {
@@ -19,6 +20,7 @@ void slide_two ()
 void renamed_slide_three ()
 {
   __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   vFloat w = dst_reg[4];
   vFloat s = subvec_rotr<3> (w);
   v_if (lane_col () < 3) {
@@ -32,6 +34,7 @@ void renamed_slide_three ()
 void mismatch_stays ()
 {
   __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   vFloat u = dst_reg[8];
   vFloat t = subvec_rotr<2> (u);
   v_if (lane_col () < 3) {

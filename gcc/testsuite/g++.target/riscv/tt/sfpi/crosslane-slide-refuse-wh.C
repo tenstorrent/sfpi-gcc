@@ -8,6 +8,7 @@ using namespace sfpi;
 void slide_two ()
 {
   __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   vFloat v = dst_reg[0];
   vFloat r = subvec_rotr<2> (v);
   v_if (lane_col () < 2) {
