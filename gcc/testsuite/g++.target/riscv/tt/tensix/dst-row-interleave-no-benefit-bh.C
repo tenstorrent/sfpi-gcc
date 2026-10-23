@@ -11,6 +11,9 @@ using vec_t = __xtt_vector;
 void
 abs_rows ()
 {
+  // Lane flags and LaneConfig ROW_MASK are independent hardware state.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   for (unsigned ix = 0; ix != 32; ++ix)
     {
       vec_t x = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 7);

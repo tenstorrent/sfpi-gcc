@@ -17,6 +17,9 @@ literal (unsigned hi, unsigned lo)
 void
 held_coefficients ()
 {
+  // Lane flags and LaneConfig ROW_MASK are independent hardware state.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   vec_t c0 = literal (0x3f80, 0x0000);
   vec_t c1 = literal (0x3f00, 0x1234);
   vec_t c2 = literal (0x3e80, 0x2345);
