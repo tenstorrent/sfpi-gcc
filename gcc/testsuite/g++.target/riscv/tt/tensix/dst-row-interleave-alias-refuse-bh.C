@@ -10,6 +10,9 @@ using vec_t = __xtt_vector;
 void
 forward_rows ()
 {
+  // Lane flags and LaneConfig ROW_MASK are independent hardware state.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   vec_t c0 = __builtin_rvtt_sfpreadlreg (12);
   for (unsigned ix = 0; ix != 32; ++ix)
     {

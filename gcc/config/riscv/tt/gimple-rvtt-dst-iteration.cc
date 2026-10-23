@@ -1370,56 +1370,14 @@ row_interleave::admit_atoms ()
   return true;
 }
 
-/* The ambient lane state on the loop's entry edge is all-lanes: walking
-   back through single-predecessor blocks, the nearest CC writer is the
-   all-lanes SFPENCC, or the walk reaches the function entry (all-lanes by
-   the structured-CC lowering contract).  A call, an asm or an unaudited
-   word may hand back any state.  */
+/* Both lane facts must hold on every incoming path; neither is an entry
+   ABI promise, and a flags reset alone cannot clear LaneConfig ROW_MASK.  */
 
 bool
 row_interleave::entry_all_lanes_p () const
 {
-  for (basic_block cur = entry->src; cur != ENTRY_BLOCK_PTR_FOR_FN (cfun);
-       cur = single_pred (cur))
-    {
-      for (gimple_stmt_iterator gsi = gsi_last_bb (cur); !gsi_end_p (gsi);
-	   gsi_prev (&gsi))
-	{
-	  gimple *stmt = gsi_stmt (gsi);
-	  if (gimple_code (stmt) == GIMPLE_ASM)
-	    return false;
-	  gcall *call = dyn_cast <gcall *> (stmt);
-	  if (!call)
-	    continue;
-	  const rvtt_insn_data *insnd = rvtt_get_insn_data (call);
-	  if (!insnd)
-	    return false;
-	  if (rvtt_encc_all_lanes_call_p (call, insnd)
-	      || insnd->id == rvtt_insn_data::sfpencc_all_lanes)
-	    return true;
-	  if (rvtt_cc_writer_id_p (insnd->id) || insnd->sets_cc (call))
-	    return false;
-	  /* Counter and address-modifier words, and SFPCONFIG programming of
-	     the constant registers (dests 12-14; LaneConfig is dest 15),
-	     leave lane state alone; anything else unaudited might not.  */
-	  if (insnd->id == rvtt_insn_data::sfpwriteconfig_v)
-	    {
-	      unsigned mod, dest;
-	      if (rvtt_call_const_uarg (call, 1, &mod) && mod == 0
-		  && rvtt_call_const_uarg (call, 2, &dest)
-		  && dest >= 12 && dest <= 14)
-		continue;
-	      return false;
-	    }
-	  if (!rvtt_cc_quiet_compute_id_p (insnd->id)
-	      && insnd->id != rvtt_insn_data::ttincrwc
-	      && insnd->id != rvtt_insn_data::ttsetc16)
-	    return false;
-	}
-      if (!single_pred_p (cur))
-	return false;
-    }
-  return true;
+  rvtt_gimple_lane_facts facts (cfun);
+  return facts.block_out (entry->src) == RVTT_LANE_ALL;
 }
 
 /* Every row-B Dst access is disjoint from every row-A access when one of
