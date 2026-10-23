@@ -108,6 +108,16 @@ classify_stmt (gimple *stmt)
     case rvtt_insn_data::sfpencc:
     case rvtt_insn_data::sfpencc_all_lanes:
       return STMT_CC_ENCC;
+    case rvtt_insn_data::sfpconfig_i:
+    case rvtt_insn_data::sfpwriteconfig_i:
+    case rvtt_insn_data::sfpwriteconfig_v:
+      {
+	unsigned arg = insnd->id == rvtt_insn_data::sfpconfig_i ? 1
+	  : insnd->id == rvtt_insn_data::sfpwriteconfig_i ? 5 : 2;
+	unsigned dest;
+	return rvtt_call_const_uarg (call, arg, &dest) && dest != 15
+	  ? STMT_CC_NONE : STMT_CC_OPAQUE;
+      }
     default:
       return insnd->sets_cc (call) ? STMT_CC_OTHER : STMT_CC_NONE;
     }
@@ -131,6 +141,15 @@ rvtt_cc_window_cc_event_p (gimple *stmt)
     return true;
   if (insnd->sets_cc (call))
     return true;
+  if (insnd->id == rvtt_insn_data::sfpconfig_i
+      || insnd->id == rvtt_insn_data::sfpwriteconfig_i
+      || insnd->id == rvtt_insn_data::sfpwriteconfig_v)
+    {
+      unsigned arg = insnd->id == rvtt_insn_data::sfpconfig_i ? 1
+	: insnd->id == rvtt_insn_data::sfpwriteconfig_i ? 5 : 2;
+      unsigned dest;
+      return !rvtt_call_const_uarg (call, arg, &dest) || dest == 15;
+    }
   /* The typed all-lanes SFPENCC has no CC flag.  */
   return insnd->id == rvtt_insn_data::sfpencc_all_lanes;
 }
@@ -948,115 +967,24 @@ rvtt_cc_region_tree::loop_cc_ambient_preserving_p (class loop *loop) const
   return ok;
 }
 
-/* Block classification for the all-lanes entry proof of
-   edge_entry_all_lanes_p, decided by the block's last CC-relevant event:
-   a typed all-lanes SFPENCC KILLS (restores all lanes); any other
-   CC-relevant statement, unknown call or raw word that may change the CC
-   state makes the block DIRTY; anything else is TRANSPARENT.  A raw word
-   never kills: it may sit in a replay record window and not execute, and
-   the LaneConfig words do not touch LaneFlags (rvtt-raw-boundary.h).  */
-
-enum cc_kill_class
-{
-  CC_KILL_TRANSPARENT,
-  CC_KILL_KILLS,
-  CC_KILL_DIRTY
-};
-
-/* Classify BB as described above.  */
-
-static cc_kill_class
-classify_cc_kill_block (basic_block bb)
-{
-  cc_kill_class cls = CC_KILL_TRANSPARENT;
-  for (gimple_stmt_iterator gsi = gsi_start_bb (bb); !gsi_end_p (gsi);
-       gsi_next (&gsi))
-    {
-      gimple *stmt = gsi_stmt (gsi);
-      stmt_cc_kind kind = classify_stmt (stmt);
-      switch (kind)
-	{
-	case STMT_CC_NONE:
-	  break;
-	case STMT_CC_ENCC:
-	  cls = rvtt_all_lanes_encc_p (stmt) ? CC_KILL_KILLS : CC_KILL_DIRTY;
-	  break;
-	case STMT_CC_OPAQUE:
-	  {
-	    gasm *a = dyn_cast <gasm *> (stmt);
-	    uint32_t w;
-	    if (a && rvtt_raw_ttinsn_word_p (a, &w))
-	      {
-		if (!rvtt_raw_cc_word_ambient_preserving_p (w))
-		  cls = CC_KILL_DIRTY;
-	      }
-	    else
-	      /* Unknown call or undecodable asm.  */
-	      cls = CC_KILL_DIRTY;
-	    break;
-	  }
-	default:
-	  /* Any other CC event may leave lanes disabled.  */
-	  cls = CC_KILL_DIRTY;
-	  break;
-	}
-    }
-  return cls;
-}
-
-/* Return true if every backward path from BB's entry reaches the
-   function entry (where all lanes are enabled) or a KILLS block before a
-   DIRTY block.  */
+/* Full-lane proofs share the independent column-flag / LaneConfig
+   must-analysis.  Function entry and an SFPENCC alone are insufficient.  */
 
 bool
 rvtt_cc_region_tree::block_entry_all_lanes_p (basic_block bb) const
 {
-  hash_set<basic_block> visited;
-  auto_vec<basic_block, 16> work;
-  edge e;
-  edge_iterator ei;
-  FOR_EACH_EDGE (e, ei, bb->preds)
-    work.safe_push (e->src);
-  while (!work.is_empty ())
-    {
-      basic_block b = work.pop ();
-      if (b == ENTRY_BLOCK_PTR_FOR_FN (m_fn))
-	continue;		/* All lanes enabled at function entry.  */
-      if (visited.add (b))
-	continue;
-      switch (classify_cc_kill_block (b))
-	{
-	case CC_KILL_DIRTY:
-	  return false;
-	case CC_KILL_KILLS:
-	  continue;		/* Path restores all lanes.  */
-	case CC_KILL_TRANSPARENT:
-	  FOR_EACH_EDGE (e, ei, b->preds)
-	    work.safe_push (e->src);
-	  continue;
-	}
-    }
-  return true;
+  rvtt_gimple_lane_facts facts (m_fn);
+  return facts.block_in (bb) == RVTT_LANE_ALL;
 }
-
-/* See rvtt-cc-region.h.  */
 
 bool
 rvtt_cc_region_tree::edge_entry_all_lanes_p (edge e) const
 {
-  if (!e || !e->src)
+  if (!e || !e->src || (e->flags & EDGE_ABNORMAL)
+      || e->src == ENTRY_BLOCK_PTR_FOR_FN (m_fn))
     return false;
-  /* The state on E is the state at the end of E->src.  */
-  switch (classify_cc_kill_block (e->src))
-    {
-    case CC_KILL_KILLS:
-      return true;
-    case CC_KILL_DIRTY:
-      return false;
-    case CC_KILL_TRANSPARENT:
-      return block_entry_all_lanes_p (e->src);
-    }
-  return false;
+  rvtt_gimple_lane_facts facts (m_fn);
+  return facts.block_out (e->src) == RVTT_LANE_ALL;
 }
 
 /* See rvtt-cc-region.h.  */

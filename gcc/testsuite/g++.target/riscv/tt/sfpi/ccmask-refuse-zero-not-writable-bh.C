@@ -7,7 +7,7 @@
 // { dg-final { scan-assembler "SFPENCC" } }
 #define CCMASK_FN ccmask_ltdir_cregzero
 #define CCMASK_COND(x) ((x) < 0.0f)
-#define CCMASK_ZERO sfpi::vConst0
+#define CCMASK_ZERO sfpi::impl_::LRegFile::vCReg<sfpi::vFloat>(sfpi::CREG_IDX_0)
 #define CCMASK_X x
 #define CCMASK_Y y
 #define CCMASK_W w
