@@ -1,3 +1,5 @@
+#include "rtl-lane-reset.h"
+
 // Check that without the flag window-pairing does not run and every row boundary keeps the full drain.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -fdump-rtl-rvtt_macro_planner" }
 // { dg-final { scan-rtl-dump-times "Macro-planner drain-interrow: drain=2 rows=8" 1 "rvtt_macro_planner" } }
@@ -31,6 +33,7 @@
 
 __attribute__((noinline)) void wide_int_product_rows ()
 {
+  RVTT_TEST_LANE_RESET ();
   ROW ();
   ROW ();
   ROW ();

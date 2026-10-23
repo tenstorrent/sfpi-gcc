@@ -1,5 +1,7 @@
+#include "rtl-lane-reset.h"
+
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner" }
-// { dg-final { scan-assembler-times "SFPCONFIG" 5 } }
+// { dg-final { scan-assembler-times "SFPCONFIG" 6 } }
 // { dg-final { scan-assembler-times "\\.ttinsn" 19 } }
 // { dg-final { scan-assembler-times "SFPLOAD\\t" 8 } }
 // { dg-final { scan-assembler-times "SFPNOP" 3 } }

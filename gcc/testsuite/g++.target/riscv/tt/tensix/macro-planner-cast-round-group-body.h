@@ -1,3 +1,7 @@
+#ifndef RVTT_TEST_LANE_RESET
+#define RVTT_TEST_LANE_RESET() ((void) 0)
+#endif
+
 /* One all-lanes proof followed by eight load/cast/round/store rows with typed Dst increments.  */
 #if __riscv_xtttensixwh
 constexpr unsigned no_increment = 3;
@@ -36,6 +40,7 @@ constexpr unsigned no_increment = 7;
 
 __attribute__((noinline)) void cast_round_rows ()
 {
+  RVTT_TEST_LANE_RESET ();
   __builtin_rvtt_sfppushc (0);
   __builtin_rvtt_sfppopc (0);
   ROW (); ROW (); ROW (); ROW (); ROW (); ROW (); ROW (); ROW ();

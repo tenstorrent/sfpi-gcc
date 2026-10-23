@@ -1,3 +1,5 @@
+#include "rtl-lane-reset.h"
+
 // Check that the compact select calendar forms on Wormhole with the WH launch-field layout and SETC16 program.
 // { dg-options "-mcpu=tt-wh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-macro-planner-verify -fdump-rtl-rvtt_macro_planner-details" }
 // { dg-final { scan-rtl-dump "Macro-planner schedule-candidate: cc-compact" "rvtt_macro_planner" } }
@@ -18,6 +20,7 @@
 
 __attribute__((noinline)) void select_uniform_compact_wh ()
 {
+  RVTT_TEST_LANE_RESET ();
   __builtin_rvtt_sfppushc (0);
   __builtin_rvtt_sfppopc (0);
   SELECT_ROWS_8 ();

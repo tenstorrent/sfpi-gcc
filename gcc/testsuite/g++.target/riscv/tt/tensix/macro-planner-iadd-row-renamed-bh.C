@@ -1,3 +1,5 @@
+#include "rtl-lane-reset.h"
+
 // { dg-options "-mcpu=tt-bh-tensix -O3 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -fdump-rtl-rvtt_macro_planner-details" }
 // Check that the subtract iadd row with different names, addresses and data mode classifies like the add row.
 // { dg-final { scan-rtl-dump-not "row-opaque-effect" "rvtt_macro_planner" } }
@@ -5,10 +7,11 @@
 // { dg-final { scan-rtl-dump "Macro-planner region: rows=4 row-len=7" "rvtt_macro_planner" } }
 // { dg-final { scan-rtl-dump "Macro-planner formation-refusal: unprofitable" "rvtt_macro_planner" } }
 // { dg-final { scan-assembler-not "\\.ttinsn" } }
-// { dg-final { scan-assembler-not "SFPCONFIG" } }
+// { dg-final { scan-assembler-not {SFPCONFIG[ \t]+([0-9]|1[0-4]),} } }
 
 __attribute__((noinline)) void banana_split_rows ()
 {
+  RVTT_TEST_LANE_RESET ();
   __builtin_rvtt_sfppushc (0);
   __builtin_rvtt_sfppopc (0);
 #pragma GCC unroll 4

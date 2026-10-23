@@ -1,3 +1,5 @@
+#include "rtl-lane-reset.h"
+
 // Check that an eight-row compact select loop hoists its configuration to the preheader and forms every row.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-macro-planner-verify -fdump-rtl-rvtt_macro_planner-details" }
 // { dg-final { scan-rtl-dump "Macro-planner region: rows=8 row-len=7 runs=1 stride=2 loop=yes" "rvtt_macro_planner" } }
@@ -7,7 +9,7 @@
 // { dg-final { scan-rtl-dump "Macro-planner formed: rows=8 runs=1 config=preheader lane-proof=materialized-enable" "rvtt_macro_planner" } }
 // { dg-final { scan-assembler-times "\\.ttinsn" 19 } }
 // { dg-final { scan-assembler-not "SFPSETCC" } }
-// { dg-final { scan-assembler-times "SFPENCC" 1 } }
+// { dg-final { scan-assembler-times "SFPENCC" 2 } }
 // { dg-final { scan-assembler-not "TTINCRWC" } }
 // { dg-final { scan-assembler-times "SFPLOAD\\tL0, 64, 6, 6" 8 } }
 
@@ -28,6 +30,7 @@
 
 __attribute__((noinline)) void select_faces_compact (unsigned faces)
 {
+  RVTT_TEST_LANE_RESET ();
   unsigned face = 0;
   do
     {

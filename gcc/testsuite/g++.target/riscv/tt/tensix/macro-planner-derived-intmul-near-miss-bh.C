@@ -1,3 +1,5 @@
+#include "rtl-lane-reset.h"
+
 // Check that unproven integer-row events (fresh-dest or mod-2 SFPMUL24, stochastic SFPCAST, shared store producer) stay explicit.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-macro-planner-verify -fdump-rtl-rvtt_macro_planner" }
 // { dg-final { scan-assembler "SFPMUL24" } }
@@ -6,6 +8,7 @@
 
 __attribute__((noinline)) void fresh_dest_factor_rows ()
 {
+  RVTT_TEST_LANE_RESET ();
 #pragma GCC unroll 8
   for (int row = 0; row < 8; ++row)
     {
@@ -28,6 +31,7 @@ __attribute__((noinline)) void fresh_dest_factor_rows ()
 
 __attribute__((noinline)) void stochastic_cast_rows ()
 {
+  RVTT_TEST_LANE_RESET ();
 #pragma GCC unroll 8
   for (int row = 0; row < 8; ++row)
     {
@@ -42,6 +46,7 @@ __attribute__((noinline)) void stochastic_cast_rows ()
 
 __attribute__((noinline)) unsigned dual_consumer_rows ()
 {
+  RVTT_TEST_LANE_RESET ();
   unsigned acc = 0;
 #pragma GCC unroll 8
   for (int row = 0; row < 8; ++row)

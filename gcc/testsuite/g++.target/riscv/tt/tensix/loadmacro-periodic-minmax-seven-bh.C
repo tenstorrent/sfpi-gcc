@@ -1,7 +1,9 @@
+#include "rtl-lane-reset.h"
+
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner" }
 // Check that seven min/max rows form a macro on Blackhole.
-// { dg-final { scan-assembler-times "SFPENCC" 1 } }
-// { dg-final { scan-assembler-times "SFPCONFIG" 5 } }
+// { dg-final { scan-assembler-times "SFPENCC" 2 } }
+// { dg-final { scan-assembler-times "SFPCONFIG" 6 } }
 // { dg-final { scan-assembler-times "\\.ttinsn" 17 } }
 // { dg-final { scan-assembler-times "SFPLOAD\t" 7 } }
 // { dg-final { scan-assembler-times "SFPNOP" 3 } }

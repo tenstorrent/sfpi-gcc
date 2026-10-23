@@ -1,3 +1,5 @@
+#include "rtl-lane-reset.h"
+
 // Check that a callee with two call sites gets no caller-loop amortization and keeps the per-run pricing refusal.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-macro-planner-verify -mtt-tensix-optimize-init-hoist -fdump-rtl-rvtt_macro_planner" }
 // { dg-final { scan-rtl-dump "Macro-planner init-hoist-refusal: drain-init-callers-unproven" "rvtt_macro_planner" } }

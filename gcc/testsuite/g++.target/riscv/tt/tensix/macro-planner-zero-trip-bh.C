@@ -1,8 +1,10 @@
+#include "rtl-lane-reset.h"
+
 // Check that a loop that may run zero times refuses to hoist the all-lanes enable.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -fdump-rtl-rvtt_macro_planner-details" }
 // { dg-final { scan-rtl-dump "zero-trip-preheader-unproven" "rvtt_macro_planner" } }
 // { dg-final { scan-assembler-not "SFPLOADMACRO" } }
-// { dg-final { scan-assembler-not "SFPCONFIG" } }
+// { dg-final { scan-assembler-not {SFPCONFIG[ \t]+([0-9]|1[0-4]),} } }
 // { dg-final { scan-assembler-times "SFPSHFT" 1 } }
 // { dg-final { scan-assembler-times "TTINCRWC" 1 } }
 
@@ -14,6 +16,7 @@ constexpr unsigned no_increment = 7;
 
 __attribute__((noinline)) void zero_trip (unsigned n)
 {
+  RVTT_TEST_LANE_RESET ();
   if (n & 1)
     do
       {

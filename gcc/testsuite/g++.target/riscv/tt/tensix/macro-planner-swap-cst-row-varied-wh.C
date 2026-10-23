@@ -1,3 +1,5 @@
+#include "rtl-lane-reset.h"
+
 // { dg-options "-mcpu=tt-wh-tensix -O3 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -fdump-rtl-rvtt_macro_planner-details" }
 // Check that a WH SFPSWAP with a SUBVEC mod and a different constant register forms no calendar.
 // { dg-final { scan-rtl-dump-not "row-opaque-effect" "rvtt_macro_planner" } }
@@ -5,10 +7,11 @@
 // { dg-final { scan-rtl-dump "Macro-planner region: rows=4 row-len=3" "rvtt_macro_planner" } }
 // { dg-final { scan-rtl-dump "descriptor-program-unproven" "rvtt_macro_planner" } }
 // { dg-final { scan-assembler-not "\\.ttinsn" } }
-// { dg-final { scan-assembler-not "SFPCONFIG" } }
+// { dg-final { scan-assembler-not {SFPCONFIG[ \t]+([0-9]|1[0-4]),} } }
 
 __attribute__((noinline)) void kumquat_clamp_rows ()
 {
+  RVTT_TEST_LANE_RESET ();
   __builtin_rvtt_sfppushc (0);
   __builtin_rvtt_sfppopc (0);
 #pragma GCC unroll 4

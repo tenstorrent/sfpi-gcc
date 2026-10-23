@@ -1,3 +1,5 @@
+#include "rtl-lane-reset.h"
+
 // Check that a carrier feeding two Simple-class members hosts only one iadd-imm and the shift, and still forms.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-macro-planner-verify -fdump-rtl-rvtt_macro_planner" }
 // { dg-final { scan-rtl-dump-times "Macro-planner descriptor-word dest=0: 0x79fe10c5" 1 "rvtt_macro_planner" } }
@@ -11,6 +13,7 @@
 
 __attribute__((noinline)) void double_simple_rows ()
 {
+  RVTT_TEST_LANE_RESET ();
 #define ROW()                                                                 \
   do                                                                          \
     {                                                                          \
@@ -31,6 +34,7 @@ __attribute__((noinline)) void double_simple_rows ()
 
 int main ()
 {
+  RVTT_TEST_LANE_RESET ();
   double_simple_rows ();
   return 0;
 }

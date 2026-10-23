@@ -1,3 +1,5 @@
+#include "rtl-lane-reset.h"
+
 // Check that the derived intmul row refuses the upward-carrier search and keeps its ii=12 formation.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-macro-planner-verify -mtt-tensix-macro-ims -mtt-tensix-macro-ims-carrier -fdump-rtl-rvtt_macro_planner" }
 // { dg-final { scan-rtl-dump "Macro-planner upward-carrier-refusal: ims-carrier-rederive-unproven" "rvtt_macro_planner" } }

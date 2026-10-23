@@ -1,3 +1,5 @@
+#include "rtl-lane-reset.h"
+
 // Check that macro-planner launches of a CC-writing calendar get no emission record, so the replay hoist still refuses them as effect-opaque.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -fno-unroll-loops -mtt-tensix-macro-planner -mtt-tensix-macro-planner-replay -mtt-tensix-optimize-replay-hoist -fdump-rtl-rvtt_replay-details -fdump-rtl-rvtt_macro_planner" }
 // { dg-final { scan-rtl-dump "reissue-unproved: payload insn \\d+ is effect-opaque" "rvtt_replay" } }
@@ -23,6 +25,7 @@
 
 __attribute__((noinline)) void select_loop_counted ()
 {
+  RVTT_TEST_LANE_RESET ();
   for (unsigned face = 0; face != 8; ++face)
     {
       ROW ();

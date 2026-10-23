@@ -1,3 +1,5 @@
+#include "rtl-lane-reset.h"
+
 // Check that the compact select calendar re-derives identically under different names.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-macro-planner-verify -fdump-rtl-rvtt_macro_planner-details" }
 // { dg-final { scan-rtl-dump "Macro-planner schedule-candidate: cc-compact" "rvtt_macro_planner" } }
@@ -27,6 +29,7 @@
 
 __attribute__((noinline)) void pick_lane_slices ()
 {
+  RVTT_TEST_LANE_RESET ();
   __builtin_rvtt_sfppushc (0);
   __builtin_rvtt_sfppopc (0);
   PICK_ONE_LANE_SLICE ();

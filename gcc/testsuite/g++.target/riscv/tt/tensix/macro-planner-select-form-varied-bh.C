@@ -1,3 +1,5 @@
+#include "rtl-lane-reset.h"
+
 // Check that a uniform-mode select with different addresses, mode and complemented predicate forms the compact calendar.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-macro-planner-verify -fdump-rtl-rvtt_macro_planner-details" }
 // { dg-final { scan-rtl-dump "Macro-planner schedule-candidate: cc-compact" "rvtt_macro_planner" } }
@@ -25,5 +27,6 @@
 
 __attribute__((noinline)) void select_rows_varied ()
 {
+  RVTT_TEST_LANE_RESET ();
   SELECT_ROWS_8 ();
 }

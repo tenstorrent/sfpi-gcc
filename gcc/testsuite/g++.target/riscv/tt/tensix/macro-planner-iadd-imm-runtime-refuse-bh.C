@@ -1,3 +1,5 @@
+#include "rtl-lane-reset.h"
+
 /* A runtime immediate needs an instruction buffer to hold the synthesised
    instruction word, so these dynamic subjects provide one.  */
 namespace ckernel { volatile unsigned long *instrn_buffer; }
@@ -9,6 +11,7 @@ namespace ckernel { volatile unsigned long *instrn_buffer; }
 
 __attribute__((noinline)) void runtime_imm_rows (int k)
 {
+  RVTT_TEST_LANE_RESET ();
 #define ROW()                                                                 \
   do                                                                          \
     {                                                                          \
@@ -26,6 +29,7 @@ __attribute__((noinline)) void runtime_imm_rows (int k)
 
 int main ()
 {
+  RVTT_TEST_LANE_RESET ();
   runtime_imm_rows (3);
   return 0;
 }

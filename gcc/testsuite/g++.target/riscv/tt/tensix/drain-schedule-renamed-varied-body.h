@@ -1,3 +1,7 @@
+#ifndef RVTT_TEST_LANE_RESET
+#define RVTT_TEST_LANE_RESET() ((void) 0)
+#endif
+
 /* QSR's sfpsetcc and sfpswap carry an operand-type argument the other
    architectures do not have.  0 is IMM_TYPE_INT, which is what these
    bit-pattern subjects want.  Spelled as a token macro rather than an
@@ -53,6 +57,7 @@ constexpr unsigned quiet_hold_mode = 7;
 
 __attribute__((noinline)) void quiet_periodic_hold ()
 {
+  RVTT_TEST_LANE_RESET ();
   QUIET_GROUP ();
   __builtin_rvtt_ttdstface ();
   QUIET_GROUP ();

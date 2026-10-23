@@ -1,7 +1,9 @@
+#include "rtl-lane-reset.h"
+
 // Check that the signbit loop forms on Wormhole with the single-slot Base=1 SETC16 program and drain 3.
 // { dg-options "-mcpu=tt-wh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner" }
-// { dg-final { scan-assembler-times "SFPENCC" 1 } }
-// { dg-final { scan-assembler-times "SFPCONFIG" 4 } }
+// { dg-final { scan-assembler-times "SFPENCC" 2 } }
+// { dg-final { scan-assembler-times "SFPCONFIG" 5 } }
 // { dg-final { scan-assembler-not "\\.ttinsn\\t2987065344" } }
 // { dg-final { scan-assembler-not "\\.ttinsn\\t2987982850" } }
 // { dg-final { scan-assembler-not "\\.ttinsn\\t2989621248" } }

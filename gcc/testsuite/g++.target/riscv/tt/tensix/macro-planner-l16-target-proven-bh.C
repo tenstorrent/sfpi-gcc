@@ -1,3 +1,5 @@
+#include "rtl-lane-reset.h"
+
 // Check that SFPABS is not admitted to the LReg16 staging register while the same-shape SFPCAST row keeps it.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-macro-planner-verify -fdump-rtl-rvtt_macro_planner-details" }
 // { dg-final { scan-rtl-dump "Macro-planner descriptor-refusal: subunit-placement-unproven" "rvtt_macro_planner" } }
@@ -9,6 +11,7 @@
 
 __attribute__((noinline)) void abs_vd_direct_loop ()
 {
+  RVTT_TEST_LANE_RESET ();
   for (int row = 0; row < 32; ++row)
     {
       auto v = __builtin_rvtt_sfpload (nullptr, 0, 4, 0, 0, 7);
@@ -20,6 +23,7 @@ __attribute__((noinline)) void abs_vd_direct_loop ()
 
 __attribute__((noinline)) void cast_l16_control_loop ()
 {
+  RVTT_TEST_LANE_RESET ();
   for (int row = 0; row < 32; ++row)
     {
       auto v = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 7);

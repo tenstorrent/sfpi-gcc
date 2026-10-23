@@ -1,7 +1,9 @@
+#include "rtl-lane-reset.h"
+
 // Check that four TTSETRWC-separated typecast faces share one region and one descriptor configuration.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner" }
-// { dg-final { scan-assembler-times "SFPENCC" 1 } }
-// { dg-final { scan-assembler-times "SFPCONFIG" 4 } }
+// { dg-final { scan-assembler-times "SFPENCC" 2 } }
+// { dg-final { scan-assembler-times "SFPCONFIG" 5 } }
 // { dg-final { scan-assembler-times "\\.ttinsn\\t2987524096" 1 } }
 // { dg-final { scan-assembler-times "\\.ttinsn\\t2988572674" 1 } }
 // { dg-final { scan-assembler-times "\\.ttinsn\\t2989817856" 1 } }
@@ -18,6 +20,7 @@
 
 __attribute__((noinline)) void typecast_four_faces ()
 {
+  RVTT_TEST_LANE_RESET ();
   __builtin_rvtt_sfppushc (0);
   __builtin_rvtt_sfppopc (0);
   FACE (); FACE (); FACE (); FACE ();

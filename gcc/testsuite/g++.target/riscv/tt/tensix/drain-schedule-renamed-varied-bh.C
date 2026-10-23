@@ -1,3 +1,5 @@
+#include "rtl-lane-reset.h"
+
 // Check the minmax face drain elision with renamed code, other addresses and the min sense.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-optimize-drain-schedule -fdump-rtl-rvtt_macro_planner" }
 // { dg-final { scan-assembler-times "SFPNOP" 3 } }

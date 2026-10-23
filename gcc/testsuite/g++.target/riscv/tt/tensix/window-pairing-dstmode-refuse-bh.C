@@ -1,3 +1,5 @@
+#include "rtl-lane-reset.h"
+
 // Check that an INT32_ALL (mod0 10) Dst access refuses window-pairing by name and keeps the Dst-RAW spacing.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-optimize-window-pairing -fdump-rtl-rvtt_macro_planner" }
 // { dg-final { scan-rtl-dump-times "Macro-planner window-pairing: interrow-drain 2 -> 1 rows=8 bound=window-pairing-dst-mode-unproven" 1 "rvtt_macro_planner" } }
@@ -29,6 +31,7 @@
 
 __attribute__((noinline)) void wide_int_product_rows ()
 {
+  RVTT_TEST_LANE_RESET ();
   
   ROW ();
   ROW ();

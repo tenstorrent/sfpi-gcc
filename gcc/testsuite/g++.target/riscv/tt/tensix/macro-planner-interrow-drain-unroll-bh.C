@@ -1,3 +1,5 @@
+#include "rtl-lane-reset.h"
+
 // Check that an unrolled counted signbit loop formed as an 8-row fixed-VD region drains after every launch.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-optimize-dst-autoincr -mtt-tensix-optimize-replay-loop-unroll -fdump-tree-rvtt_replay_unroll -fdump-rtl-rvtt_macro_planner-details" }
 // { dg-final { scan-tree-dump "requested unroll 8 of loop" "rvtt_replay_unroll" } }
@@ -8,6 +10,7 @@
 
 __attribute__((noinline)) void signbit_row_loop ()
 {
+  RVTT_TEST_LANE_RESET ();
   for (int row = 0; row < 32; ++row)
     {
       __builtin_rvtt_sfppushc (0);

@@ -1,3 +1,5 @@
+#include "rtl-lane-reset.h"
+
 // Check the drain-follower-vd-write refusal on Wormhole.
 // { dg-options "-mcpu=tt-wh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-optimize-drain-schedule -fdump-rtl-rvtt_macro_planner-details" }
 // { dg-final { scan-rtl-dump "Macro-planner drain-refusal: drain-follower-vd-write" "rvtt_macro_planner" } }
@@ -20,6 +22,7 @@
 
 __attribute__((noinline)) void signbit_two_inc_runs_wh ()
 {
+  RVTT_TEST_LANE_RESET ();
   ROW ();
   ROW ();
   ROW ();

@@ -1,3 +1,5 @@
+#include "rtl-lane-reset.h"
+
 // Check that a uniform-mode predicated select forms the 3-slot compact calendar with the separator absorbed.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-macro-planner-verify -fdump-rtl-rvtt_macro_planner-details" }
 // { dg-final { scan-rtl-dump "Macro-planner schedule-candidate: cc-compact" "rvtt_macro_planner" } }
@@ -27,6 +29,7 @@
 
 __attribute__((noinline)) void select_uniform_compact ()
 {
+  RVTT_TEST_LANE_RESET ();
   __builtin_rvtt_sfppushc (0);
   __builtin_rvtt_sfppopc (0);
   SELECT_ROWS_8 ();

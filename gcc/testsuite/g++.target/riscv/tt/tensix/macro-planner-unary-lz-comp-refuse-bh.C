@@ -1,3 +1,5 @@
+#include "rtl-lane-reset.h"
+
 // Check that SFPLZ mod 8 (CC_COMP alone) stays opaque and the explicit SFPLZ survives.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-macro-planner-verify -fdump-rtl-rvtt_macro_planner" }
 // { dg-final { scan-rtl-dump "Macro-planner refusal: row-opaque-effect" "rvtt_macro_planner" } }
@@ -6,6 +8,7 @@
 
 __attribute__((noinline)) void lz_comp_rows ()
 {
+  RVTT_TEST_LANE_RESET ();
 #define ROW()                                                                 \
   do                                                                          \
     {                                                                          \
@@ -23,6 +26,7 @@ __attribute__((noinline)) void lz_comp_rows ()
 
 int main ()
 {
+  RVTT_TEST_LANE_RESET ();
   lz_comp_rows ();
   return 0;
 }

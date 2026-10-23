@@ -1,3 +1,5 @@
+#include "../tensix/rtl-lane-reset.h"
+
 // Check that a single predicated-select row refuses macro scheduling (cc-template-unproved, cc-restore-store-race).
 // { dg-options "-mcpu=tt-bh-tensix -O3 -I [SFPI]/include -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -fdump-rtl-rvtt_macro_planner-details" }
 // { dg-final { scan-rtl-dump "Macro-planner descriptor-refusal: cc-template-unproved" "rvtt_macro_planner" } }

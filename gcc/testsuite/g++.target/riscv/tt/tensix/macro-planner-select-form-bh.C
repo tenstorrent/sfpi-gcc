@@ -1,3 +1,5 @@
+#include "rtl-lane-reset.h"
+
 // Check that the mixed-mode predicated select refuses both candidates, the 4-slot one with cc-restore-store-race.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-macro-planner-verify -fdump-rtl-rvtt_macro_planner-details" }
 // { dg-final { scan-rtl-dump "Macro-planner region: rows=8 row-len=7 runs=1 stride=2" "rvtt_macro_planner" } }
@@ -12,7 +14,7 @@
 // restores, stores and the typed separators all survive and no descriptor
 // is configured.
 // { dg-final { scan-assembler-not "\\.ttinsn" } }
-// { dg-final { scan-assembler-not "SFPCONFIG" } }
+// { dg-final { scan-assembler-not {SFPCONFIG[ \t]+([0-9]|1[0-4]),} } }
 // { dg-final { scan-assembler-not "SFPLOADMACRO" } }
 // { dg-final { scan-assembler-times "SFPSETCC" 1 } }
 // { dg-final { scan-assembler-times "SFPSTORE" 1 } }
@@ -23,5 +25,6 @@
 
 __attribute__((noinline)) void select_rows ()
 {
+  RVTT_TEST_LANE_RESET ();
   SELECT_ROWS_8 ();
 }

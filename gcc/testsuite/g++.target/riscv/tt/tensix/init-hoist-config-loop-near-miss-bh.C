@@ -1,12 +1,15 @@
+#include "rtl-lane-reset.h"
+
 // Check that an SFPCONFIG-class word in the caller's loop refuses the init hoist.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-macro-planner-verify -mtt-tensix-optimize-init-hoist -fdump-rtl-rvtt_macro_planner" }
 // { dg-final { scan-rtl-dump "Macro-planner init-hoist-refusal: drain-init-ownership-unproven" "rvtt_macro_planner" } }
 // { dg-final { scan-rtl-dump-not "init contract hoisted" "rvtt_macro_planner" } }
 // The interposed raw SFPCONFIG-class word stays a raw word; the
 // callee keeps its five typed SFPCONFIG writes per call.
-// { dg-final { scan-assembler-times "SFPCONFIG" 5 } }
+// { dg-final { scan-assembler-times "SFPCONFIG" 7 } }
 // { dg-final { scan-assembler-times "\\.ttinsn.-1862270911" 1 } }
-// { dg-final { scan-assembler-times "SFPENCC\\t3, 10" 1 } }
+// Two physical lane resets plus the retained planner-owned enable.
+// { dg-final { scan-assembler-times "SFPENCC\\t3, 10" 3 } }
 
 #define INIT_LOOP_TAIL()                                                      \
   asm volatile (".ttinsn %0" :: "n" (0x91000041u))

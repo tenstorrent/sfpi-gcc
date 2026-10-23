@@ -1,3 +1,5 @@
+#include "rtl-lane-reset.h"
+
 // Check that an SFPIADD immediate of +2047 forms alongside an in-place SFPSHFT2 pair in one calendar.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-macro-planner-verify -fdump-rtl-rvtt_macro_planner" }
 // { dg-final { scan-rtl-dump-times "Macro-planner descriptor-word dest=0: 0x797ff0c5" 1 "rvtt_macro_planner" } }
@@ -22,6 +24,7 @@
 
 __attribute__((noinline)) void saturating_bias_rows ()
 {
+  RVTT_TEST_LANE_RESET ();
   TILE (7); TILE (7); TILE (7); TILE (7);
   TILE (7); TILE (7); TILE (7); TILE (7);
 }
@@ -29,6 +32,7 @@ __attribute__((noinline)) void saturating_bias_rows ()
 
 int main ()
 {
+  RVTT_TEST_LANE_RESET ();
   saturating_bias_rows ();
   return 0;
 }

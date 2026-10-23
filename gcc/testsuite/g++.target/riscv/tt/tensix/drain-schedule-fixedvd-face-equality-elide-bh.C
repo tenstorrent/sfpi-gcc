@@ -1,3 +1,5 @@
+#include "rtl-lane-reset.h"
+
 // Check that a fixed-VD region with a two-word face advance elides the boundary when the
 // launch issues exactly at the last pending retirement.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-optimize-drain-schedule -fdump-rtl-rvtt_macro_planner-details" }
@@ -21,6 +23,7 @@
 
 __attribute__((noinline)) void signbit_two_face_runs ()
 {
+  RVTT_TEST_LANE_RESET ();
   ROW ();
   ROW ();
   ROW ();

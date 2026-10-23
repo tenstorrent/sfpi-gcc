@@ -1,3 +1,5 @@
+#include "rtl-lane-reset.h"
+
 // Check that a different reaching value for owned row 18 demotes the init hoist to stage 1.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-macro-planner-verify -mtt-tensix-optimize-init-hoist -fdump-rtl-rvtt_macro_planner" }
 // { dg-final { scan-rtl-dump "init-hoist: value-equality: row 18 write unequal" "rvtt_macro_planner" } }

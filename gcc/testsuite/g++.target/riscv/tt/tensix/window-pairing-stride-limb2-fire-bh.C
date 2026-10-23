@@ -1,3 +1,5 @@
+#include "rtl-lane-reset.h"
+
 // Check that the window-pairing stride flag admits a first-word absorber and tunes the limb-2 MulInt32 row to one NOP.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-optimize-window-pairing -mtt-tensix-optimize-window-pairing-stride -fdump-rtl-rvtt_macro_planner" }
 // { dg-final { scan-rtl-dump-times "Macro-planner drain-interrow: drain=2 rows=8" 1 "rvtt_macro_planner" } }
@@ -28,5 +30,6 @@
 
 __attribute__((noinline)) void limb2_product_rows ()
 {
+  RVTT_TEST_LANE_RESET ();
   ROW (); ROW (); ROW (); ROW (); ROW (); ROW (); ROW (); ROW ();
 }

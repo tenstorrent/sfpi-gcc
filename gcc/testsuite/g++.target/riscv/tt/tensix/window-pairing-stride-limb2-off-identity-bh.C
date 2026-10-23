@@ -1,3 +1,5 @@
+#include "rtl-lane-reset.h"
+
 // Check that without the stride flag window-pairing refuses the limb-2 row as stride-unproven and keeps the full drain.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-optimize-window-pairing -fdump-rtl-rvtt_macro_planner" }
 // { dg-final { scan-rtl-dump-times "Macro-planner drain-interrow: drain=2 rows=8" 1 "rvtt_macro_planner" } }
@@ -28,5 +30,6 @@
 
 __attribute__((noinline)) void limb2_product_rows ()
 {
+  RVTT_TEST_LANE_RESET ();
   ROW (); ROW (); ROW (); ROW (); ROW (); ROW (); ROW (); ROW ();
 }

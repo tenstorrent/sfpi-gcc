@@ -1,6 +1,11 @@
-// Check that a local SFPCONFIG LaneConfig write refuses the column-parity clause and keeps the Dst-RAW spacing.
+#include "rtl-lane-reset.h"
+
+// Nonidentity or unknown LaneConfig must not borrow the entry default.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-optimize-window-pairing -fdump-rtl-rvtt_macro_planner" }
-// { dg-final { scan-rtl-dump-times "Macro-planner window-pairing: interrow-drain 2 -> 1 rows=8 bound=window-pairing-laneconfig-unproven" 1 "rvtt_macro_planner" } }
+// The earlier physical-lane gate refuses before a paired calendar exists.
+// { dg-final { scan-rtl-dump-times "Macro-planner formation-refusal: cc-enable-unproved" 3 "rvtt_macro_planner" } }
+// { dg-final { scan-rtl-dump-not "Macro-planner formed:" "rvtt_macro_planner" } }
+// { dg-final { scan-rtl-dump-not "Macro-planner window-pairing:" "rvtt_macro_planner" } }
 
 #define ROW()                                                                 \
   do                                                                          \
@@ -29,7 +34,8 @@
 
 __attribute__((noinline)) void wide_int_product_rows ()
 {
-  __builtin_rvtt_sfpconfig_i (0x0, 15, 1);
+  RVTT_TEST_LANE_RESET ();
+  __builtin_rvtt_sfpconfig_i (1, 15, 1);
   ROW ();
   ROW ();
   ROW ();
@@ -38,6 +44,17 @@ __attribute__((noinline)) void wide_int_product_rows ()
   ROW ();
   ROW ();
   ROW ();
+}
+
+__attribute__((noinline)) void wide_int_unknown_laneconfig ()
+{
+  ROW (); ROW (); ROW (); ROW (); ROW (); ROW (); ROW (); ROW ();
+}
+
+__attribute__((noinline)) void wide_int_flags_only ()
+{
+  __builtin_rvtt_sfpencc_all_lanes ();
+  ROW (); ROW (); ROW (); ROW (); ROW (); ROW (); ROW (); ROW ();
 }
 
 #undef ROW

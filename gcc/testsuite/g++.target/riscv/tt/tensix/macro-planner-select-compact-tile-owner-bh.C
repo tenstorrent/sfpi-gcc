@@ -1,3 +1,5 @@
+#include "rtl-lane-reset.h"
+
 // Check that a raw SFPCONFIG to a planner-owned destination in the tile loop keeps the prefix per tile.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-macro-planner-verify -fdump-rtl-rvtt_macro_planner-details" }
 // { dg-final { scan-rtl-dump "Macro-planner prefix-epoch-refusal: prefix-epoch-invalidated" "rvtt_macro_planner" } }

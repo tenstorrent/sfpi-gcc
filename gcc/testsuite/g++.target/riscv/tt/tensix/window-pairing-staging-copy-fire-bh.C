@@ -1,3 +1,5 @@
+#include "rtl-lane-reset.h"
+
 // Check that window-pairing prices a row with a store-source staging copy into LReg16 at one NOP.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-optimize-window-pairing -fdump-rtl-rvtt_macro_planner" }
 // { dg-final { scan-rtl-dump-times "staging=copy" 1 "rvtt_macro_planner" } }
@@ -25,5 +27,6 @@
 
 __attribute__((noinline)) void limb2_cast_rows ()
 {
+  RVTT_TEST_LANE_RESET ();
   ROW (); ROW (); ROW (); ROW (); ROW (); ROW (); ROW (); ROW ();
 }

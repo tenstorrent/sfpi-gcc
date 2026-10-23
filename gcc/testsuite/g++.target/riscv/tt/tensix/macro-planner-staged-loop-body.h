@@ -1,3 +1,7 @@
+#ifndef RVTT_TEST_LANE_RESET
+#define RVTT_TEST_LANE_RESET() ((void) 0)
+#endif
+
 /* Unary load/shift/cast/store loop row (the signbit kernel shape): one
    row per trip, typed Dst += 2, all-lanes proof in the body, unknown
    trip count behind a zero-trip guard.  */
@@ -13,6 +17,7 @@ constexpr unsigned no_increment = 7;
 
 __attribute__((noinline)) void staged_loop (unsigned iterations)
 {
+  RVTT_TEST_LANE_RESET ();
   for (unsigned row = 0; row < iterations; ++row)
     {
       __builtin_rvtt_sfppushc (0);

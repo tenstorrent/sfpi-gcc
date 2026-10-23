@@ -1,7 +1,12 @@
+#ifndef RVTT_TEST_LANE_RESET
+#define RVTT_TEST_LANE_RESET() ((void) 0)
+#endif
+
 /* A noinline macro-formed minmax callee called from a counted caller loop;
    INIT_CALLER_PRELUDE() and INIT_LOOP_TAIL() let variants add code.  */
 
 #define MINMAX_FOUR_FACE_RUNS 1
+#define MINMAX_VISIBILITY static
 #include "loadmacro-periodic-minmax-inplace-body.h"
 
 #ifndef INIT_CALLER_PRELUDE
@@ -16,6 +21,7 @@
 
 __attribute__((noinline)) void INIT_CALLER_NAME (unsigned tiles)
 {
+  RVTT_TEST_LANE_RESET ();
   INIT_CALLER_PRELUDE ();
   unsigned t = 0;
   do

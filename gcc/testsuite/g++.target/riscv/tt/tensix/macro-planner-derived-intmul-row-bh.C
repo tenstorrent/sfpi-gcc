@@ -1,3 +1,5 @@
+#include "rtl-lane-reset.h"
+
 // Check that a multi-sub-unit integer multiply row forms a derived calendar from the capability tables.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-macro-planner-verify -fdump-rtl-rvtt_macro_planner" }
 // { dg-final { scan-rtl-dump-times "Macro-planner schedule: ii=12 issues=12 launches=3 explicit=9 launched-events=6" 1 "rvtt_macro_planner" } }
@@ -60,6 +62,7 @@
 
 __attribute__((noinline)) void wide_int_product_rows ()
 {
+  RVTT_TEST_LANE_RESET ();
   ROW ();
   ROW ();
   ROW ();

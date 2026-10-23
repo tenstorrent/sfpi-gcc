@@ -1,3 +1,5 @@
+#include "rtl-lane-reset.h"
+
 // Check that an SFPAND of two loaded values derives a USE_VB template and forms.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-macro-planner-verify -fdump-rtl-rvtt_macro_planner" }
 // The derived word: SFPAND mod1 USE_VB, VB subfield naming L0, VC
@@ -22,12 +24,14 @@
 
 __attribute__((noinline)) void mask_rows ()
 {
+  RVTT_TEST_LANE_RESET ();
   ROW (); ROW (); ROW (); ROW (); ROW (); ROW (); ROW (); ROW ();
 }
 #undef ROW
 
 int main ()
 {
+  RVTT_TEST_LANE_RESET ();
   mask_rows ();
   return 0;
 }

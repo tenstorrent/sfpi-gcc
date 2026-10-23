@@ -1,7 +1,9 @@
+#include "rtl-lane-reset.h"
+
 // Check that a cast-round calendar keeps the two surrounding PRNG consumers in place.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner" }
 // { dg-final { scan-assembler-times {SFPSTOCHRND} 2 } }
-// { dg-final { scan-assembler-times {SFPCONFIG} 4 } }
+// { dg-final { scan-assembler-times {SFPCONFIG} 5 } }
 // { dg-final { scan-assembler-times {\.ttinsn[ \t]+2466693120} 4 } }
 // { dg-final { scan-assembler-times {\.ttinsn[ \t]+2467741696} 4 } }
 // { dg-final { scan-assembler {SFPSTOCHRND(.|\n)*SFPCONFIG(.|\n)*SFPSTOCHRND} } }
@@ -17,6 +19,7 @@
 
 __attribute__((noinline)) void cast_round_prng_boundaries ()
 {
+  RVTT_TEST_LANE_RESET ();
   auto before = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 7);
   auto before_round = __builtin_rvtt_sfpstochrnd_descale_i
     (nullptr, before, 3, 0, 0, 4, 0);

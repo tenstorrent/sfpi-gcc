@@ -1,3 +1,7 @@
+#ifndef RVTT_TEST_LANE_RESET
+#define RVTT_TEST_LANE_RESET() ((void) 0)
+#endif
+
 /* QSR's sfpsetcc and sfpswap carry an operand-type argument the other
    architectures do not have.  0 is IMM_TYPE_INT, which is what these
    bit-pattern subjects want.  Spelled as a token macro rather than an
@@ -51,6 +55,7 @@
   __attribute__((noinline)) void NAME (unsigned tiles, unsigned faces,        \
 				       volatile unsigned *sync_word)          \
   {                                                                           \
+    RVTT_TEST_LANE_RESET ();                                                  \
     __asm__ __volatile__ (".ttinsn %0" :: "n" (0xa6a1000a));                  \
     unsigned tile = 0;                                                        \
     do                                                                        \

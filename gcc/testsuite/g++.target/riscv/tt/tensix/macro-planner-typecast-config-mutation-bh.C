@@ -1,3 +1,5 @@
+#include "rtl-lane-reset.h"
+
 // Check that a typed write to a planner-owned configuration destination between faces refuses every formation.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -fdump-rtl-rvtt_macro_planner-details" }
 // { dg-final { scan-rtl-dump "config-ownership-unproven" "rvtt_macro_planner" } }
@@ -10,6 +12,7 @@
 
 __attribute__((noinline)) void typecast_faces_mutated ()
 {
+  RVTT_TEST_LANE_RESET ();
   __builtin_rvtt_sfppushc (0);
   __builtin_rvtt_sfppopc (0);
   FACE ();

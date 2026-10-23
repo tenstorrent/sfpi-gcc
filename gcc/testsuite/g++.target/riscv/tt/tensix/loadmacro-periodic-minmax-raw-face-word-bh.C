@@ -1,7 +1,9 @@
+#include "rtl-lane-reset.h"
+
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner" }
 // Check that a raw `.ttinsn' face-advance pair decodes as a run separator and both runs share one descriptor.
-// { dg-final { scan-assembler-times "SFPENCC" 1 } }
-// { dg-final { scan-assembler-times "SFPCONFIG" 5 } }
+// { dg-final { scan-assembler-times "SFPENCC" 2 } }
+// { dg-final { scan-assembler-times "SFPCONFIG" 6 } }
 // { dg-final { scan-assembler-times "\\.ttinsn" 37 } }
 // { dg-final { scan-assembler-times "\\.ttinsn 923926532" 2 } }
 // { dg-final { scan-assembler-times "SFPLOAD\\t" 16 } }
@@ -27,6 +29,7 @@
 
 __attribute__((noinline)) void periodic_minmax_raw_face_word ()
 {
+  RVTT_TEST_LANE_RESET ();
   MINMAX_ROW ();
   MINMAX_ROW ();
   MINMAX_ROW ();

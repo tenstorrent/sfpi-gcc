@@ -1,3 +1,5 @@
+#include "rtl-lane-reset.h"
+
 // Check that -mtt-tensix-macro-ims-carrier moves a shift/product chain onto a free launch register and forms at ii=12.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-macro-planner-verify -mtt-tensix-macro-ims -mtt-tensix-macro-ims-carrier -fdump-rtl-rvtt_macro_planner" }
 // { dg-final { scan-rtl-dump-times "Macro-planner upward-carrier: seed=2 chain=.3,4. reload-vd=3 prefix-clones=0 ii=13->12" 1 "rvtt_macro_planner" } }
@@ -24,6 +26,7 @@
 
 __attribute__((noinline)) void paired_shift_product_rows ()
 {
+  RVTT_TEST_LANE_RESET ();
   ROW (-23, 64); ROW (-23, 64); ROW (-23, 64); ROW (-23, 64);
   ROW (-23, 64); ROW (-23, 64); ROW (-23, 64); ROW (-23, 64);
 }

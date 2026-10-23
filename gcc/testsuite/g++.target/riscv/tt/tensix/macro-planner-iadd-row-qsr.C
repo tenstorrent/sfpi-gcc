@@ -1,11 +1,14 @@
+#include "rtl-lane-reset.h"
+
 // { dg-options "-mcpu=tt-qsr32-tensix -O3 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -fdump-rtl-rvtt_macro_planner-details" }
 // Check that the SFPIADD row stays an opaque boundary on QSR, which has no audited SFPIADD effects.
 // { dg-final { scan-rtl-dump "row-opaque-effect" "rvtt_macro_planner" } }
 // { dg-final { scan-assembler-not "\\.ttinsn" } }
-// { dg-final { scan-assembler-not "SFPCONFIG" } }
+// { dg-final { scan-assembler-not {SFPCONFIG[ \t]+([0-9]|1[0-4]),} } }
 
 __attribute__((noinline)) void iadd_row_qsr ()
 {
+  RVTT_TEST_LANE_RESET ();
   __builtin_rvtt_sfppushc (0);
   __builtin_rvtt_sfppopc (0);
 #pragma GCC unroll 4

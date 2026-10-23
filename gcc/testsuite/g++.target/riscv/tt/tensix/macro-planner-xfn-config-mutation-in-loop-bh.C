@@ -1,3 +1,5 @@
+#include "rtl-lane-reset.h"
+
 // Check that a typed configuration write inside the face loop refuses the region-scoped fallback.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -fdump-rtl-rvtt_macro_planner-details" }
 // { dg-final { scan-rtl-dump "config-ownership-unproven" "rvtt_macro_planner" } }
@@ -13,6 +15,7 @@ volatile unsigned instruction_pipe;
 
 __attribute__((noinline)) void face_loop_mutated (unsigned faces)
 {
+  RVTT_TEST_LANE_RESET ();
   instruction_pipe = 0x12300000;	/* raw MMIO instruction push */
   asm volatile (".ttinsn\t%0" :: "i" (4));	/* opaque raw issue */
   for (unsigned face = 0; face < faces; ++face)

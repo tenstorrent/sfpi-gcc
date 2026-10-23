@@ -1,9 +1,11 @@
+#include "rtl-lane-reset.h"
+
 // Check that a single straight-line row is discovered but refuses as unprofitable.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -fdump-rtl-rvtt_macro_planner-details" }
 // { dg-final { scan-rtl-dump "Macro-planner region: rows=1 row-len=4 runs=1 stride=2 loop=no" "rvtt_macro_planner" } }
 // { dg-final { scan-rtl-dump "formation-refusal: unprofitable" "rvtt_macro_planner" } }
 // { dg-final { scan-assembler-not "SFPLOADMACRO" } }
-// { dg-final { scan-assembler-not "SFPCONFIG" } }
+// { dg-final { scan-assembler-not {SFPCONFIG[ \t]+([0-9]|1[0-4]),} } }
 // { dg-final { scan-assembler-times "SFPSHFT" 1 } }
 // { dg-final { scan-assembler-times "SFPCAST" 1 } }
 // { dg-final { scan-assembler-times "TTINCRWC" 1 } }
@@ -16,6 +18,7 @@ constexpr unsigned no_increment = 7;
 
 void single_row ()
 {
+  RVTT_TEST_LANE_RESET ();
   __builtin_rvtt_sfppushc (0);
   __builtin_rvtt_sfppopc (0);
   auto loaded = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, no_increment);

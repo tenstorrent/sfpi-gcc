@@ -1,6 +1,8 @@
+#include "../tensix/rtl-lane-reset.h"
+
 // Check that on Wormhole the macro planner emits the cast-round loop as 3 SETC16 (base-1 bank only) plus 8 launches.
 // { dg-options "-mcpu=tt-wh-tensix -O3 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner" }
-// { dg-final { scan-assembler-times "SFPCONFIG" 4 } }
+// { dg-final { scan-assembler-times "SFPCONFIG" 5 } }
 // { dg-final { scan-assembler-times "\\.ttinsn" 11 } }
 // { dg-final { scan-assembler-not "\\.ttinsn\\t2987065344" } }
 // { dg-final { scan-assembler-not "\\.ttinsn\\t2987982850" } }

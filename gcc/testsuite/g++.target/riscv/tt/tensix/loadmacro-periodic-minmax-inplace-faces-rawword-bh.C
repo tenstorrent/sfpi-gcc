@@ -1,7 +1,9 @@
+#include "rtl-lane-reset.h"
+
 // Check that in-place face runs separated by raw SETRWC words form like the typed face advance.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner" }
-// { dg-final { scan-assembler-times "SFPENCC" 1 } }
-// { dg-final { scan-assembler-times "SFPCONFIG" 5 } }
+// { dg-final { scan-assembler-times "SFPENCC" 2 } }
+// { dg-final { scan-assembler-times "SFPCONFIG" 6 } }
 // { dg-final { scan-assembler-times "\\.ttinsn" 73 } }
 // { dg-final { scan-assembler-times "\\.ttinsn\\t2466308096" 16 } }
 // { dg-final { scan-assembler-times "\\.ttinsn\\t2467356672" 16 } }

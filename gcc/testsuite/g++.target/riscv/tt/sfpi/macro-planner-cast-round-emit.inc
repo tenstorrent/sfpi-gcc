@@ -1,6 +1,11 @@
 /* An 8-row cast and stochastic-round loop for the macro planner tests.  */
+#ifndef RVTT_TEST_LANE_RESET
+#define RVTT_TEST_LANE_RESET() ((void) 0)
+#endif
+
 __attribute__((noinline)) void cast_round_pipeline_emittable ()
 {
+  RVTT_TEST_LANE_RESET ();
   __builtin_rvtt_sfppushc (0);
   __builtin_rvtt_sfppopc (0);
 #if __riscv_xtttensixwh

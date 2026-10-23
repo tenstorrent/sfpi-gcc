@@ -1,3 +1,7 @@
+#ifndef RVTT_TEST_LANE_RESET
+#define RVTT_TEST_LANE_RESET() ((void) 0)
+#endif
+
 /* Descriptor-residency shape: the tile-hoist kernel nested in a guarded
    block loop.  BLOCK_PRE and BLOCK_POST inject a word at block level or
    after the block loop.  */
@@ -10,12 +14,16 @@
 #ifndef BLOCK_POST
 #define BLOCK_POST()
 #endif
+#ifndef TILE_LANE_PROLOGUE
+#define TILE_LANE_PROLOGUE()
+#endif
 
 #define BLOCK_KERNEL(NAME)                                                    \
   __attribute__((noinline)) void NAME (unsigned blocks, unsigned tiles,       \
 				       unsigned faces,                        \
 				       volatile unsigned *sync_word)          \
   {                                                                           \
+    RVTT_TEST_LANE_RESET ();                                                  \
     __asm__ __volatile__ (".ttinsn %0" :: "n" (0xa6a1000a));                  \
     unsigned block = 0;                                                       \
     do                                                                        \
@@ -24,6 +32,7 @@
 	unsigned tile = 0;                                                    \
 	do                                                                    \
 	  {                                                                   \
+	    TILE_LANE_PROLOGUE ();                                            \
 	    __asm__ __volatile__ (".ttinsn %0" :: "n" (0xb20f0000));          \
 	    __asm__ __volatile__ (".ttinsn %0" :: "n" (0xb2120000));          \
 	    __asm__ __volatile__ (".ttinsn %0" :: "n" (0xb2220002));          \

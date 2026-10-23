@@ -1,3 +1,5 @@
+#include "rtl-lane-reset.h"
+
 // Check the loop-backedge drain elision with a renamed function and other Dst addresses.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-macro-planner-verify -mtt-tensix-optimize-drain-schedule -fdump-rtl-rvtt_macro_planner" }
 // { dg-final { scan-rtl-dump "Macro-planner drain-schedule: loop-backedge drain elided" "rvtt_macro_planner" } }

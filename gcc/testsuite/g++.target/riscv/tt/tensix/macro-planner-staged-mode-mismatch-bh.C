@@ -1,3 +1,5 @@
+#include "rtl-lane-reset.h"
+
 // Check that a row whose store mode differs from its load mode forms through the derived StoreMod0 field.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -fdump-rtl-rvtt_macro_planner-details" }
 // { dg-final { scan-rtl-dump "Macro-planner descriptor: templates=2 seq=1 misc=0x00000002 setc16=3 launches=1 drain=3" "rvtt_macro_planner" } }
@@ -7,6 +9,7 @@
 
 __attribute__((noinline)) void staged_mode_mismatch (unsigned iterations)
 {
+  RVTT_TEST_LANE_RESET ();
   for (unsigned row = 0; row < iterations; ++row)
     {
       __builtin_rvtt_sfppushc (0);
