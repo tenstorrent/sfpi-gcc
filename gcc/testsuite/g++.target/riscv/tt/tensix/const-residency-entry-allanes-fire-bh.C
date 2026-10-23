@@ -3,10 +3,13 @@
 // { dg-final { scan-tree-dump-times "programmed on its all-lanes entry edge" 1 "rvtt_prgm_const" } }
 // { dg-final { scan-tree-dump-times "reused PRGM L1\\d for identical constant 0x40000000" 1 "rvtt_prgm_const" } }
 // { dg-final { scan-tree-dump-times "peeled first iteration" 1 "rvtt_prgm_const" } }
-// { dg-final { scan-assembler-times "SFPCONFIG" 2 } }
+// { dg-final { scan-assembler-times "SFPCONFIG" 4 } }
 
 void entry_fire (void)
 {
+  // Prove physical full lanes; do not infer an entry-state ABI.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   auto x = __builtin_rvtt_sfpreadlreg (0);
   auto zero = __builtin_rvtt_sfpreadlreg (1);
   for (unsigned ix = 0; ix != 32; ++ix)
@@ -28,6 +31,9 @@ void entry_fire (void)
 
 void prior_cc_keeps_peel (void)
 {
+  // Prove physical full lanes; do not infer an entry-state ABI.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   auto west = __builtin_rvtt_sfpreadlreg (2);
   auto floor = __builtin_rvtt_sfpreadlreg (3);
   __builtin_rvtt_sfpencc (10, 0);

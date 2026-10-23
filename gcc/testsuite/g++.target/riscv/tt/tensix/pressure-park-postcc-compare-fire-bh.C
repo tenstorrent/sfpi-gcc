@@ -3,11 +3,14 @@
 // { dg-final { scan-tree-dump-times "pressure-park: admitted post-CC candidate" 2 "rvtt_prgm_const" } }
 // { dg-final { scan-tree-dump-not "consumer-lane-discipline-unaudited" "rvtt_prgm_const" } }
 // { dg-final { scan-tree-dump-times "pressure-park: hoisted invariant materialization to a free LREG" 1 "rvtt_prgm_const" } }
-// { dg-final { scan-assembler-times "SFPCONFIG" 1 } }
+// { dg-final { scan-assembler-times "SFPCONFIG" 3 } }
 // { dg-final { scan-assembler "SFPLE\tL\\d+, L1\\d, 0, 1" } }
 
 void compare_vc_fire (void)
 {
+  // Establish physical full lanes independently of the entry ABI.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   auto x = __builtin_rvtt_sfpreadlreg (0);
   auto out = __builtin_rvtt_sfpreadlreg (1);
   for (unsigned ix = 0; ix != 32; ++ix)
@@ -25,6 +28,9 @@ void compare_vc_fire (void)
 
 void compare_vd_lreg_park (void)
 {
+  // Establish physical full lanes independently of the entry ABI.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   auto y = __builtin_rvtt_sfpreadlreg (2);
   auto res = __builtin_rvtt_sfpreadlreg (3);
   for (unsigned ix = 0; ix != 32; ++ix)

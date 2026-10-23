@@ -5,6 +5,8 @@
 
 void park_failclosed_keep (void)
 {
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   auto x0 = __builtin_rvtt_sfpreadlreg (0);
   auto x1 = __builtin_rvtt_sfpreadlreg (1);
   auto x2 = __builtin_rvtt_sfpreadlreg (2);

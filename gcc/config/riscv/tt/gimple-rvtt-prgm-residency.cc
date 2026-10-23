@@ -55,6 +55,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt-protos.h"
 #include "rvtt-refuse.h"
 #include "rvtt.h"
+#include "rvtt-effects.h"
 #include "rvtt-pressure.h"
 #include "rvtt-delivery-cost.h"
 #include "rvtt-placement.h"
@@ -555,117 +556,21 @@ peel_first_iteration (class loop *loop, edge entry,
 }
 
 /* -------------------------------------------------------------------- */
-/* Pre-peel lane-state proof.
-
-   The pressure-park tier can hoist a constant to the post-peel programming
-   point, but the peeled copy keeps its own materialization, so the constant is
-   materialized twice per loop entry.  Placing the definition at the head of
-   the peel block instead lets the copy be erased, but only if all lanes are
-   enabled there.
-
-   That holds when no function-local CC-affecting statement reaches the point
-   without passing an all-lanes SFPENCC, which overwrites the lane enables from
-   its immediates.  cc_write_reaches_point_p cannot be used because it does not
-   model that kill: a nested CC-canonical loop's own writers reach its
-   preheader around the enclosing backedge.
-
-   Calls are treated as CC-transparent, as in the plain LOOP class.  Raw asm is
-   transparent because the transform only runs when the TU raw-boundary audit
-   passed (facts.refused), and no audited raw word (NOP, sync, thread config,
-   CLEARDVALID, SETRWC, LOADI, SFPCONFIG) writes lane state.  When the proof
-   fails the post-peel placement is kept.  */
-
-enum cc_block_class
-{
-  CC_BLOCK_TRANSPARENT,		/* no CC-affecting statement */
-  CC_BLOCK_KILLS,		/* last CC event is the all-lanes SFPENCC */
-  CC_BLOCK_DIRTY		/* a CC-affecting statement escapes */
-};
-
-/* Classify BB by its last CC-affecting statement: CC_BLOCK_KILLS when that is
-   the all-lanes SFPENCC, CC_BLOCK_DIRTY when another CC writer (or a
-   pushc/popc) follows the last kill, and CC_BLOCK_TRANSPARENT when the block
-   has no typed CC event.  Calls and raw asm are transparent (see above).  */
-
-static cc_block_class
-classify_cc_block (basic_block bb)
-{
-  cc_block_class cls = CC_BLOCK_TRANSPARENT;
-  for (gimple_stmt_iterator gsi = gsi_start_bb (bb); !gsi_end_p (gsi);
-       gsi_next (&gsi))
-    {
-      gimple *stmt = gsi_stmt (gsi);
-      if (is_gimple_debug (stmt) || gimple_code (stmt) == GIMPLE_LABEL
-	  || gimple_code (stmt) == GIMPLE_COND)
-	continue;
-      const rvtt_insn_data *insnd = rvtt_get_insn_data (stmt);
-      if (!insnd)
-	continue;		/* calls and raw asm: see above */
-      gcall *call = as_a <gcall *> (stmt);
-      if (rvtt_all_lanes_encc_p (stmt))
-	cls = CC_BLOCK_KILLS;
-      else if (insnd->sets_cc (call)
-	       || insnd->id == rvtt_insn_data::sfppushc
-	       || insnd->id == rvtt_insn_data::sfppopc)
-	cls = CC_BLOCK_DIRTY;
-    }
-  return cls;
-}
-
-/* Whether the lane-enable state on entry to POINT_BB is provably the
-   architectural all-lanes state: every backwards CFG path from
-   POINT_BB's entry hits the function entry (all-lanes ambient) or an
-   all-lanes-SFPENCC-terminated block before any escaping CC-affecting
-   statement.  */
+/* Pre-peel/programming lane proof shared with the other GIMPLE passes.
+   Function entry is unknown; flags and LaneConfig are independent.  */
 
 static bool
 prepeel_ambient_all_lanes_p (basic_block point_bb)
 {
-  hash_set<basic_block> visited;
-  auto_vec<basic_block, 16> work;
-  edge e;
-  edge_iterator ei;
-  FOR_EACH_EDGE (e, ei, point_bb->preds)
-    work.safe_push (e->src);
-  while (!work.is_empty ())
-    {
-      basic_block b = work.pop ();
-      if (b == ENTRY_BLOCK_PTR_FOR_FN (cfun))
-	continue;
-      if (visited.add (b))
-	continue;
-      switch (classify_cc_block (b))
-	{
-	case CC_BLOCK_DIRTY:
-	  return false;
-	case CC_BLOCK_KILLS:
-	  continue;
-	case CC_BLOCK_TRANSPARENT:
-	  FOR_EACH_EDGE (e, ei, b->preds)
-	    work.safe_push (e->src);
-	  break;
-	}
-    }
-  return true;
+  rvtt_gimple_lane_facts facts (cfun);
+  return facts.block_in (point_bb) == RVTT_LANE_ALL;
 }
-
-/* Whether the lane-enable state on exit from BB is provably all-lanes:
-   BB itself ends on the all-lanes SFPENCC, or it has no CC event and
-   its entry state is proven (prepeel_ambient_all_lanes_p).  */
 
 static bool
 block_exit_ambient_all_lanes_p (basic_block bb)
 {
-  switch (classify_cc_block (bb))
-    {
-    case CC_BLOCK_KILLS:
-      return true;
-    case CC_BLOCK_DIRTY:
-      return false;
-    case CC_BLOCK_TRANSPARENT:
-      break;
-    }
-  return prepeel_ambient_all_lanes_p (bb);
+  rvtt_gimple_lane_facts facts (cfun);
+  return facts.block_out (bb) == RVTT_LANE_ALL;
 }
 
 /* True when USE is a SET_CC compare reading NAME as its VD.  It is
@@ -803,8 +708,7 @@ residency_collect_loop_class (function *fn,
 		{
 		  auto_vec<gimple *> lift_writers;
 		  collect_cc_writers (fn, &lift_writers);
-		  if (cc_write_reaches_point_p (lift_writers,
-						lifted_entry->src, nullptr))
+		  if (!block_exit_ambient_all_lanes_p (lifted_entry->src))
 		    {
 		      rvtt_refuse (RVTT_REF_CROSSLOOP_CC_PEEL_ENTRYCC_UNPROVEN,
 				   dump_file,
@@ -853,7 +757,7 @@ residency_collect_loop_class (function *fn,
 	  collect_cc_writers (fn, &writers);
 	  bool unreached
 	    = !cc_write_reaches_point_p (writers, entry->src, nullptr);
-	  if (unreached || block_exit_ambient_all_lanes_p (entry->src))
+	  if (block_exit_ambient_all_lanes_p (entry->src))
 	    {
 	      cc_lifted_loop = true;
 	      own_entry = true;
@@ -1574,101 +1478,37 @@ residency_transform (function *fn, prgm_state *st)
       return false;
     }
   {
-    auto_vec<gimple *> cc_writers;
-    collect_cc_writers (fn, &cc_writers);
-    if (!cc_writers.is_empty ())
+    rvtt_gimple_lane_facts lanes (fn);
+    auto filter = [&] (auto_vec<residency_candidate> &cands, bool inplace)
       {
-	/* All-lanes proof by reachability: a candidate is refused when a
-	   function-local CC writer can execute before its programming point
-	   (the same test as the fusion class).  Peel candidates are exempt:
-	   their programming follows the peeled iteration's all-lanes SFPENCC,
-	   and every replaced materialization ran in that same state.  The
-	   in-place classes test their own statement.  */
 	unsigned kept = 0;
-	for (residency_candidate &c : loop_cands)
+	for (residency_candidate &c : cands)
 	  {
-	    /* A cc-lifted candidate was proven at discovery.  The header test
-	       would wrongly count the loop's own CC writers, which run after
-	       the lifted point.  */
-	    if (!c.peel && !c.cc_lifted
-		&& cc_write_reaches_point_p (cc_writers, c.loop->header,
-					     nullptr))
+	    bool proved = inplace
+	      ? lanes.before (c.load) == RVTT_LANE_ALL
+	      : c.peel
+		? (lanes.before (c.load) & RVTT_LANE_ROW_MASK_CLEAR) != 0
+		: lanes.block_out (c.entry->src) == RVTT_LANE_ALL;
+	    if (!proved)
 	      {
+		if (c.group)
+		  invalid_madpair_groups.add (c.group);
 		rvtt_refuse (RVTT_REF_CC_REGION_UNPROVEN, dump_file,
-			     "const-residency: loop bb %d refused "
-			     "(cc-region-unproven): a CC write reaches the "
-			     "programming point\n", c.loop->header->index);
+			     "const-residency: refused (cc-region-unproven): "
+			     "flags/ROW_MASK unproved\n");
 		continue;
 	      }
-	    loop_cands[kept++] = c;
+	    cands[kept++] = c;
 	  }
-	loop_cands.truncate (kept);
-	kept = 0;
-	for (residency_candidate &c : pressure_cands)
-	  {
-	    if (cc_write_reaches_point_p (cc_writers, gimple_bb (c.load),
-					  c.load))
-	      {
-		rvtt_refuse (RVTT_REF_CC_REGION_UNPROVEN, dump_file,
-			     "const-residency: pressure candidate in bb %d "
-			     "refused (cc-region-unproven): a CC write reaches "
-			     "the in-place programming point\n",
-			     gimple_bb (c.load)->index);
-		continue;
-	      }
-	    pressure_cands[kept++] = c;
-	  }
-	pressure_cands.truncate (kept);
-	/* MAD-PAIR: in-place reach test.  A refused member invalidates its
-	   whole group, since the remaining claims would pay for programming
-	   while the surviving immediate fold still blocks the mad combine.  */
-	kept = 0;
-	for (residency_candidate &c : madpair_cands)
-	  {
-	    if (cc_write_reaches_point_p (cc_writers, gimple_bb (c.load),
-					  c.load))
-	      {
-		rvtt_refuse (RVTT_REF_CC_REGION_UNPROVEN, dump_file,
-			     "const-residency: madpair candidate in bb %d "
-			     "refused (cc-region-unproven): a CC write reaches "
-			     "the in-place programming point\n",
-			     gimple_bb (c.load)->index);
-		invalid_madpair_groups.add (c.group);
-		continue;
-	      }
-	    madpair_cands[kept++] = c;
-	  }
-	madpair_cands.truncate (kept);
-	/* HOISTED-REUSE class: same in-place programming point, same
-	   pressure-style reach test; no grouping.  */
-	kept = 0;
-	for (residency_candidate &c : hoistreuse_cands)
-	  {
-	    if (cc_write_reaches_point_p (cc_writers, gimple_bb (c.load),
-					  c.load))
-	      {
-		rvtt_refuse (RVTT_REF_CC_REGION_UNPROVEN, dump_file,
-			     "const-residency: hoisted-reuse candidate in bb "
-			     "%d refused (cc-region-unproven): a CC write "
-			     "reaches the in-place programming point\n",
-			     gimple_bb (c.load)->index);
-		continue;
-	      }
-	    hoistreuse_cands[kept++] = c;
-	  }
-	hoistreuse_cands.truncate (kept);
-	if (loop_cands.is_empty () && pressure_cands.is_empty ()
-	    && madpair_cands.is_empty () && hoistreuse_cands.is_empty ())
-	  {
-	    rvtt_refuse (RVTT_REF_CC_REGION_UNPROVEN, dump_file,
-			 "const-residency: refused (cc-region-unproven)"
-			 " -- in-function CC writes reach every candidate"
-			 " programming point; cross-call ambient proof is"
-			 " not on"
-			 " record here\n");
-	    return false;
-	  }
-      }
+	cands.truncate (kept);
+      };
+    filter (loop_cands, false);
+    filter (pressure_cands, true);
+    filter (madpair_cands, true);
+    filter (hoistreuse_cands, true);
+    if (loop_cands.is_empty () && pressure_cands.is_empty ()
+	&& madpair_cands.is_empty () && hoistreuse_cands.is_empty ())
+      return false;
   }
   if (!st->initialized)
     {

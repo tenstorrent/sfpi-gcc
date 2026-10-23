@@ -3,10 +3,13 @@
 // { dg-final { scan-tree-dump-times "admits runtime trips" 2 "rvtt_prgm_const" } }
 // { dg-final { scan-tree-dump-times "const-residency: allocated PRGM L1\\d for constant" 2 "rvtt_prgm_const" } }
 // { dg-final { scan-tree-dump-not "trip-count" "rvtt_prgm_const" } }
-// { dg-final { scan-assembler-times "SFPCONFIG" 2 } }
+// { dg-final { scan-assembler-times "SFPCONFIG" 4 } }
 
 void residency_runtime_trips (unsigned n)
 {
+  // Prove physical full lanes; do not infer an entry-state ABI.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   auto x = __builtin_rvtt_sfpreadlreg (0);
   for (unsigned ix = 0; ix != n; ++ix)
     {
@@ -18,6 +21,9 @@ void residency_runtime_trips (unsigned n)
 
 void renamed_scaled_rows (int rows)
 {
+  // Prove physical full lanes; do not infer an entry-state ABI.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   auto acc = __builtin_rvtt_sfpreadlreg (4);
   for (int r = 0; r < rows; ++r)
     {

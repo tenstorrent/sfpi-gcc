@@ -2,10 +2,13 @@
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-unroll-loops -mtt-tensix-optimize-const-residency -fdump-tree-rvtt_prgm_const-details" }
 // { dg-final { scan-tree-dump-times "programmed on its all-lanes entry edge \\(every CC write reaching the preheader is killed" 1 "rvtt_prgm_const" } }
 // { dg-final { scan-tree-dump-not "peeled first iteration" "rvtt_prgm_const" } }
-// { dg-final { scan-assembler-times "SFPCONFIG" 1 } }
+// { dg-final { scan-assembler-times "SFPCONFIG" 2 } }
 
 void nested_fire (unsigned faces)
 {
+  // Prove physical full lanes; do not infer an entry-state ABI.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   auto x = __builtin_rvtt_sfpreadlreg (0);
   auto zero = __builtin_rvtt_sfpreadlreg (1);
   for (unsigned face = 0; face != faces; ++face)

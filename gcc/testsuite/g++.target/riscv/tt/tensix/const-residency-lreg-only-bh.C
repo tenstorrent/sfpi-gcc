@@ -8,6 +8,9 @@
 
 void lut_tables_resident (void)
 {
+  // Prove physical full lanes; do not infer an entry-state ABI.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   for (unsigned ix = 0; ix != 32; ++ix)
     {
       auto x = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 7);
@@ -26,6 +29,9 @@ void lut_tables_resident (void)
 
 void compare_vd_resident (void)
 {
+  // Prove physical full lanes; do not infer an entry-state ABI.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   for (unsigned ix = 0; ix != 32; ++ix)
     {
       auto x = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 7);

@@ -3,12 +3,15 @@
 // { dg-final { scan-tree-dump-times "madpair-prgm-exhausted" 1 "rvtt_prgm_const" } }
 // { dg-final { scan-tree-dump-times "allocated PRGM L1\\d for constant 0x\[0-9a-f\]+ .madpair class" 2 "rvtt_prgm_const" } }
 // { dg-final { scan-assembler-times "SFPMAD" 1 } }
-// { dg-final { scan-assembler-times "SFPCONFIG" 2 } }
+// { dg-final { scan-assembler-times "SFPCONFIG" 3 } }
 // { dg-final { scan-assembler-times "SFPMULI" 1 } }
 // { dg-final { scan-assembler-times "SFPADDI" 1 } }
 
 void madpair_prgm_exhausted (void)
 {
+  // Prove physical full lanes; do not infer an entry-state ABI.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   auto x = __builtin_rvtt_sfpreadlreg (0);
   auto y = __builtin_rvtt_sfpreadlreg (1);
   auto k1 = __builtin_rvtt_sfpxloadi (nullptr, 0x40400000, 0, 0, 31);

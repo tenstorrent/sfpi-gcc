@@ -3,10 +3,13 @@
 // { dg-final { scan-tree-dump "pressure-park: refused .consumer-lane-discipline-unaudited." "rvtt_prgm_const" } }
 // { dg-final { scan-tree-dump-not "pressure-park: admitted post-CC candidate" "rvtt_prgm_const" } }
 // { dg-final { scan-tree-dump-not "allocated PRGM" "rvtt_prgm_const" } }
-// { dg-final { scan-assembler-not "SFPCONFIG" } }
+// { dg-final { scan-assembler-times "SFPCONFIG" 1 } }
 
 void park_consumer_refuse (void)
 {
+  // Establish physical full lanes independently of the entry ABI.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   auto x = __builtin_rvtt_sfpreadlreg (0);
   for (unsigned ix = 0; ix != 32; ++ix)
     {

@@ -2,10 +2,13 @@
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-unroll-loops -mtt-tensix-optimize-const-residency -fdump-tree-rvtt_prgm_const-details" }
 // { dg-final { scan-tree-dump-times "loop bb \\d+ refused .sfpu-barrier." 2 "rvtt_prgm_const" } }
 // { dg-final { scan-tree-dump-not "peeled first iteration" "rvtt_prgm_const" } }
-// { dg-final { scan-assembler-not "SFPCONFIG" } }
+// { dg-final { scan-assembler-times "SFPCONFIG" 2 } }
 
 void peel_dead_lanes_tail (void)
 {
+  // Prove physical full lanes; do not infer an entry-state ABI.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   auto x = __builtin_rvtt_sfpreadlreg (0);
   for (unsigned ix = 0; ix != 32; ++ix)
     {
@@ -21,6 +24,9 @@ void peel_dead_lanes_tail (void)
 
 void peel_noncanonical_word (void)
 {
+  // Prove physical full lanes; do not infer an entry-state ABI.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   auto x = __builtin_rvtt_sfpreadlreg (1);
   for (unsigned ix = 0; ix != 32; ++ix)
     {

@@ -5,6 +5,9 @@
 
 void owner_init_typed (void)
 {
+  // Prove physical full lanes; do not infer an entry-state ABI.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   auto ln2 = __builtin_rvtt_sfpxloadi (nullptr, 0x3f317218, 0, 0, 31);
   __builtin_rvtt_sfpwriteconfig_v (ln2, 0, 12);
   auto k1 = __builtin_rvtt_sfpxloadi (nullptr, 0x3dd8adac, 0, 0, 31);
@@ -15,6 +18,9 @@ void owner_init_typed (void)
 
 void owner_init_raw (void)
 {
+  // Prove physical full lanes; do not infer an entry-state ABI.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   /* SFPCONFIG dest 12 from LReg[0]: opcode 0x91, dest field 12 --
      claimed with an unauditable value.  */
   asm volatile (".ttinsn %0" :: "i" (0x910000C0));
@@ -22,6 +28,9 @@ void owner_init_raw (void)
 
 void kernel_no_reuse (void)
 {
+  // Prove physical full lanes; do not infer an entry-state ABI.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   auto x = __builtin_rvtt_sfpreadlreg (0);
   for (unsigned ix = 0; ix != 32; ++ix)
     {

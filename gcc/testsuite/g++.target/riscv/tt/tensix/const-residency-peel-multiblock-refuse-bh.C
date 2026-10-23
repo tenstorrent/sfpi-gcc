@@ -3,10 +3,13 @@
 // { dg-final { scan-tree-dump "cc-canonical proof failed .multi-block-body." "rvtt_prgm_const" } }
 // { dg-final { scan-tree-dump "loop bb \\d+ refused .sfpu-barrier." "rvtt_prgm_const" } }
 // { dg-final { scan-tree-dump-not "peeled first iteration" "rvtt_prgm_const" } }
-// { dg-final { scan-assembler-not "SFPCONFIG" } }
+// { dg-final { scan-assembler-times "SFPCONFIG" 1 } }
 
 void peel_multiblock (const unsigned *sel)
 {
+  // Prove physical full lanes; do not infer an entry-state ABI.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   auto x = __builtin_rvtt_sfpreadlreg (0);
   for (unsigned ix = 0; ix != 32; ++ix)
     {

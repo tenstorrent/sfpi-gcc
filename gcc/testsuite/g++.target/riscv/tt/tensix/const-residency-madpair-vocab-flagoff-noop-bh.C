@@ -6,6 +6,9 @@
 
 void vocab_compl_fire (void)
 {
+  // Prove physical full lanes; do not infer an entry-state ABI.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   auto x = __builtin_rvtt_sfpreadlreg (0);
   auto twice = __builtin_rvtt_sfpxloadi (nullptr, 0x40000000, 0, 0, 31);
   auto lift = __builtin_rvtt_sfpreadlreg (1);
@@ -23,6 +26,9 @@ void vocab_compl_fire (void)
 
 void vocab_lv_fire (void)
 {
+  // Prove physical full lanes; do not infer an entry-state ABI.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   auto x = __builtin_rvtt_sfpreadlreg (2);
   auto keep = __builtin_rvtt_sfpreadlreg (3);
   auto gain = __builtin_rvtt_sfpxloadi (nullptr, 0x3f100000, 0, 0, 31);

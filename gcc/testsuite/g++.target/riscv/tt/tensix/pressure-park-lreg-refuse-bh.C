@@ -4,10 +4,13 @@
 // { dg-final { scan-tree-dump "const-residency: refused .prgm-exhausted." "rvtt_prgm_const" } }
 // { dg-final { scan-tree-dump "pressure-park: refused .lreg-file-exhausted." "rvtt_prgm_const" } }
 // { dg-final { scan-tree-dump-not "hoisted invariant materialization to a free LREG" "rvtt_prgm_const" } }
-// { dg-final { scan-assembler-times "SFPCONFIG" 3 } }
+// { dg-final { scan-assembler-times "SFPCONFIG" 4 } }
 
 void park_lreg_refuse (void)
 {
+  // Establish physical full lanes independently of the entry ABI.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   auto a0 = __builtin_rvtt_sfpreadlreg (0);
   auto a1 = __builtin_rvtt_sfpreadlreg (1);
   auto a2 = __builtin_rvtt_sfpreadlreg (2);

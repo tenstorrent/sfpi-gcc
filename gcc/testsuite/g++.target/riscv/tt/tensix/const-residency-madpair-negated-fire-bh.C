@@ -7,6 +7,9 @@
 
 void madpair_negated_fire (void)
 {
+  // Prove physical full lanes; do not infer an entry-state ABI.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   auto x = __builtin_rvtt_sfpreadlreg (0);
   auto y = __builtin_rvtt_sfpreadlreg (1);
   auto two = __builtin_rvtt_sfpxloadi (nullptr, 0x40000000, 0, 0, 31);
@@ -24,6 +27,9 @@ void madpair_negated_fire (void)
 
 void renamed_halving_step (void)
 {
+  // Prove physical full lanes; do not infer an entry-state ABI.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   auto north = __builtin_rvtt_sfpreadlreg (2);
   auto south = __builtin_rvtt_sfpreadlreg (3);
   auto bias = __builtin_rvtt_sfpxloadi (nullptr, 0x3fc00000, 0, 0, 31);

@@ -1,12 +1,15 @@
+#include "rtl-lane-reset.h"
+
 // Check that -mtt-tensix-optimize-park-ordering defers an in-region invariant hoist in a CC-restore loop to the late residency walk.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-unroll-loops -fchecking=2 -mtt-tensix-optimize-invariant-loadi -mtt-tensix-optimize-const-residency -mtt-tensix-optimize-pressure-park -mtt-tensix-optimize-park-ordering -fdump-tree-rvtt_invariant-details -fdump-tree-rvtt_prgm_const-details" }
 // { dg-final { scan-tree-dump-times "hoist deferred: residency-walk-ordering" 2 "rvtt_invariant" } }
 // { dg-final { scan-tree-dump-not "Hoisted invariant SFPU immediate" "rvtt_invariant" } }
 // { dg-final { scan-tree-dump-times "allocated PRGM L1\\d for constant 0x\[0-9a-f\]+ .loop class" 2 "rvtt_prgm_const" } }
-// { dg-final { scan-assembler-times "SFPCONFIG" 2 } }
+// { dg-final { scan-assembler-times "SFPCONFIG" 4 } }
 
 void ordering_defer_fire (void)
 {
+  RVTT_TEST_LANE_RESET ();
   auto x = __builtin_rvtt_sfpreadlreg (0);
   for (unsigned ix = 0; ix != 32; ++ix)
     {
@@ -21,6 +24,7 @@ void ordering_defer_fire (void)
 
 void renamed_varied_walker (void)
 {
+  RVTT_TEST_LANE_RESET ();
   auto west = __builtin_rvtt_sfpreadlreg (2);
   for (unsigned step = 0; step != 12; ++step)
     {
