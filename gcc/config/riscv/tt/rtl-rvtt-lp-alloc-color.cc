@@ -49,6 +49,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt-protos.h"
 #include "rvtt-refuse.h"
 #include "rvtt-effects.h"
+#include "rvtt-rtl-lane-state.h"
 #include "rtl-rvtt-lp-alloc-int.h"
 
 namespace rvtt_lpa {
@@ -89,7 +90,7 @@ struct lpa_state : rvtt_cc_lattice
   static lpa_state entry ()
   {
     lpa_state s = {};
-    s.cc = RVTT_CC_ALL;
+    s.cc = RVTT_CC_UNPROVED;
     s.known = true;
     s.reached = true;
     return s;
@@ -131,7 +132,8 @@ lpa_refuse (spill_ctx &ctx, const char *name, const char *detail, rtx_insn *at)
    rows, layout facts, and hard refusals.  */
 
 static void
-lpa_transfer (lpa_state &s, rtx_insn *insn, spill_ctx *collect)
+lpa_transfer (lpa_state &s, rtx_insn *insn, spill_ctx *collect,
+	      const rvtt_rtl_lane_facts *lanes = nullptr)
 {
   int code = recog_memoized (insn);
   /* Zero-length LREG metadata: no Dst/RWC/config/CC effect; raw
@@ -203,7 +205,15 @@ lpa_transfer (lpa_state &s, rtx_insn *insn, spill_ctx *collect)
       /* LaneConfig (SFPCONFIG dest 15): the column-exchange and
 	 lane-block bits redirect or drop SFPLOAD/SFPSTORE lanes,
 	 which would silently corrupt the round trip.  */
-      if (collect)
+      /* The shared fact is established only by an all-column exact
+	 assignment of the entire LaneConfig register to zero, not by an
+	 ENCC or an arbitrary mask-bit update.  That is the identity mapping
+	 needed by the Dst round trip.  Every other LaneConfig write still
+	 refuses globally; no spill is moved across an unproved layout.  */
+      if (collect
+	  && !(lanes
+	       && rvtt_rtl_lane_effect_of (insn) == LANES_ROW_MASK_CLEAR
+	       && lanes->after (insn) == RVTT_RTL_ALL_LANES))
 	lpa_refuse (*collect, "lreg-spill-laneconfig-unproven",
 		"laneconfig-written-in-function", insn);
     }
@@ -422,6 +432,7 @@ scan_spill_legality (function *fn, spill_ctx &ctx)
     ctx.mint_trips[i] = -1;
 
   unsigned max_uid = get_max_uid () + 1;
+  rvtt_rtl_lane_facts lanes (fn);
   ctx.cc_before.safe_grow_cleared (max_uid);
   ctx.cc_after.safe_grow_cleared (max_uid);
   ctx.epoch_before.safe_grow_cleared (max_uid);
@@ -475,12 +486,18 @@ scan_spill_legality (function *fn, spill_ctx &ctx)
 	  if (!NONDEBUG_INSN_P (insn))
 	    continue;
 	  unsigned uid = INSN_UID (insn);
-	  ctx.cc_before[uid] = s.cc;
+	  unsigned lane_before = lanes.before (insn);
+	  ctx.cc_before[uid]
+	    = !(lane_before & RVTT_RTL_ROW_MASK_CLEAR) ? RVTT_CC_UNPROVED
+	    : lane_before == RVTT_RTL_ALL_LANES ? RVTT_CC_ALL : RVTT_CC_OTHER;
 	  ctx.epoch_before[uid] = s.epoch;
 	  ctx.off_before[uid] = s.off;
 	  ctx.known_before[uid] = s.known;
-	  lpa_transfer (s, insn, &ctx);
-	  ctx.cc_after[uid] = s.cc;
+	  lpa_transfer (s, insn, &ctx, &lanes);
+	  unsigned lane_after = lanes.after (insn);
+	  ctx.cc_after[uid]
+	    = !(lane_after & RVTT_RTL_ROW_MASK_CLEAR) ? RVTT_CC_UNPROVED
+	    : lane_after == RVTT_RTL_ALL_LANES ? RVTT_CC_ALL : RVTT_CC_OTHER;
 	  ctx.epoch_after[uid] = s.epoch;
 	  ctx.off_after[uid] = s.off;
 	  ctx.known_after[uid] = s.known;
@@ -1278,8 +1295,9 @@ web_spill_admissible_p (function *fn, unsigned regno, const spill_ctx &ctx,
 	    }
 	  if (reads)
 	    {
-	      if (ctx.cc_before[uid] != RVTT_CC_ALL
-		  && !lane_gated_consumer_p (insn))
+	      if (ctx.cc_before[uid] == RVTT_CC_UNPROVED
+		  || (ctx.cc_before[uid] != RVTT_CC_ALL
+		      && !lane_gated_consumer_p (insn)))
 		{
 		  *why = "cc-enable-unproved";
 		  return false;
@@ -1306,8 +1324,9 @@ web_spill_admissible_p (function *fn, unsigned regno, const spill_ctx &ctx,
 	      /* A pure def must be all-lanes; an RMW def by a
 		 lane-gated insn is exact at any CC (the scratch keeps
 		 the old disabled lanes -- predicated-write semantics).  */
-	      if (ctx.cc_after[uid] != RVTT_CC_ALL
-		  && !(reads && lane_gated_consumer_p (insn)))
+	      if (ctx.cc_after[uid] == RVTT_CC_UNPROVED
+		  || (ctx.cc_after[uid] != RVTT_CC_ALL
+		      && !(reads && lane_gated_consumer_p (insn))))
 		{
 		  *why = "cc-enable-unproved";
 		  return false;

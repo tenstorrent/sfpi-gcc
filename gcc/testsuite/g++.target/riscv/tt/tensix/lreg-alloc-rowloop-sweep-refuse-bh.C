@@ -6,6 +6,9 @@
 
 void lreg_alloc_rowloop_sweep_refuse (void)
 {
+  /* Establish both lane facts; ENCC alone does not clear ROW_MASK.  */
+  __builtin_rvtt_sfpencc (10, 3);
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   for (unsigned d = 0; d != 64; ++d)
     {
       auto a0 = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 4, 7);

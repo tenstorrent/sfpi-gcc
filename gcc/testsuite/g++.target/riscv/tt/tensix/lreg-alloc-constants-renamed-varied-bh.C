@@ -7,4 +7,5 @@
 #define C(N) q##N
 #define K(N) (0x3f1200a0u + 0x1111u * N)
 #define TRIPS 17
+#define CONST_RESIDENCY_ENTRY_PROLOGUE
 #include "const-remat-body.h"

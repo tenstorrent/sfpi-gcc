@@ -5,6 +5,9 @@
 
 void dualbank_matched_overlap (void)
 {
+  /* Establish both lane facts; ENCC alone does not clear ROW_MASK.  */
+  __builtin_rvtt_sfpencc (10, 3);
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   auto v0 = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 7);
   auto v1 = __builtin_rvtt_sfpload (nullptr, 4, 0, 0, 0, 7);
   auto c0 = __builtin_rvtt_sfpload (nullptr, 8, 0, 0, 0, 7);
