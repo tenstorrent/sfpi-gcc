@@ -2,9 +2,9 @@
 // Check that a single call outside any loop refuses the PRGM move.
 // { dg-final { scan-tree-dump "refused .crosscall-caller-no-loop." "rvtt_prgm_const" } }
 // { dg-final { scan-tree-dump-not "crosscall-prgm: moved" "rvtt_prgm_const" } }
-// { dg-final { scan-assembler-times "SFPCONFIG" 1 } }
+// { dg-final { scan-assembler-times "SFPCONFIG" 2 } }
 
-__attribute__((noinline)) void
+static __attribute__((noinline)) void
 cpn_callee ()
 {
   for (int row = 0; row != 8; ++row)
@@ -20,5 +20,8 @@ cpn_callee ()
 void
 cpn_caller ()
 {
+  // Caller setup proves the incoming state of the closed private callee.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   cpn_callee ();
 }

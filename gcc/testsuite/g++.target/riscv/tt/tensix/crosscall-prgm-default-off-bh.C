@@ -2,9 +2,9 @@
 // Check that without the flag the callee programs its residency register on every call.
 // { dg-final { scan-tree-dump "allocated PRGM L12 for constant" "rvtt_prgm_const" } }
 // { dg-final { scan-tree-dump-not "crosscall-prgm" "rvtt_prgm_const" } }
-// { dg-final { scan-assembler-times "SFPCONFIG" 1 } }
+// { dg-final { scan-assembler-times "SFPCONFIG" 2 } }
 
-__attribute__((noinline)) void
+static __attribute__((noinline)) void
 cpo_callee ()
 {
   for (int row = 0; row != 8; ++row)
@@ -20,6 +20,9 @@ cpo_callee ()
 void
 cpo_caller (int tiles)
 {
+  // Caller setup proves the incoming state of the closed private callee.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   for (int t = 0; t != tiles; ++t)
     cpo_callee ();
 }

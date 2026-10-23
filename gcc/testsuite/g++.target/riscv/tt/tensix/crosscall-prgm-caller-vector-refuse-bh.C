@@ -3,7 +3,7 @@
 // { dg-final { scan-tree-dump "refused .crosscall-caller-stmt-unproven." "rvtt_prgm_const" } }
 // { dg-final { scan-tree-dump-not "crosscall-prgm: moved" "rvtt_prgm_const" } }
 
-__attribute__((noinline)) void
+static __attribute__((noinline)) void
 cpv_callee ()
 {
   for (int row = 0; row != 8; ++row)
@@ -19,6 +19,9 @@ cpv_callee ()
 void
 cpv_caller (int tiles)
 {
+  // Caller setup proves the incoming state of the closed private callee.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   for (int t = 0; t != tiles; ++t)
     {
       auto y = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 6, 7);
