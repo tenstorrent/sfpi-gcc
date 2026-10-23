@@ -4,7 +4,7 @@
 // { dg-final { scan-tree-dump-not "contract placement lifted" "rvtt_crosscall" } }
 // { dg-final { scan-tree-dump "hoisted 6 contract materializations ..config prefix. from .* into 1 caller" "rvtt_crosscall" } }
 
-__attribute__((noinline)) void
+static __attribute__((noinline)) void
 ccs_callee ()
 {
   auto v = __builtin_rvtt_sfploadi (nullptr, 16128, 0, 0, 0);
@@ -29,8 +29,13 @@ ccs_callee ()
 void
 ccs_caller (int batches, int tiles)
 {
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   for (int b = 0; b != batches; ++b)
     {
+      // Re-enable the next batch after its predecessor's deliberate CC write.
+      // The test still requires the outer residency walk to stop at that write.
+      __builtin_rvtt_sfpencc_all_lanes ();
       for (int t = 0; t != tiles; ++t)
 	ccs_callee ();
       __builtin_rvtt_sfpencc (10, 0);	/* CC writer in the batch loop */

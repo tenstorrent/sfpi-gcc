@@ -1,6 +1,7 @@
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-optimize-crosscall-hoist -fdump-tree-rvtt_crosscall" }
-// Check that with an in-TU `_start' the scan skips an uncalled public body and the hoist fires.
-// { dg-final { scan-tree-dump "scan skips unreachable body void cch_orphan_copy" "rvtt_crosscall" } }
+// A truly private, unreferenced body is dead; a reset anchor alone would
+// not justify excluding an otherwise identical public ABI definition.
+// { dg-final { scan-tree-dump-not "mop-template-alias-unproven" "rvtt_crosscall" } }
 // { dg-final { scan-tree-dump "TU template audit: proven loadi-dests=0x8" "rvtt_crosscall" } }
 // { dg-final { scan-tree-dump "hoisted 6 contract materializations from .* into 1 caller" "rvtt_crosscall" } }
 
@@ -27,7 +28,8 @@
 #define CCH_VAL_B1 0xbd23d70a
 #define CCH_VAL_B2 0x3f2e147b
 #define CCH_SLOT_WORD 0x71312345
+#define CCH_LOCAL_TEMPLATE_INIT() CCH_TMPL (4, 2)
 #define CCH_ENTRY_DEF \
-  void cch_orphan_copy (unsigned *p) { ((volatile unsigned *) p)[0] = 1u; } \
+  static void cch_orphan_copy (unsigned *p) { ((volatile unsigned *) p)[0] = 1u; } \
   extern "C" void _start () { ccha_tmpl (4, 2); ccha_caller (4); }
 #include "crosscall-hoist-scan-body.h"

@@ -38,6 +38,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "stringpool.h"
 #include "attribs.h"
 #include "rvtt.h"
+#include "rvtt-effects.h"
 #include "rvtt-cc-region.h"
 #include "rvtt-refuse.h"
 #include "rvtt-ipa-summary.h"
@@ -207,6 +208,7 @@ rvtt_ipa_summary_get (cgraph_node *node)
 void
 rvtt_ipa_summary_invalidate (function *fn)
 {
+  rvtt_gimple_direct_issue_invalidate (fn);
   if (!summaries || !fn || !fn->decl)
     return;
   cgraph_node *node = cgraph_node::get (fn->decl);
@@ -246,8 +248,8 @@ static rvtt_ipa_tu_anchor_facts anchor_facts;
 
 /* Compute the TU anchor facts into F: whether a defined `_start' or a
    public `main' exists, how many defined functions qualify as entry
-   roots (the anchor itself; every externally visible non-comdat
-   definition when no anchor exists; forced-output/interrupt
+   roots (the anchor itself; every public definition, including COMDAT,
+   even with an anchor; forced-output/interrupt
    definitions), and whether anything roots the TU at all (an entry
    root, a static ctor/dtor, or an address-taken definition).  */
 
@@ -275,14 +277,11 @@ compute_tu_anchors (rvtt_ipa_tu_anchor_facts *f)
     {
       if (!node->definition)
 	continue;
-      bool externally_visible
-	= TREE_PUBLIC (node->decl) && !DECL_COMDAT (node->decl);
+      bool externally_visible = TREE_PUBLIC (node->decl);
       bool forced = DECL_PRESERVE_P (node->decl)
 	|| node->force_output || node->forced_by_abi
 	|| lookup_attribute ("interrupt", DECL_ATTRIBUTES (node->decl));
-      bool entry = node == anchor
-	|| (!anchor && externally_visible)
-	|| forced;
+      bool entry = node == anchor || externally_visible || forced;
       if (entry)
 	++f->n_entry_roots;
       if (entry
@@ -293,29 +292,20 @@ compute_tu_anchors (rvtt_ipa_tu_anchor_facts *f)
     }
 }
 
-/* The TU anchor facts, computed once on first consult and cached for
-   the rest of the compilation (decl/symtab flags only, stable after
-   IPA).  Under flag_checking every later consult recomputes and
-   asserts the cached facts did not drift.  */
+/* A live, declaration-only snapshot.  Public/COMDAT definitions may be
+   retired or materialized while functions are lowered, so the public-root
+   count is not immutable after IPA.  Recompute without consulting any
+   GIMPLE/RTL bodies; this is safe in either phase.  ROOTED says only that
+   an entry exists, not that a body or newly created declaration belongs
+   to a previously completed audit: consumers must separately check their
+   retained audited-function membership.  */
 
 const rvtt_ipa_tu_anchor_facts &
 rvtt_ipa_tu_anchors ()
 {
-  if (!anchor_facts.computed)
-    {
-      compute_tu_anchors (&anchor_facts);
-      anchor_facts.computed = true;
-      return anchor_facts;
-    }
-  if (flag_checking)
-    {
-      /* The facts depend only on symtab flags and must not change.  */
-      rvtt_ipa_tu_anchor_facts again;
-      compute_tu_anchors (&again);
-      gcc_assert (again.has_start == anchor_facts.has_start
-		  && again.has_main == anchor_facts.has_main
-		  && again.n_entry_roots == anchor_facts.n_entry_roots
-		  && again.rooted == anchor_facts.rooted);
-    }
+  rvtt_ipa_tu_anchor_facts current;
+  compute_tu_anchors (&current);
+  current.computed = true;
+  anchor_facts = current;
   return anchor_facts;
 }

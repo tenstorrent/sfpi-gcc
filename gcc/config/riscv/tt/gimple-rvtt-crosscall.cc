@@ -498,6 +498,23 @@ scan_stmt (scan_ctx *ctx, gimple *stmt, bool in_caller)
       const rvtt_insn_data *insnd = rvtt_get_insn_data (call);
       if (insnd)
 	{
+	  /* LaneConfig is independent of insnd->sets_cc: these calls can
+	     change ROW_MASK without touching the column flags.  A moved
+	     prefix cannot rely on the caller/callee mask staying invariant
+	     across such an unmodelled write.  Caller reset prologues are
+	     outside the scanned loop and are validated at placement.  */
+	  if (insnd->id == rvtt_insn_data::sfpconfig_i
+	      || insnd->id == rvtt_insn_data::sfpwriteconfig_i
+	      || insnd->id == rvtt_insn_data::sfpwriteconfig_v)
+	    {
+	      unsigned arg = insnd->id == rvtt_insn_data::sfpconfig_i ? 1
+		: insnd->id == rvtt_insn_data::sfpwriteconfig_i ? 5 : 2;
+	      unsigned dest;
+	      if (!rvtt_call_const_uarg (call, arg, &dest) || dest == 15)
+		return scan_refuse (ctx, in_caller
+				    ? "crosscall-caller-row-mask-unproved"
+				    : "crosscall-callee-row-mask-unproved", stmt);
+	    }
 	  if (insnd->sets_cc (call))
 	    {
 	      if (!ctx->cc_immaterial && !ctx->cc_ambient_ok)
@@ -1236,6 +1253,13 @@ prove_caller (cgraph_node *caller, gcall *call_stmt, tree callee_decl,
 	}
     }
 
+  /* The structural callee contract is conditional on a full caller
+     programming point, not on an all-lanes function-entry ABI.  Validate
+     every closed-graph caller at its actual (possibly lifted) placement.  */
+  rvtt_gimple_lane_facts lanes (fn);
+  if (lanes.block_out (entry->src) != RVTT_LANE_ALL)
+    return crosscall_refuse ("crosscall-caller-row-mask-unproved",
+			     caller->decl, call_stmt);
   *entry_out = entry;
   return true;
 }
@@ -1462,6 +1486,11 @@ transform (function *fn)
   if (!cn->definition || cn->address_taken || cn->alias || cn->thunk
       || cn->clones || !cn->callers)
     return crosscall_refuse ("crosscall-caller-body-unavailable", fn->decl,
+			     nullptr);
+
+  if (TREE_PUBLIC (fn->decl) || tu_facts.scan_unrooted || !tu_facts.entry_roots
+      || tu_facts.entry_roots->contains (cn))
+    return crosscall_refuse ("crosscall-callee-entry-unproved", fn->decl,
 			     nullptr);
 
   /* One call site per caller; collect and prove each caller.  */

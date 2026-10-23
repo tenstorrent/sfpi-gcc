@@ -3,7 +3,7 @@
 // { dg-final { scan-tree-dump "contract placement lifted to enclosing loop" "rvtt_crosscall" } }
 // { dg-final { scan-tree-dump "hoisted 6 contract materializations ..config prefix. from .* into 1 caller" "rvtt_crosscall" } }
 
-__attribute__((noinline)) void
+static __attribute__((noinline)) void
 ccn_callee ()
 {
   auto v = __builtin_rvtt_sfploadi (nullptr, 16128, 0, 0, 0);
@@ -30,6 +30,8 @@ int ccn_pace;
 void
 ccn_caller (int batches, int tiles)
 {
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   for (int b = 0; b != batches; ++b)
     {
       ccn_pace = b;			/* scalar batch bookkeeping */
