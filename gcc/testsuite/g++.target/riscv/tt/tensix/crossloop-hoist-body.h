@@ -26,6 +26,9 @@ extern volatile unsigned long __instrn_buffer[];
 void
 XLH_KERNEL (int XLH_TILES)
 {
+  // Each injected non-lane refusal below starts from genuinely full lanes.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   for (int XLH_T = 0; XLH_T != XLH_TILES; ++XLH_T)
     {
       /* The per-tile delivered words: SETRWC (RWC counters only), a

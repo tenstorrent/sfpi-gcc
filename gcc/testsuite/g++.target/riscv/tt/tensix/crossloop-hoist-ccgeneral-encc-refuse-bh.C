@@ -9,6 +9,9 @@ extern volatile unsigned long __instrn_buffer[];
 void
 xlh_ccgeneral_encc (int tiles)
 {
+  // Prove physical full lanes; do not infer an entry-state ABI.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   /* Entry-state spoiler: the entry is not provably all-lanes.  */
   {
     auto xs = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 6, 7);
