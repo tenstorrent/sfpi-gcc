@@ -1,3 +1,5 @@
+#include "rtl-lane-reset.h"
+
 // Check that a typed write to a planner-owned config destination between rows refuses formation in the function.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -fdump-rtl-rvtt_macro_planner-details" }
 // { dg-final { scan-rtl-dump "row-config-write" "rvtt_macro_planner" } }
@@ -32,6 +34,7 @@ constexpr unsigned no_increment = 7;
 
 __attribute__((noinline)) void config_mutation_between_rows ()
 {
+  RVTT_TEST_LANE_RESET ();
   ROW ();
   auto knob = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, no_increment);
   __builtin_rvtt_sfpwriteconfig_v (knob, 0, 4);

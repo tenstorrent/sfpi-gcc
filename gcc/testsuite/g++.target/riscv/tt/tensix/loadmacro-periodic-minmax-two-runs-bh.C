@@ -1,7 +1,9 @@
+#include "rtl-lane-reset.h"
+
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner" }
 // Check that two eight-row runs separated by typed TTINCRWC share one descriptor and keep the separators.
-// { dg-final { scan-assembler-times "SFPENCC" 1 } }
-// { dg-final { scan-assembler-times "SFPCONFIG" 5 } }
+// { dg-final { scan-assembler-times "SFPENCC" 2 } }
+// { dg-final { scan-assembler-times "SFPCONFIG" 6 } }
 // { dg-final { scan-assembler-times "\\.ttinsn" 35 } }
 // { dg-final { scan-assembler-times "SFPLOAD\\t" 16 } }
 // { dg-final { scan-assembler-times "SFPNOP" 6 } }
@@ -25,6 +27,7 @@
 
 __attribute__((noinline)) void periodic_minmax_two_runs ()
 {
+  RVTT_TEST_LANE_RESET ();
   MINMAX_ROW ();
   MINMAX_ROW ();
   MINMAX_ROW ();

@@ -1,3 +1,5 @@
+#include "rtl-lane-reset.h"
+
 // Check that an in-place SFPMUL24 tied to its VA-side factor forms through the commuted template word.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-macro-planner-verify -fdump-rtl-rvtt_macro_planner" }
 // { dg-final { scan-rtl-dump-times "Macro-planner descriptor: derived-calendar events=5 staging=none drain=2 kind-mask=0x3" 1 "rvtt_macro_planner" } }
@@ -46,12 +48,14 @@
 
 __attribute__((noinline)) void commuted_product_rows ()
 {
+  RVTT_TEST_LANE_RESET ();
   ROW (); ROW (); ROW (); ROW (); ROW (); ROW (); ROW (); ROW ();
 }
 #undef ROW
 
 int main ()
 {
+  RVTT_TEST_LANE_RESET ();
   commuted_product_rows ();
   return 0;
 }

@@ -1,3 +1,5 @@
+#include "rtl-lane-reset.h"
+
 // Same shape as replay-hoist-planner-launch-fire-bh.C with different names and sixteen trips.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -fno-unroll-loops -mtt-tensix-macro-planner -mtt-tensix-macro-planner-replay -mtt-tensix-optimize-replay-hoist -fdump-rtl-rvtt_replay-details" }
 // { dg-final { scan-rtl-dump "planner-derived launch effects: insn \\d+ writes 0x10001 settle 3" "rvtt_replay" } }
@@ -10,6 +12,7 @@
 
 __attribute__((noinline)) void sixteen_panel_walk (void)
 {
+  RVTT_TEST_LANE_RESET ();
   __builtin_rvtt_sfppushc (0);
   __builtin_rvtt_sfppopc (0);
   for (unsigned panel = 0; panel != 16; ++panel)

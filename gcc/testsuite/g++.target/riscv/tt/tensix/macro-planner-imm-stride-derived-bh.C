@@ -1,3 +1,5 @@
+#include "rtl-lane-reset.h"
+
 // Check that rows differing only by a common Dst-address immediate delta form the absorbed-stride calendar.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-macro-planner-verify -fdump-rtl-rvtt_macro_planner-details" }
 // { dg-final { scan-rtl-dump-times "Macro-planner region: rows=8 row-len=3 runs=1 stride=2 \\(imm\\) loop=yes" 1 "rvtt_macro_planner" } }
@@ -6,7 +8,8 @@
 // { dg-final { scan-assembler-times "\\.ttinsn\\t2466308096" 4 } }
 // { dg-final { scan-assembler-times "\\.ttinsn\\t2467356672" 4 } }
 // { dg-final { scan-assembler-times "\\.ttinsn\\t2472591360" 8 } }
-// { dg-final { scan-assembler-times "SFPENCC\\t3, 10" 1 } }
+// Three fixture lane resets and the one formed loop's planner enable.
+// { dg-final { scan-assembler-times "SFPENCC\\t3, 10" 4 } }
 
 // A non-uniform immediate progression (the second pair jumps +6) and a
 // progression whose total separator advance is short both refuse with
@@ -35,6 +38,7 @@
 
 __attribute__((noinline)) void fused_imm_fire ()
 {
+  RVTT_TEST_LANE_RESET ();
   for (int t = 0; t < 4; ++t)
     {
       ROWPAIR (0, 2);
@@ -46,6 +50,7 @@ __attribute__((noinline)) void fused_imm_fire ()
 
 __attribute__((noinline)) void fused_imm_nonuniform_refuse ()
 {
+  RVTT_TEST_LANE_RESET ();
   for (int t = 0; t < 4; ++t)
     {
       ROWPAIR (0, 2);
@@ -57,6 +62,7 @@ __attribute__((noinline)) void fused_imm_nonuniform_refuse ()
 
 __attribute__((noinline)) void fused_imm_short_counter_refuse ()
 {
+  RVTT_TEST_LANE_RESET ();
   for (int t = 0; t < 4; ++t)
     {
       ROWPAIR (0, 2);

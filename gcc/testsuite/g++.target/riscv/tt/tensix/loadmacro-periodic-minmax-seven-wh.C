@@ -1,7 +1,9 @@
+#include "rtl-lane-reset.h"
+
 // Check that seven min/max rows form a macro on Wormhole (three config words, seven launches).
 // { dg-options "-mcpu=tt-wh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner" }
-// { dg-final { scan-assembler-times "SFPENCC" 1 } }
-// { dg-final { scan-assembler-times "SFPCONFIG" 5 } }
+// { dg-final { scan-assembler-times "SFPENCC" 2 } }
+// { dg-final { scan-assembler-times "SFPCONFIG" 6 } }
 // { dg-final { scan-assembler-times "\\.ttinsn" 17 } }
 // { dg-final { scan-assembler-not "\\.ttinsn\\t2987065344" } }
 // { dg-final { scan-assembler-not "\\.ttinsn\\t2987982850" } }

@@ -1,9 +1,11 @@
+#include "rtl-lane-reset.h"
+
 // Check that the opaque-caller face loop forms on Wormhole with the single-slot Base=1 SETC16 program.
 // { dg-options "-mcpu=tt-wh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -fdump-rtl-rvtt_macro_planner-details" }
 // { dg-final { scan-rtl-dump "Macro-planner config-ownership: loop-scoped window" "rvtt_macro_planner" } }
 // { dg-final { scan-rtl-dump "Macro-planner formed: rows=8 runs=1 config=preheader" "rvtt_macro_planner" } }
-// { dg-final { scan-assembler-times "SFPENCC" 1 } }
-// { dg-final { scan-assembler-times "SFPCONFIG" 4 } }
+// { dg-final { scan-assembler-times "SFPENCC" 2 } }
+// { dg-final { scan-assembler-times "SFPCONFIG" 5 } }
 // { dg-final { scan-rtl-dump-times "Macro-planner descriptor-setc16" 3 "rvtt_macro_planner" } }
 // { dg-final { scan-assembler-times "\\.ttinsn\\t2466676736" 4 } }
 // { dg-final { scan-assembler-times "\\.ttinsn\\t2467725312" 4 } }
@@ -18,8 +20,10 @@ volatile unsigned instruction_pipe;
 
 __attribute__((noinline)) void opaque_caller_face_loop (unsigned faces)
 {
-  instruction_pipe = 0x12300000;	/* raw MMIO instruction push */
-  asm volatile (".ttinsn\t%0" :: "i" (4));	/* opaque raw issue */
+  RVTT_TEST_LANE_RESET ();
+  instruction_pipe = 0x02000000;	/* NOP, whether stored or delivered.  */
+  asm volatile ("fence rw,rw" ::: "memory");	/* Scalar opaque channel.  */
+  asm volatile (".ttinsn\t%0" :: "i" (4)); /* Audited opcode-0 NOP.  */
   for (unsigned face = 0; face < faces; ++face)
     {
       __builtin_rvtt_sfppushc (0);

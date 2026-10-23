@@ -1,3 +1,5 @@
+#include "rtl-lane-reset.h"
+
 // Check that a source interleaving two limb-2 rows forms no macro row, so the stride flag is inert.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-optimize-window-pairing -mtt-tensix-optimize-window-pairing-stride -fdump-rtl-rvtt_macro_planner" }
 // { dg-final { scan-rtl-dump-times "Macro-planner refusal: row-not-closed" 8 "rvtt_macro_planner" } }
@@ -37,5 +39,6 @@
 
 __attribute__((noinline)) void limb2_interleaved_pairs ()
 {
+  RVTT_TEST_LANE_RESET ();
   PAIR (); PAIR (); PAIR (); PAIR ();
 }

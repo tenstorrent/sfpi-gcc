@@ -1,14 +1,23 @@
-// Check that asm the per-word decode cannot classify passes the entry-ambient walk when the TU-wide CC audit is clean.
+#include "rtl-lane-reset.h"
+#include "ambient-walk-mop-template.h"
+
+// An exact scalar fence and a completely programmed, audited NOP MOP preserve
+// the caller's physical lane facts. A clean TU alone is not an entry ABI.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-macro-planner-verify -mtt-tensix-optimize-prgm-const -fdump-rtl-rvtt_macro_planner-details" }
 // { dg-final { scan-rtl-dump-times "Macro-planner formation: entry-ambient all-lanes derived" 1 "rvtt_macro_planner" } }
-// { dg-final { scan-rtl-dump-times "Macro-planner ambient-walk: derived through opaque init \\(0 raw words decoded ambient-preserving, 2 audited-TU asm\\)" 1 "rvtt_macro_planner" } }
+// { dg-final { scan-rtl-dump-times "entry-ambient all-lanes derived .flags and ROW_MASK proved." 1 "rvtt_macro_planner" } }
 // { dg-final { scan-rtl-dump-times "Macro-planner verify: ok" 1 "rvtt_macro_planner" } }
 // { dg-final { scan-rtl-dump-not "ambient-entry-unproven" "rvtt_macro_planner" } }
+// Both actual instructions remain; neither is an invented metadata marker.
+// { dg-final { scan-assembler-times {(?n)^[ \t]*fence[ \t]*$} 1 } }
+// { dg-final { scan-assembler-times {\.ttinsn[ \t]+25165824} 1 } }
 
 #define TTI(w) __asm__ __volatile__ (".ttinsn %0" :: "n" (w))
 
 __attribute__((noinline)) void reed_tulean_fire ()
 {
+  program_ambient_nop_mop ();
+  RVTT_TEST_LANE_RESET ();
   /* Residency candidate: forces the TU scan in this function's own
      prgm-const execution.  */
   auto x = __builtin_rvtt_sfpload (nullptr, 64, 0, 0, 0, 7);

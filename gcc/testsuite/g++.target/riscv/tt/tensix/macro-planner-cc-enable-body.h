@@ -1,3 +1,7 @@
+#ifndef RVTT_TEST_LANE_RESET
+#define RVTT_TEST_LANE_RESET() ((void) 0)
+#endif
+
 /* QSR's sfpsetcc and sfpswap carry an operand-type argument the other
    architectures do not have.  0 is IMM_TYPE_INT, which is what these
    bit-pattern subjects want.  Spelled as a token macro rather than an
@@ -61,6 +65,7 @@ constexpr unsigned cc_enable_no_increment = 7;
 
 __attribute__((noinline)) void CC_ENABLE_FN ()
 {
+  RVTT_TEST_LANE_RESET ();
   CC_ENABLE_STMT;
   CC_ENABLE_ROW ();
   CC_ENABLE_ROW ();

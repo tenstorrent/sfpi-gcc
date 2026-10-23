@@ -1,3 +1,5 @@
+#include "rtl-lane-reset.h"
+
 // Check the loop-backedge drain elision with a typed face advance in the loop tail.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-macro-planner-verify -mtt-tensix-optimize-drain-schedule -fdump-rtl-rvtt_macro_planner" }
 // { dg-final { scan-rtl-dump "Macro-planner drain-backedge: drain=3 pending=1 stream-credit=2 words-per-row=3" "rvtt_macro_planner" } }

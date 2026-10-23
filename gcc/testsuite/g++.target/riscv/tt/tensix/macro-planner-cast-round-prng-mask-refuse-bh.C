@@ -1,3 +1,5 @@
+#include "rtl-lane-reset.h"
+
 // Check that a predicated cast-round row without an all-lanes proof stays explicit.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -fdump-rtl-rvtt_macro_planner-details" }
 // { dg-final { scan-rtl-dump {all-lanes-proof-missing} "rvtt_macro_planner" } }
@@ -14,6 +16,7 @@
 
 __attribute__((noinline)) void cast_round_prng_masked ()
 {
+  RVTT_TEST_LANE_RESET ();
   __builtin_rvtt_sfpencc (10, 1);
   ROW (); ROW (); ROW (); ROW (); ROW (); ROW (); ROW (); ROW ();
 }

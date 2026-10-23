@@ -1,3 +1,5 @@
+#include "rtl-lane-reset.h"
+
 // Check that the in-body drain of a compact loop is elided on the backedge and one
 // SFPNOP 3 drain lands after the loop.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-macro-planner-verify -mtt-tensix-optimize-drain-schedule -fdump-rtl-rvtt_macro_planner" }

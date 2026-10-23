@@ -1,3 +1,5 @@
+#include "rtl-lane-reset.h"
+
 // Check that the compact select keeps the restore launch and explicit payload load directly behind the definition launch.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-macro-planner-verify -mtt-tensix-macro-planner-replay -fdump-rtl-rvtt_macro_planner-details" }
 // { dg-final { scan-rtl-dump "Macro-planner descriptor-cc: sense=complement def-visible=2 pre-load=1 post-load=2 store-exec=3 restore-visible=3 interval=3 separator=absorbed" "rvtt_macro_planner" } }
@@ -26,6 +28,7 @@
 
 __attribute__((noinline)) void select_compact_cc_slots (unsigned faces)
 {
+  RVTT_TEST_LANE_RESET ();
   unsigned face = 0;
   do
     {

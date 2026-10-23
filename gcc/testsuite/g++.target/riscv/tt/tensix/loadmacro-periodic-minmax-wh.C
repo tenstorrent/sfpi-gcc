@@ -1,6 +1,8 @@
+#include "rtl-lane-reset.h"
+
 // Check that the Wormhole min/max calendar programs only the Base=1 SETC16 slot, never the ADDR_MOD_2 bank LLK uses.
 // { dg-options "-mcpu=tt-wh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner" }
-// { dg-final { scan-assembler-times "SFPCONFIG" 5 } }
+// { dg-final { scan-assembler-times "SFPCONFIG" 6 } }
 // { dg-final { scan-assembler-times "\\.ttinsn" 19 } }
 // { dg-final { scan-assembler-not "\\.ttinsn\\t2987065344" } }
 // { dg-final { scan-assembler-not "\\.ttinsn\\t2987982850" } }

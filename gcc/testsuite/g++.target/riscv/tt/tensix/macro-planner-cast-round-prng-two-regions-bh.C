@@ -1,3 +1,5 @@
+#include "rtl-lane-reset.h"
+
 // Check that an opaque entropy consumer splits two cast-round regions and only the first forms.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -fdump-rtl-rvtt_macro_planner-details" }
 // { dg-final { scan-rtl-dump-times {Macro-planner region: rows=8} 2 "rvtt_macro_planner" } }
@@ -17,6 +19,7 @@
 
 __attribute__((noinline)) void cast_round_prng_two_regions ()
 {
+  RVTT_TEST_LANE_RESET ();
   __builtin_rvtt_sfppushc (0);
   __builtin_rvtt_sfppopc (0);
   ROW (); ROW (); ROW (); ROW (); ROW (); ROW (); ROW (); ROW ();

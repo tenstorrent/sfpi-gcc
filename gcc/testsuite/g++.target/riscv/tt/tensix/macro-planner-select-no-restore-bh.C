@@ -1,9 +1,11 @@
+#include "rtl-lane-reset.h"
+
 // Check that a predicated store with no in-row all-lanes restore refuses by name.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -fdump-rtl-rvtt_macro_planner-details" }
 // { dg-final { scan-rtl-dump "descriptor-program-unproven" "rvtt_macro_planner" } }
 // { dg-final { scan-rtl-dump-not "Macro-planner formed" "rvtt_macro_planner" } }
 // { dg-final { scan-assembler-not "\\.ttinsn" } }
-// { dg-final { scan-assembler-not "SFPCONFIG" } }
+// { dg-final { scan-assembler-not {SFPCONFIG[ \t]+([0-9]|1[0-4]),} } }
 // { dg-final { scan-assembler "SFPSETCC" } }
 
 #define ROW()                                                                 \
@@ -21,6 +23,7 @@
 
 __attribute__((noinline)) void predicated_store_no_restore ()
 {
+  RVTT_TEST_LANE_RESET ();
   ROW ();
   ROW ();
   ROW ();

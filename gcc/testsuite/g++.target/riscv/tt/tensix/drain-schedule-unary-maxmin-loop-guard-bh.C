@@ -1,7 +1,10 @@
+#include "rtl-lane-reset.h"
+
 // Check that a single-run loop-body region never elides its exit drain.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-macro-planner-verify -mtt-tensix-optimize-drain-schedule -fdump-rtl-rvtt_macro_planner" }
-// { dg-final { scan-assembler-times "SFPENCC\\t3, 10" 2 } }
-// { dg-final { scan-assembler-times "SFPCONFIG" 10 } }
+// Two fixture lane resets and two planner-owned enables.
+// { dg-final { scan-assembler-times "SFPENCC\\t3, 10" 4 } }
+// { dg-final { scan-assembler-times "SFPCONFIG" 12 } }
 // { dg-final { scan-assembler-times "\\.ttinsn\\t2466308096" 8 } }
 // { dg-final { scan-assembler-times "\\.ttinsn\\t2467356672" 8 } }
 // { dg-final { scan-assembler-times "\\.ttinsn\\t2472591360" 16 } }
@@ -16,6 +19,7 @@
 
 __attribute__((noinline)) void unary_max_loop ()
 {
+  RVTT_TEST_LANE_RESET ();
 #pragma GCC unroll 8
   for (int row = 0; row < 32; ++row)
     {
@@ -32,6 +36,7 @@ __attribute__((noinline)) void unary_max_loop ()
 
 __attribute__((noinline)) void unary_min_loop ()
 {
+  RVTT_TEST_LANE_RESET ();
 #pragma GCC unroll 8
   for (int row = 0; row < 32; ++row)
     {

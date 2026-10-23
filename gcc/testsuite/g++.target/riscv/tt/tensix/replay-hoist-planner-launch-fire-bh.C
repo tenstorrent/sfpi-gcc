@@ -1,3 +1,5 @@
+#include "rtl-lane-reset.h"
+
 // Check that a macro-planner SFPLOADMACRO launch payload is priced from the planner's emission records and its replay record hoists to the preheader.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -fno-unroll-loops -mtt-tensix-macro-planner -mtt-tensix-macro-planner-replay -mtt-tensix-optimize-replay-hoist -fdump-rtl-rvtt_replay-details" }
 // { dg-final { scan-rtl-dump "planner-derived launch effects: insn \\d+ writes 0x10001 settle 3" "rvtt_replay" } }
@@ -11,6 +13,7 @@
 
 __attribute__((noinline)) void typecast_face_loop_8 ()
 {
+  RVTT_TEST_LANE_RESET ();
   __builtin_rvtt_sfppushc (0);
   __builtin_rvtt_sfppopc (0);
   for (unsigned face = 0; face != 8; ++face)

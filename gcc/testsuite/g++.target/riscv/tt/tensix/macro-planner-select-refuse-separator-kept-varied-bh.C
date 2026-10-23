@@ -1,3 +1,5 @@
+#include "rtl-lane-reset.h"
+
 // Check that cc-restore-store-race refuses with different addresses, reversed mixed modes and the EQ0 predicate sense.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-macro-planner-verify -fdump-rtl-rvtt_macro_planner-details" }
 // { dg-final { scan-rtl-dump "Macro-planner schedule-candidate: cc-compact" "rvtt_macro_planner" } }
@@ -7,7 +9,7 @@
 // { dg-final { scan-rtl-dump-not "Macro-planner descriptor-cc:" "rvtt_macro_planner" } }
 // { dg-final { scan-rtl-dump-not "Macro-planner formed" "rvtt_macro_planner" } }
 // { dg-final { scan-assembler-not "\\.ttinsn" } }
-// { dg-final { scan-assembler-not "SFPCONFIG" } }
+// { dg-final { scan-assembler-not {SFPCONFIG[ \t]+([0-9]|1[0-4]),} } }
 // { dg-final { scan-assembler-not "SFPLOADMACRO" } }
 // { dg-final { scan-assembler-times "SFPSETCC" 1 } }
 // { dg-final { scan-assembler-times "TTINCRWC" 8 } }
@@ -23,5 +25,6 @@
 
 __attribute__((noinline)) void select_rows_varied_refusal ()
 {
+  RVTT_TEST_LANE_RESET ();
   SELECT_ROWS_8 ();
 }

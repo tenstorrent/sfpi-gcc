@@ -1,3 +1,7 @@
+#ifndef RVTT_TEST_LANE_RESET
+#define RVTT_TEST_LANE_RESET() ((void) 0)
+#endif
+
 /* QSR's sfpsetcc and sfpswap carry an operand-type argument the other
    architectures do not have.  0 is IMM_TYPE_INT, which is what these
    bit-pattern subjects want.  Spelled as a token macro rather than an
@@ -60,8 +64,12 @@ constexpr unsigned minmax_no_increment = 7;
 #define MINMAX_FACE_ADVANCE() __builtin_rvtt_ttdstface ()
 #endif
 
-__attribute__((noinline)) void periodic_minmax_inplace ()
+#ifndef MINMAX_VISIBILITY
+#define MINMAX_VISIBILITY
+#endif
+MINMAX_VISIBILITY __attribute__((noinline)) void periodic_minmax_inplace ()
 {
+  RVTT_TEST_LANE_RESET ();
 #ifdef MINMAX_FOUR_FACE_RUNS
   /* Four eight-row face runs separated by the face advance.  */
   MINMAX_EIGHT_ROWS ();

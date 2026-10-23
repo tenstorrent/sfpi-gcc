@@ -1,3 +1,5 @@
+#include "rtl-lane-reset.h"
+
 // Check that -mno-tt-tensix-optimize-drain-schedule keeps the in-body drain.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-macro-planner-verify -mno-tt-tensix-optimize-drain-schedule -fdump-rtl-rvtt_macro_planner" }
 // { dg-final { scan-rtl-dump-not "Macro-planner drain-backedge" "rvtt_macro_planner" } }

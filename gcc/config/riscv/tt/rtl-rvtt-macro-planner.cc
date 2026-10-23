@@ -79,6 +79,7 @@ along with GCC; see the file COPYING3.  If not see
 using namespace rvtt_planner;
 #include "rvtt-refuse.h"
 #include "rvtt-effects.h"
+#include "rvtt-rtl-lane-state.h"
 #include "rvtt-delivery-cost.h"
 #include "rvtt-macro-region.h"
 #include "rvtt-macro-sched.h"
@@ -184,6 +185,22 @@ form_region (function *fn, macro_region &region,
 	}
     }
 
+  /* Configuration writes and row payloads are lane-gated.  Moving an ENCC
+     cannot repair ROW_MASK, and moving configuration before its reset is
+     invalid even when a row later executes with all lanes enabled.  */
+  rvtt_rtl_lane_facts lanes (fn);
+  rtx_insn *config_at = region.rows[0].enable
+    ? region.rows[0].enable : region.rows[0].insns[0];
+  unsigned config_lanes = config_preheader
+    ? lanes.block_out (config_preheader) : lanes.before (config_at);
+  if (!(config_lanes & RVTT_RTL_ROW_MASK_CLEAR))
+    {
+      rvtt_refuse (RVTT_REF_CC_ENABLE_UNPROVED, dump,
+		   "Macro-planner formation-refusal:"
+		   " cc-enable-unproved (ROW_MASK at configuration)\n");
+      return false;
+    }
+
   /* Every enable the formation consumes (each row's local enable, all deleted
      with one re-emitted in the prefix, and the preheader's trailing enable)
      must provably enable all lanes; the store and misc programs do not support
@@ -239,7 +256,10 @@ form_region (function *fn, macro_region &region,
 		    && !e.lreg_write && e.cc_write_all_lanes)
 		  proof_restore = member;
 	      }
-	  if (proof_restore)
+	  if (proof_restore
+	      && entry_ambient_all_lanes_p
+		   (config_preheader ? config_preheader : region.bb,
+		    config_preheader ? nullptr : config_at, dump))
 	    {
 	      enable_src = proof_restore;
 	      materialized_enable = true;
@@ -269,8 +289,8 @@ form_region (function *fn, macro_region &region,
 	      ambient_enable = true;
 	      if (dump)
 		fprintf (dump, "Macro-planner formation: entry-ambient"
-			 " all-lanes derived (structured-CC fn-entry"
-			 " contract); canonical enable synthesized\n");
+			 " all-lanes derived (flags and ROW_MASK proved);"
+			 " canonical enable synthesized\n");
 	    }
 	  else
 	    {
@@ -1657,6 +1677,12 @@ public:
   unsigned execute (function *fn) final override
   {
     bool changed = false;
+    /* Formed calendars preserve the original lane state at every
+       unmodified source point, but their hidden CC programs are opaque
+       to generic RTL effect decoding.  Keep the pre-formation proof for
+       later source regions; never infer a fact for newly emitted UIDs.  */
+    rvtt_rtl_lane_facts original_lanes (fn);
+    rvtt_rtl_lane_snapshot_scope lane_scope (original_lanes);
     /* Clear the previous function's launch effect records
        (rvtt-effects.h).  */
     rvtt_planner_launch_effects_reset ();

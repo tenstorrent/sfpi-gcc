@@ -1,3 +1,5 @@
+#include "rtl-lane-reset.h"
+
 // Check that the SFPMOV negate arm forms and the same-shape SFPABS row stays explicit on Blackhole.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-macro-planner-verify -fdump-rtl-rvtt_macro_planner" }
 // { dg-final { scan-rtl-dump-times "Macro-planner descriptor-word dest=0: 0x7c0000c1" 1 "rvtt_macro_planner" } }
@@ -10,6 +12,7 @@
 
 __attribute__((noinline)) void neg_rows ()
 {
+  RVTT_TEST_LANE_RESET ();
 #define ROW()                                                                 \
   do                                                                          \
     {                                                                          \
@@ -27,6 +30,7 @@ __attribute__((noinline)) void neg_rows ()
 
 __attribute__((noinline)) void abs_rows ()
 {
+  RVTT_TEST_LANE_RESET ();
 #define ROW()                                                                 \
   do                                                                          \
     {                                                                          \
@@ -44,6 +48,7 @@ __attribute__((noinline)) void abs_rows ()
 
 int main ()
 {
+  RVTT_TEST_LANE_RESET ();
   neg_rows ();
   abs_rows ();
   return 0;

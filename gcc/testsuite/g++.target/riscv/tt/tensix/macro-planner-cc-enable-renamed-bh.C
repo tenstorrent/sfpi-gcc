@@ -1,11 +1,13 @@
+#include "rtl-lane-reset.h"
+
 // Check that of two renamed functions only the one with a proven all-lanes enable forms.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -fdump-rtl-rvtt_macro_planner-details" }
 // { dg-final { scan-rtl-dump-times "Macro-planner refusal: cc-enable-unproved" 1 "rvtt_macro_planner" } }
 // { dg-final { scan-rtl-dump-times "Macro-planner formed: rows=8 runs=1" 1 "rvtt_macro_planner" } }
 // The refused function keeps its explicit rows; the formed one's rows are
 // replaced by the macro calendar.
-// { dg-final { scan-assembler-times "SFPENCC" 2 } }
-// { dg-final { scan-assembler-times "SFPCONFIG" 5 } }
+// { dg-final { scan-assembler-times "SFPENCC" 4 } }
+// { dg-final { scan-assembler-times "SFPCONFIG" 7 } }
 // { dg-final { scan-assembler-times "\\.ttinsn" 19 } }
 // { dg-final { scan-assembler-times "TTINCRWC" 8 } }
 // { dg-final { scan-assembler "SFPSWAP" } }

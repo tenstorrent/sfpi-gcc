@@ -1,6 +1,8 @@
+#include "rtl-lane-reset.h"
+
 // Check that four in-place eight-row face runs share one descriptor on Wormhole, with a three-word SETC16 prefix.
 // { dg-options "-mcpu=tt-wh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner" }
-// { dg-final { scan-assembler-times "SFPCONFIG" 5 } }
+// { dg-final { scan-assembler-times "SFPCONFIG" 6 } }
 // { dg-final { scan-assembler-times "\\.ttinsn" 67 } }
 // { dg-final { scan-assembler-times "\\.ttinsn\\t2466299904" 16 } }
 // { dg-final { scan-assembler-times "\\.ttinsn\\t2467348480" 16 } }

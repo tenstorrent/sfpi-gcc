@@ -1,3 +1,5 @@
+#include "rtl-lane-reset.h"
+
 // Check that the arithmetic register-amount SFPSHFT (mod 2) derives a template under different names and immediate.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-macro-planner-verify -fdump-rtl-rvtt_macro_planner" }
 // { dg-final { scan-rtl-dump-times "Macro-planner descriptor-word dest=0: 0x79ff70c5" 1 "rvtt_macro_planner" } }
@@ -23,6 +25,7 @@
 
 __attribute__((noinline)) void arith_shift_rows ()
 {
+  RVTT_TEST_LANE_RESET ();
   TILE (); TILE (); TILE (); TILE ();
   TILE (); TILE (); TILE (); TILE ();
 }
@@ -30,6 +33,7 @@ __attribute__((noinline)) void arith_shift_rows ()
 
 int main ()
 {
+  RVTT_TEST_LANE_RESET ();
   arith_shift_rows ();
   return 0;
 }

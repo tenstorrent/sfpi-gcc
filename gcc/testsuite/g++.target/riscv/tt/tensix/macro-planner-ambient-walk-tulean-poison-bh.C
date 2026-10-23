@@ -1,13 +1,20 @@
+#include "rtl-lane-reset.h"
+#include "ambient-walk-mop-template.h"
+
 // Check that one unauditable asm anywhere in the TU makes the entry-ambient walk refuse the fire body.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-macro-planner-verify -mtt-tensix-optimize-prgm-const -fdump-rtl-rvtt_macro_planner-details" }
-// { dg-final { scan-rtl-dump-times "Macro-planner formation-refusal: all-lanes-proof-missing \\(ambient-entry-unproven\\)" 1 "rvtt_macro_planner" } }
-// { dg-final { scan-rtl-dump-times "Macro-planner ambient-walk dirty: insn \\d+ bb \\d+ \\(non-.ttinsn assembly in" 1 "rvtt_macro_planner" } }
+// A poisoned whole-TU no-recorder audit cannot establish ROW_MASK even from
+// the local reset. Retain the poison word and reject all macro formation.
+// { dg-final { scan-rtl-dump-times "Macro-planner formation-refusal: cc-enable-unproved \\(ROW_MASK at configuration\\)" 1 "rvtt_macro_planner" } }
+// { dg-final { scan-assembler-times {\.word[ \t]+0x00000013} 1 } }
+// { dg-final { scan-rtl-dump-not "Macro-planner formed:" "rvtt_macro_planner" } }
 // { dg-final { scan-rtl-dump-not "Macro-planner formation: entry-ambient all-lanes derived" "rvtt_macro_planner" } }
 
 #define TTI(w) __asm__ __volatile__ (".ttinsn %0" :: "n" (w))
 
 __attribute__((noinline)) void bogwood_poison_unaudited_asm ()
 {
+  RVTT_TEST_LANE_RESET ();
   /* Not called by the fire function, but makes the TU audit fail: the
      scan has no audited fact for a .word of the scalar NOP encoding.  */
   __asm__ __volatile__ (".word 0x00000013");
@@ -15,6 +22,8 @@ __attribute__((noinline)) void bogwood_poison_unaudited_asm ()
 
 __attribute__((noinline)) void reed_tulean_refuse ()
 {
+  program_ambient_nop_mop ();
+  RVTT_TEST_LANE_RESET ();
   auto x = __builtin_rvtt_sfpload (nullptr, 64, 0, 0, 0, 7);
   for (unsigned ix = 0; ix != 32; ++ix)
     {

@@ -1,8 +1,10 @@
+#include "rtl-lane-reset.h"
+
 // Check that raw `.ttinsn' SETRWC face-advance words earn the same credit and every
 // boundary elides.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-optimize-drain-schedule -fdump-rtl-rvtt_macro_planner" }
-// { dg-final { scan-assembler-times "SFPENCC" 1 } }
-// { dg-final { scan-assembler-times "SFPCONFIG" 5 } }
+// { dg-final { scan-assembler-times "SFPENCC" 2 } }
+// { dg-final { scan-assembler-times "SFPCONFIG" 6 } }
 // { dg-final { scan-assembler-times "\\.ttinsn" 73 } }
 // { dg-final { scan-assembler-times "\\.ttinsn 923926532" 6 } }
 // { dg-final { scan-assembler-times "SFPLOAD\\t" 32 } }

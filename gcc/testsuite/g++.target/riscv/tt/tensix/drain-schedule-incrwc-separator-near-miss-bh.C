@@ -1,3 +1,5 @@
+#include "rtl-lane-reset.h"
+
 // Check that a single TTINCRWC face advance earns no slot credit, so every boundary
 // refuses (drain-lreg-overlap) and keeps its drain.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-optimize-drain-schedule -fdump-rtl-rvtt_macro_planner" }

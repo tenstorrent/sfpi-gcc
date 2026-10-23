@@ -45,6 +45,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt-protos.h"
 #include "rvtt-refuse.h"
 #include "rvtt-effects.h"
+#include "rvtt-rtl-lane-state.h"
 #include "rvtt-delivery-cost.h"
 #include "rvtt-macro-region.h"
 #include "rvtt-macro-sched.h"
@@ -602,7 +603,14 @@ pure_cc_write_insn_p (rtx_insn *insn)
 bool
 cc_enable_all_lanes_proved_p (rtx_insn *insn)
 {
-  return rvtt_macro_insn_effects (insn).cc_write_all_lanes;
+  if (!rvtt_macro_insn_effects (insn).cc_write_all_lanes)
+    return false;
+  /* Unattached resets are checked for word shape only; placement must
+     independently pass entry_ambient_all_lanes_p.  */
+  if (!BLOCK_FOR_INSN (insn))
+    return true;
+  rvtt_rtl_lane_facts lanes (cfun);
+  return lanes.after (insn) == RVTT_RTL_ALL_LANES;
 }
 
 /* Return the last Tensix instruction before the loop entered from
@@ -639,189 +647,17 @@ preheader_trailing_enable (basic_block preheader)
   return nullptr;
 }
 
-/* Return true if all lanes are known to be enabled at the configuration
-   placement point (in POINT_BB before BEFORE) without an explicit enable
-   in the stream.  This relies on the structured-CC lowering convention
-   of gimple-rvtt-cc.cc that the outermost lane state is all-lanes:
-   function entry is all-lanes, the all-lanes SFPENCC word re-establishes
-   it, and any other CC write may change it.  Scalar instructions cannot
-   affect SFPU lane state.
-
-   LLK code issues some init as raw `.ttinsn' words, so asm is classified
-   by content:
-
-     - a canonical raw `.ttinsn' word is classified by
-       rvtt_raw_cc_word_class (rvtt-raw-boundary.cc).  A word in either
-       proven class is transparent, but never re-establishes the state,
-       since a word inside a REPLAY record window is stored, not
-       executed;
-     - an empty asm template is a compiler barrier with no effect;
-     - any other asm (MMIO store idioms, expander words such as MOP,
-       unclassified words) is accepted only if the TU-wide scan
-       (rvtt_tu_opaque_cc_ambient_preserving_p) found that nothing in the
-       translation unit delivered through such channels can take the
-       lane-enable state away from all-lanes.
-
-   Calls, unrecognized instructions and opaque typed Tensix instructions
-   may change the state (the TU scan does not cover what a callee
-   executes).  */
-
+/* Prove both independent lane facts at the actual placement point.  */
 bool
 entry_ambient_all_lanes_p (basic_block point_bb, rtx_insn *before,
-			   FILE *dump)
+			  FILE *dump)
 {
-  /* Refusal diagnostics: the first dirty instruction and its class.  */
-  rtx_insn *dirty_insn = nullptr;
-  const char *dirty_why = nullptr;
-  unsigned derived_words = 0, tu_leaned = 0;
-
-  /* 0 = transparent, 1 = kill (proven all-lanes), 2 = dirty.  */
-  auto classify = [&] (rtx_insn *insn) -> int
-    {
-      auto dirty = [&] (const char *why) -> int
-	{
-	  if (!dirty_insn)
-	    {
-	      dirty_insn = insn;
-	      dirty_why = why;
-	    }
-	  return 2;
-	};
-      if (!NONDEBUG_INSN_P (insn))
-	return 0;
-      if (CALL_P (insn))
-	return dirty ("call");
-      rtx pat = PATTERN (insn);
-      if (GET_CODE (pat) == USE || GET_CODE (pat) == CLOBBER)
-	return 0;
-      if (asm_noperands (pat) >= 0)
-	{
-	  /* Derive through the asm (see the function comment).  */
-	  uint32_t word;
-	  if (rvtt_raw_ttinsn_word (insn, &word))
-	    {
-	      if (rvtt_raw_cc_word_ambient_preserving_p (word))
-		{
-		  ++derived_words;
-		  return 0;
-		}
-	      /* An unknown word may still be covered by the TU scan
-		 (e.g. a MOP word, whose content is in the template
-		 registers); fall through.  */
-	    }
-	  else
-	    {
-	      /* Empty template = pure compiler barrier.  */
-	      rtx aop = extract_asm_operands (pat);
-	      const char *templ = aop ? ASM_OPERANDS_TEMPLATE (aop)
-		: GET_CODE (pat) == ASM_INPUT ? XSTR (pat, 0) : nullptr;
-	      if (templ)
-		{
-		  while (*templ == ' ' || *templ == '\t')
-		    ++templ;
-		  if (!*templ)
-		    return 0;
-		}
-	    }
-	  const char *reason = nullptr;
-	  if (rvtt_tu_opaque_cc_ambient_preserving_p (&reason))
-	    {
-	      ++tu_leaned;
-	      return 0;
-	    }
-	  return dirty (reason);
-	}
-      if (recog_memoized (insn) < 0)
-	return dirty ("unrecognized");
-      if (get_attr_type (insn) != TYPE_TENSIX)
-	return 0;
-      if (get_attr_length (insn) == 0)
-	/* Compiler-only markers (raw LREG effects, region bounds) deliver
-	   no instruction word, so they cannot touch the lane enables.  */
-	return 0;
-      xtt_effect_set e = rvtt_macro_insn_effects (insn);
-      if (e.opaque)
-	return dirty ("opaque-typed-effects");
-      if (!e.cc_write)
-	return 0;
-      if (e.cc_write_all_lanes && pure_cc_write_insn_p (insn))
-	return 1;
-      return dirty ("cc-write");
-    };
-
-  /* Scan BB backwards, from just before STOP_BEFORE (or the block end
-     when null), and report the last CC event: 1 kill, 2 dirty, 0 none
-     (transparent -- the walk continues into the predecessors).  */
-  auto scan = [&classify] (basic_block bb, rtx_insn *stop_before) -> int
-    {
-      rtx_insn *insn = stop_before ? PREV_INSN (stop_before) : BB_END (bb);
-      while (insn && BLOCK_FOR_INSN (insn) == bb)
-	{
-	  int c = classify (insn);
-	  if (c)
-	    return c;
-	  if (insn == BB_HEAD (bb))
-	    break;
-	  insn = PREV_INSN (insn);
-	}
-      return 0;
-    };
-
-  auto report = [&] (bool proven) -> bool
-    {
-      if (!dump)
-	return proven;
-      if (proven)
-	{
-	  if (derived_words || tu_leaned)
-	    fprintf (dump, "Macro-planner ambient-walk: derived through"
-		     " opaque init (%u raw words decoded"
-		     " ambient-preserving, %u audited-TU asm)\n",
-		     derived_words, tu_leaned);
-	}
-      else if (dirty_insn)
-	{
-	  fprintf (dump, "Macro-planner ambient-walk dirty: insn %d bb %d"
-		   " (%s)", INSN_UID (dirty_insn),
-		   BLOCK_FOR_INSN (dirty_insn)->index, dirty_why);
-	  uint32_t w;
-	  if (rvtt_raw_ttinsn_word (dirty_insn, &w))
-	    fprintf (dump, " word=0x%08x", w);
-	  fprintf (dump, "\n");
-	}
-      return proven;
-    };
-
-  int c = scan (point_bb, before);
-  if (c)
-    return report (c == 1);
-
-  hash_set<basic_block> visited;
-  auto_vec<basic_block, 16> work;
-  edge e;
-  edge_iterator ei;
-  FOR_EACH_EDGE (e, ei, point_bb->preds)
-    work.safe_push (e->src);
-  while (!work.is_empty ())
-    {
-      basic_block b = work.pop ();
-      if (b == ENTRY_BLOCK_PTR_FOR_FN (cfun))
-	continue;
-      if (visited.add (b))
-	continue;
-      switch (scan (b, nullptr))
-	{
-	case 1:
-	  continue;
-	case 2:
-	  return report (false);
-	default:
-	  FOR_EACH_EDGE (e, ei, b->preds)
-	    work.safe_push (e->src);
-	  break;
-	}
-    }
-  return report (true);
+  rvtt_rtl_lane_facts lanes (cfun);
+  bool proven = (before ? lanes.before (before) : lanes.block_out (point_bb))
+    == RVTT_RTL_ALL_LANES;
+  if (!proven && dump)
+    fprintf (dump, "Macro-planner ambient-walk dirty: flags/ROW_MASK unproved\n");
+  return proven;
 }
 
 /* Return the preheader of loop-body REGION in FN, or null (with the
@@ -1505,6 +1341,14 @@ init_hoist_callee_scan (function *fn, const macro_region &region,
 	  xtt_effect_set e = rvtt_macro_insn_effects (insn);
 	  if (!e.opaque)
 	    {
+	  /* A canonical zero LaneConfig assignment touches none of the
+	     descriptor, SETC16 or LREG state being moved.  Keep this reset
+	     in the callee: the cross-call service separately proves zero
+	     LaneConfig at the caller's actual placement point.  Thus the
+	     moved prefix and retained reset agree on the identity mapping;
+	     no arbitrary or nonzero configuration write is admitted.  */
+	  if (rvtt_rtl_lane_effect_of (insn) == LANES_ROW_MASK_CLEAR)
+	    continue;
 	      if (e.cc_write && e.cc_write_all_lanes && !e.cc_read
 		  && !e.lreg_read && !e.lreg_write
 		  && !e.config_dests_written && !e.config_dests_read

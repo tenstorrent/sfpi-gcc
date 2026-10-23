@@ -1,3 +1,5 @@
+#include "rtl-lane-reset.h"
+
 // { dg-options "-mcpu=tt-wh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-macro-planner-verify -fdump-rtl-rvtt_macro_planner-details" }
 // Check that the unary max/min loop forms on Wormhole with a renamed function, L11 constant, address 64 and opposite operand order.
 // Word derivation (launch: 0x93<<24 | lreg_ind<<20 | mod0<<16
@@ -23,8 +25,9 @@
 // { dg-final { scan-rtl-dump "descriptor-launch: macro=1 vd=2 word=0x93608040" "rvtt_macro_planner" } }
 // { dg-final { scan-rtl-dump "Macro-planner verify: ok" "rvtt_macro_planner" } }
 // { dg-final { scan-rtl-dump "Macro-planner formed: rows=8 runs=1 config=preheader" "rvtt_macro_planner" } }
-// { dg-final { scan-assembler-times "SFPENCC\\t3, 10" 1 } }
-// { dg-final { scan-assembler-times "SFPCONFIG" 5 } }
+// The fixture lane reset and the planner-owned enable.
+// { dg-final { scan-assembler-times "SFPENCC\\t3, 10" 2 } }
+// { dg-final { scan-assembler-times "SFPCONFIG" 6 } }
 // { dg-final { scan-assembler-times "\\.ttinsn" 19 } }
 // { dg-final { scan-assembler-not "\\.ttinsn\\t2987065344" } }
 // { dg-final { scan-assembler-not "\\.ttinsn\\t2987982850" } }
@@ -43,6 +46,7 @@
 
 __attribute__((noinline)) void pelican_floor_rows ()
 {
+  RVTT_TEST_LANE_RESET ();
 #pragma GCC unroll 8
   for (int row = 0; row < 32; ++row)
     {

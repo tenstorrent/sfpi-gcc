@@ -1,3 +1,5 @@
+#include "rtl-lane-reset.h"
+
 // Check that the integer multiply row forms with varied shift and addresses, visible in the derived words.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-macro-planner-verify -fdump-rtl-rvtt_macro_planner" }
 // { dg-final { scan-rtl-dump-times "Macro-planner descriptor: templates=4 seq=3 misc=0x00000040 setc16=3 launches=3 drain=2" 1 "rvtt_macro_planner" } }
@@ -38,6 +40,7 @@
 
 __attribute__((noinline)) void varied_radix_product_rows ()
 {
+  RVTT_TEST_LANE_RESET ();
   ROW ();
   ROW ();
   ROW ();

@@ -1,3 +1,5 @@
+#include "../tensix/rtl-lane-reset.h"
+
 // Check that on Quasar the predicated-select row refuses macro scheduling (target-macro-encoding-unproven).
 // { dg-options "-mcpu=tt-qsr32-tensix -O3 -I [SFPI]/include -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -fdump-rtl-rvtt_macro_planner-details" }
 // { dg-final { scan-rtl-dump "target-macro-encoding-unproven" "rvtt_macro_planner" } }

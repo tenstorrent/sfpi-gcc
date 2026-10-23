@@ -1,3 +1,7 @@
+#ifndef RVTT_TEST_LANE_RESET
+#define RVTT_TEST_LANE_RESET() ((void) 0)
+#endif
+
 // Shared derived-intmul row for the IMS arbitration tests.
 #define ROW()                                                                 \
   do                                                                          \
@@ -26,6 +30,7 @@
 
 __attribute__((noinline)) void wide_int_product_rows ()
 {
+  RVTT_TEST_LANE_RESET ();
   ROW (); ROW (); ROW (); ROW (); ROW (); ROW (); ROW (); ROW ();
 }
 #undef ROW

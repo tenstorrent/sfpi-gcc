@@ -1,12 +1,14 @@
+#include "rtl-lane-reset.h"
+
 // Check that any CC write other than the exact all-lanes SFPENCC (imm12 10, mod1 3) refuses formation.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -fdump-rtl-rvtt_macro_planner-details" }
 // { dg-final { scan-rtl-dump-times "Macro-planner refusal: cc-enable-unproved" 3 "rvtt_macro_planner" } }
 // { dg-final { scan-rtl-dump-times "Macro-planner formation-refusal: all-lanes-proof-missing" 3 "rvtt_macro_planner" } }
 // { dg-final { scan-rtl-dump-not "Macro-planner formed" "rvtt_macro_planner" } }
 // { dg-final { scan-assembler-not "SFPLOADMACRO" } }
-// { dg-final { scan-assembler-not "SFPCONFIG" } }
+// { dg-final { scan-assembler-not {SFPCONFIG[ \t]+([0-9]|1[0-4]),} } }
 // { dg-final { scan-assembler-not "\\.ttinsn" } }
-// { dg-final { scan-assembler-times "SFPENCC" 3 } }
+// { dg-final { scan-assembler-times "SFPENCC" 6 } }
 // { dg-final { scan-assembler-times "TTINCRWC" 24 } }
 
 #define CC_ENABLE_FN partial_mask_enable_bit

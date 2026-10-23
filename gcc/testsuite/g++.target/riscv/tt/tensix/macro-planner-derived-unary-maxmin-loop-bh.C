@@ -1,3 +1,5 @@
+#include "rtl-lane-reset.h"
+
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-macro-planner-verify -fdump-rtl-rvtt_macro_planner-details" }
 // Check that a load/constant-swap/store loop forms a derived calendar, with mod 9 or mod 1 per operand layout.
 // { dg-final { scan-rtl-dump-times "sequence-derivation-hazard" 2 "rvtt_macro_planner" } }
@@ -14,8 +16,9 @@
 // address-modifier program, five descriptor words through the owned
 // LREG; body: sixteen launch words (two per row, alternating VDs on
 // the value carrier, the sacrificial store-only VD); derived drain 3.
-// { dg-final { scan-assembler-times "SFPENCC\\t3, 10" 2 } }
-// { dg-final { scan-assembler-times "SFPCONFIG" 10 } }
+// Two fixture lane resets and two planner-owned enables.
+// { dg-final { scan-assembler-times "SFPENCC\\t3, 10" 4 } }
+// { dg-final { scan-assembler-times "SFPCONFIG" 12 } }
 // { dg-final { scan-assembler-times "\\.ttinsn\\t2987524096" 2 } }
 // { dg-final { scan-assembler-times "\\.ttinsn\\t2988572674" 2 } }
 // { dg-final { scan-assembler-times "\\.ttinsn\\t2989817856" 2 } }
@@ -30,6 +33,7 @@
 
 __attribute__((noinline)) void unary_max_loop ()
 {
+  RVTT_TEST_LANE_RESET ();
 #pragma GCC unroll 8
   for (int row = 0; row < 32; ++row)
     {
@@ -46,6 +50,7 @@ __attribute__((noinline)) void unary_max_loop ()
 
 __attribute__((noinline)) void unary_min_loop ()
 {
+  RVTT_TEST_LANE_RESET ();
 #pragma GCC unroll 8
   for (int row = 0; row < 32; ++row)
     {

@@ -1,3 +1,5 @@
+#include "rtl-lane-reset.h"
+
 // { dg-options "-mcpu=tt-bh-tensix -O3 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -fdump-rtl-rvtt_macro_planner-details" }
 // Check that SFPABS and SFPCAST mods 1 and 2 stay out of macro rows and a CC-writing SFPIADD refuses at the CC gate.
 // { dg-final { scan-rtl-dump-times "row-opaque-effect" 8 "rvtt_macro_planner" } }
@@ -11,6 +13,7 @@
 
 __attribute__((noinline)) void nearmiss_abs_row ()
 {
+  RVTT_TEST_LANE_RESET ();
   __builtin_rvtt_sfppushc (0);
   __builtin_rvtt_sfppopc (0);
 #pragma GCC unroll 4
@@ -25,6 +28,7 @@ __attribute__((noinline)) void nearmiss_abs_row ()
 
 __attribute__((noinline)) void unproven_cast_mod1_row ()
 {
+  RVTT_TEST_LANE_RESET ();
   __builtin_rvtt_sfppushc (0);
   __builtin_rvtt_sfppopc (0);
 #pragma GCC unroll 4
@@ -39,6 +43,7 @@ __attribute__((noinline)) void unproven_cast_mod1_row ()
 
 __attribute__((noinline)) void unproven_cast_mod2_row ()
 {
+  RVTT_TEST_LANE_RESET ();
   __builtin_rvtt_sfppushc (0);
   __builtin_rvtt_sfppopc (0);
 #pragma GCC unroll 4
@@ -53,6 +58,7 @@ __attribute__((noinline)) void unproven_cast_mod2_row ()
 
 __attribute__((noinline)) void ccwrite_iadd_row ()
 {
+  RVTT_TEST_LANE_RESET ();
 #pragma GCC unroll 4
   for (int row = 0; row < 4; ++row)
     {

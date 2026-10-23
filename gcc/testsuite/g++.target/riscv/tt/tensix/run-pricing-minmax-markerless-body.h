@@ -55,8 +55,9 @@
     }                                                                         \
   while (0)
 
-__attribute__((noinline)) void RP_CALLEE_NAME ()
+static __attribute__((noinline)) void RP_CALLEE_NAME ()
 {
+  RVTT_TEST_LANE_RESET ();
   RP_EIGHT_ROWS ();
   __builtin_rvtt_ttdstface ();
   RP_EIGHT_ROWS ();
@@ -68,6 +69,7 @@ __attribute__((noinline)) void RP_CALLEE_NAME ()
 
 __attribute__((noinline)) void RP_CALLER_NAME (unsigned tiles)
 {
+  RVTT_TEST_LANE_RESET ();
   asm volatile (".ttinsn %0" :: "n" (0xb2120000u));
   asm volatile (".ttinsn %0" :: "n" (0xb2220002u));
   asm volatile (".ttinsn %0" :: "n" (0xb2350000u));
@@ -83,6 +85,7 @@ __attribute__((noinline)) void RP_CALLER_NAME (unsigned tiles)
 #ifdef RP_SECOND_CALLER
 __attribute__((noinline)) void RP_SECOND_CALLER (unsigned tiles)
 {
+  RVTT_TEST_LANE_RESET ();
   unsigned t = 0;
   do
     {

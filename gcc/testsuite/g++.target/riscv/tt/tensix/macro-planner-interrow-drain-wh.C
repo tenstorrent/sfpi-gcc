@@ -1,9 +1,11 @@
+#include "rtl-lane-reset.h"
+
 // Check that the inter-row drain applies on Wormhole (no-increment address mode 3).
 // { dg-options "-mcpu=tt-wh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -fdump-rtl-rvtt_macro_planner-details" }
 // { dg-final { scan-rtl-dump-times "Macro-planner drain-interrow: drain=3 rows=8" 1 "rvtt_macro_planner" } }
 // { dg-final { scan-assembler-times "SFPNOP" 24 } }
 // { dg-final { scan-assembler-times "\\.ttinsn" 11 } }
-// { dg-final { scan-assembler-times "SFPCONFIG" 4 } }
+// { dg-final { scan-assembler-times "SFPCONFIG" 5 } }
 // { dg-final { scan-assembler-not "SFPSHFT" } }
 // { dg-final { scan-assembler-not "SFPCAST" } }
 
@@ -22,6 +24,7 @@
 
 __attribute__((noinline)) void signbit_rows ()
 {
+  RVTT_TEST_LANE_RESET ();
   ROW ();
   ROW ();
   ROW ();

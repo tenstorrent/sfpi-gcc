@@ -1,3 +1,5 @@
+#include "rtl-lane-reset.h"
+
 // { dg-options "-mcpu=tt-wh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-macro-planner-verify -fdump-rtl-rvtt_macro_planner-details" }
 // Check that the constant-in-VC max form uses mod 9 (template word 0x92000bc9) and forms on Wormhole.
 // Launch words (0x93<<24 | lreg_ind<<20 | mod0<<16 | addr_mode<<14
@@ -27,6 +29,7 @@
 
 __attribute__((noinline)) void heron_ceiling_rows ()
 {
+  RVTT_TEST_LANE_RESET ();
 #pragma GCC unroll 8
   for (int row = 0; row < 32; ++row)
     {

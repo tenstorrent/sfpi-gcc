@@ -1,3 +1,5 @@
+#include "rtl-lane-reset.h"
+
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-macro-planner-verify -mtt-tensix-optimize-init-hoist -fdump-rtl-rvtt_macro_planner" }
 // Check that an unresolvable template slot written by another rooted function demotes the init hoist to stage 1.
 // { dg-final { scan-rtl-dump "init-hoist: value-equality: mop slot scan unproven .mop-template-slot-word-unresolved." "rvtt_macro_planner" } }
@@ -23,5 +25,6 @@ typedef volatile unsigned int vu32;
 void
 ihfs_program (unsigned w)
 {
+  RVTT_TEST_LANE_RESET ();
   ((vu32 *) 0xFFB80000)[5] = w;
 }

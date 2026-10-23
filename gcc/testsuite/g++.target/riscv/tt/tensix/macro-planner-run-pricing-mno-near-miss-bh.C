@@ -1,3 +1,5 @@
+#include "rtl-lane-reset.h"
+
 // Check that with -mno-tt-tensix-optimize-init-hoist the per-run pricing refusal is kept.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-macro-planner-verify -mno-tt-tensix-optimize-init-hoist -fdump-rtl-rvtt_macro_planner" }
 // { dg-final { scan-rtl-dump "Macro-planner formation-refusal: unprofitable" "rvtt_macro_planner" } }

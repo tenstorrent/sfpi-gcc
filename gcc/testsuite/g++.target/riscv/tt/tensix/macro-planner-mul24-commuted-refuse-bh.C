@@ -1,3 +1,5 @@
+#include "rtl-lane-reset.h"
+
 // Check that an SFPMUL24 whose destination is neither factor stays outside the admitted class and nothing forms.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-macro-planner-verify -fdump-rtl-rvtt_macro_planner" }
 // { dg-final { scan-rtl-dump-times "Macro-planner descriptor-refusal: descriptor-program-unproven" 2 "rvtt_macro_planner" } }
@@ -26,12 +28,14 @@
 
 __attribute__((noinline)) void fresh_dest_product_rows ()
 {
+  RVTT_TEST_LANE_RESET ();
   ROW (); ROW (); ROW (); ROW (); ROW (); ROW (); ROW (); ROW ();
 }
 #undef ROW
 
 int main ()
 {
+  RVTT_TEST_LANE_RESET ();
   fresh_dest_product_rows ();
   return 0;
 }

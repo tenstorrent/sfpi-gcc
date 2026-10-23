@@ -1,3 +1,5 @@
+#include "rtl-lane-reset.h"
+
 // Check that the commuted SFPMUL24 forms for the UPPER half under different names, offsets and shifts.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-macro-planner-verify -fdump-rtl-rvtt_macro_planner" }
 // { dg-final { scan-rtl-dump-times "Macro-planner descriptor-word dest=1: 0x980109d1" 1 "rvtt_macro_planner" } }
@@ -26,6 +28,7 @@
 
 __attribute__((noinline)) void varied_commuted_rows ()
 {
+  RVTT_TEST_LANE_RESET ();
   WIDE_ROW (); WIDE_ROW (); WIDE_ROW (); WIDE_ROW ();
   WIDE_ROW (); WIDE_ROW (); WIDE_ROW (); WIDE_ROW ();
 }
@@ -33,6 +36,7 @@ __attribute__((noinline)) void varied_commuted_rows ()
 
 int main ()
 {
+  RVTT_TEST_LANE_RESET ();
   varied_commuted_rows ();
   return 0;
 }

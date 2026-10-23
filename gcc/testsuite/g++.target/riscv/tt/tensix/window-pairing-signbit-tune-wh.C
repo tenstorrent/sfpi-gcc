@@ -1,3 +1,5 @@
+#include "rtl-lane-reset.h"
+
 // Check that window-pairing tunes the signbit rows' inter-row spacing to two NOPs, bounded by the LREG overlap.
 // { dg-options "-mcpu=tt-wh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-optimize-window-pairing -fdump-rtl-rvtt_macro_planner" }
 // { dg-final { scan-rtl-dump-times "Macro-planner drain-interrow: drain=3 rows=8" 1 "rvtt_macro_planner" } }
@@ -19,6 +21,7 @@
 
 __attribute__((noinline)) void signbit_rows ()
 {
+  RVTT_TEST_LANE_RESET ();
   ROW ();
   ROW ();
   ROW ();

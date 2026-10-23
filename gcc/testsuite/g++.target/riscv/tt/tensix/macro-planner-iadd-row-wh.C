@@ -1,3 +1,5 @@
+#include "rtl-lane-reset.h"
+
 // { dg-options "-mcpu=tt-wh-tensix -O3 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -fdump-rtl-rvtt_macro_planner-details" }
 // Check that the WH iadd row (load, load, iadd, store) forms a closed region and refuses by name downstream.
 // { dg-final { scan-rtl-dump-not "row-opaque-effect" "rvtt_macro_planner" } }
@@ -13,6 +15,7 @@
 
 __attribute__((noinline)) void iadd_row_wh ()
 {
+  RVTT_TEST_LANE_RESET ();
   __builtin_rvtt_sfppushc (0);
   __builtin_rvtt_sfppopc (0);
 #pragma GCC unroll 4

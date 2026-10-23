@@ -1,6 +1,8 @@
+#include "rtl-lane-reset.h"
+
 // Check the minmax face drain elision on Wormhole (SFPNOP 12 -> 3).
 // { dg-options "-mcpu=tt-wh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-optimize-drain-schedule -fdump-rtl-rvtt_macro_planner" }
-// { dg-final { scan-assembler-times "SFPCONFIG" 5 } }
+// { dg-final { scan-assembler-times "SFPCONFIG" 6 } }
 // { dg-final { scan-assembler-times "\\.ttinsn" 67 } }
 // { dg-final { scan-assembler-times "\\.ttinsn\\t2466299904" 16 } }
 // { dg-final { scan-assembler-times "\\.ttinsn\\t2467348480" 16 } }
