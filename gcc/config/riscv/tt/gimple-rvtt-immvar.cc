@@ -257,7 +257,15 @@ emit_replacement (gimple_stmt_iterator &gsi, const rvtt_insn_data *insnd, gcall 
   for (unsigned ix = insnd->num_srcs (); ix--; )
     gimple_call_set_arg (stmt, new_insnd->src_arg () + ix,
 			 gimple_call_arg (call, insnd->src_arg () + ix));
-  for (unsigned ix = new_insnd->mod_arg () + 1, jx = insnd->id_arg () + 1,
+
+  /* The instruction-specific tail follows the modifier, not the
+     synthesis ID.  For SFPCONFIG the old ID is argument 3, modifier 4
+     and destination 5: copying after ID silently used the modifier as
+     the configuration destination.  */
+  gcc_checking_assert (new_insnd->num_args () - new_insnd->mod_arg ()
+		       == insnd->num_args () - insnd->mod_arg ());
+  for (unsigned ix = new_insnd->mod_arg () + 1,
+	 jx = insnd->mod_arg () + 1,
 	 limit = new_insnd->num_args (); ix != limit; ix++, jx++)
     gimple_call_set_arg (stmt, ix, gimple_call_arg (call, jx));
 

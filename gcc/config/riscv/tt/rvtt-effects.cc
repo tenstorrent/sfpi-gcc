@@ -24,7 +24,13 @@ along with GCC; see the file COPYING3.  If not see
 #include "coretypes.h"
 #include "backend.h"
 #include "tree.h"
+#include "tree-pass.h"
 #include "gimple.h"
+#include "gimple-iterator.h"
+#include "tree-cfg.h"
+#include "cgraph.h"
+#include "stringpool.h"
+#include "attribs.h"
 #include "rtl.h"
 #include "insn-config.h"
 #include "insn-codes.h"
@@ -40,6 +46,8 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt-effects.h"
 #include "rvtt-macro-tables.h"
 #include "rvtt-raw-boundary.h"
+#include "rvtt-mop-derive.h"
+#include "rvtt-mop-tables.h"
 
 /* Effect data lives once, in the generated attribute family of
    rvtt-cost.md; this file only resolves it against operands.  Every
@@ -817,12 +825,795 @@ rvtt_cc_quiet_compute_id_p (rvtt_insn_data::insn_id id)
     case rvtt_insn_data::sfpstore:
     case rvtt_insn_data::sfpswap_indexed:
     case rvtt_insn_data::sfptransp8:
+    case rvtt_insn_data::sfptransp:
+    case rvtt_insn_data::sfpselect4:
+    case rvtt_insn_data::sfpselect8:
     case rvtt_insn_data::sfpshft2_subvec_shfl1:
     case rvtt_insn_data::sfpshft2_subvec_shfl1_lv:
       return true;
     default:
       return false;
     }
+}
+
+/* Whether a statement's physical issuance is not modelled by this proof.
+   In particular an ENCC following a replay recorder may be recorded, not
+   executed.  Do not turn a local reset into a whole-function replay proof.  */
+static bool lane_function_direct_issue_p (function *, hash_set<function *> &,
+					 hash_set<function *> &);
+/* Retain only a body property after expansion, never incoming lane facts.
+   Available bodies are always re-read (so local mutations cannot reuse a
+   stale result); cross-function contract mutations invalidate the digest.
+   Compiler lowering of an audited body preserves its no-user-recorder
+   semantics.  The declaration remains rooted by the live cgraph node.  */
+struct lane_body_digest { bool direct; bool preserves; bool full_preserves; };
+static hash_map<tree, lane_body_digest> *lane_direct_digests;
+
+bool (*rvtt_mop_lane_proof_hook) (function *);
+bool
+rvtt_gimple_word_bounds (tree val, uint32_t *lo, uint32_t *hi, unsigned depth)
+{
+  if (!val || depth > 16 || !INTEGRAL_TYPE_P (TREE_TYPE (val))
+      || TYPE_PRECISION (TREE_TYPE (val)) > 32)
+    return false;
+  if (TREE_CODE (val) == INTEGER_CST)
+    {
+      *lo = *hi = (uint32_t)TREE_INT_CST_LOW (val);
+      return true;
+    }
+  *lo = 0;
+  *hi = TYPE_PRECISION (TREE_TYPE (val)) == 32
+	    ? UINT32_MAX
+	    : (uint32_t (1) << TYPE_PRECISION (TREE_TYPE (val))) - 1;
+  if (TREE_CODE (val) != SSA_NAME)
+    return true;
+  gimple *def = SSA_NAME_DEF_STMT (val);
+  if (!def || !is_gimple_assign (def))
+    return true;
+  tree_code code = gimple_assign_rhs_code (def);
+  uint32_t al, ah, bl, bh;
+  if (!rvtt_gimple_word_bounds (gimple_assign_rhs1 (def), &al, &ah, depth + 1))
+    return true;
+  if (code == SSA_NAME || CONVERT_EXPR_CODE_P (code))
+    {
+      /* Widening signed values may sign-extend; truncation may wrap.  */
+      tree src = gimple_assign_rhs1 (def);
+      if (ah <= *hi
+	  && (TYPE_UNSIGNED (TREE_TYPE (src))
+	      || !(ah
+		   & (uint32_t (1) << (TYPE_PRECISION (TREE_TYPE (src)) - 1)))
+	      || TYPE_PRECISION (TREE_TYPE (src))
+		     == TYPE_PRECISION (TREE_TYPE (val))))
+	*lo = al, *hi = ah;
+      return true;
+    }
+  if (gimple_num_ops (def) < 3
+      || !rvtt_gimple_word_bounds (gimple_assign_rhs2 (def), &bl, &bh,
+				   depth + 1))
+    return true;
+  switch (code)
+    {
+    case PLUS_EXPR:
+      if ((uint64_t)ah + bh <= *hi)
+	*lo = al + bl, *hi = ah + bh;
+      break;
+    case BIT_AND_EXPR:
+      /* A constant mask bounds even a completely unknown operand.  */
+      if (al == ah || bl == bh)
+	*hi = al == ah ? al : bl;
+      break;
+    case BIT_IOR_EXPR:
+      /* An interval's maximum is not its possible-ones mask.  Round
+	 each varying interval up to an all-ones bit envelope.  */
+      {
+	uint32_t am = ah, bm = bh;
+	if (al != ah)
+	  for (unsigned s = 1; s < 32; s <<= 1)
+	    am |= am >> s;
+	if (bl != bh)
+	  for (unsigned s = 1; s < 32; s <<= 1)
+	    bm |= bm >> s;
+	*lo = (al == ah ? al : 0) | (bl == bh ? bl : 0);
+	*hi = am | bm;
+      }
+      break;
+    case LSHIFT_EXPR:
+      if (bl == bh && bl < 32 && ah <= (UINT32_MAX >> bl))
+	*lo = al << bl, *hi = ah << bl;
+      break;
+    case RSHIFT_EXPR:
+      if (bl == bh && bl < 32
+	  && TYPE_UNSIGNED (TREE_TYPE (gimple_assign_rhs1 (def))))
+	*lo = al >> bl, *hi = ah >> bl;
+      break;
+    default:
+      break;
+    }
+  return true;
+}
+
+bool (*rvtt_tu_no_recorder_hook) (function *);
+bool (*rvtt_tu_opaque_lane_hook) (function *);
+int (*rvtt_tu_stmt_issue_hook) (function *, gimple *);
+
+bool
+rvtt_mop_lane_slot_word_p (unsigned slot, uint32_t word)
+{
+  /* Restrict controls to known bounded literal loop counts/flags.
+     Do not infer a run-time field bound from macro spelling.  */
+  if (slot == 0)
+    return word >= 1 && word <= 127;
+  if (slot == 1)
+    return word <= 3;
+  rvtt_word_facts f;
+  rvtt_word_facts_classify (word, &f);
+  return slot <= 8 && f.cc == RVTT_RAW_CC_INERT && !f.is_mop && !f.is_mop_cfg
+	 && !f.is_replay;
+}
+
+static bool
+mop_gimple_address (tree val, uint32_t *addr, unsigned depth = 0)
+{
+  if (!val || depth > 12)
+    return false;
+  if (TREE_CODE (val) == INTEGER_CST)
+    {
+      *addr = TREE_INT_CST_LOW (val);
+      return true;
+    }
+  if (TREE_CODE (val) != SSA_NAME)
+    return false;
+  gimple *def = SSA_NAME_DEF_STMT (val);
+  if (!def || !is_gimple_assign (def))
+    return false;
+  tree_code code = gimple_assign_rhs_code (def);
+  if (CONVERT_EXPR_CODE_P (code) || code == SSA_NAME)
+    return mop_gimple_address (gimple_assign_rhs1 (def), addr, depth + 1);
+  if ((code == PLUS_EXPR || code == POINTER_PLUS_EXPR)
+      && TREE_CODE (gimple_assign_rhs2 (def)) == INTEGER_CST
+      && mop_gimple_address (gimple_assign_rhs1 (def), addr, depth + 1))
+    {
+      *addr += TREE_INT_CST_LOW (gimple_assign_rhs2 (def));
+      return true;
+    }
+  return false;
+}
+
+/* A narrow current-body fact, not an incoming hardware ABI or a retained
+   recursive call summary.  These private leaf bodies cannot touch the
+   scalar MMIO template file.  Unavailable or expanded bodies fail closed. */
+static bool
+private_tensix_callee_keeps_mop (tree decl)
+{
+  cgraph_node *node = decl ? cgraph_node::get (decl) : nullptr;
+  function *body = decl ? DECL_STRUCT_FUNCTION (decl) : nullptr;
+  if (!node || TREE_PUBLIC (decl) || !node->definition
+      || !node->binds_to_current_def_p () || !body || !body->cfg
+      || (body->curr_properties & PROP_rtl))
+    return false;
+  basic_block bb;
+  FOR_EACH_BB_FN (bb, body)
+    for (gimple_stmt_iterator gsi = gsi_start_bb (bb); !gsi_end_p (gsi);
+	 gsi_next (&gsi))
+      {
+	gimple *stmt = gsi_stmt (gsi);
+	switch (gimple_code (stmt))
+	  {
+	  case GIMPLE_ASSIGN: case GIMPLE_CALL:
+	  case GIMPLE_COND: case GIMPLE_SWITCH: case GIMPLE_GOTO:
+	  case GIMPLE_RETURN: case GIMPLE_DEBUG: case GIMPLE_LABEL:
+	  case GIMPLE_NOP: case GIMPLE_PREDICT:
+	    break;
+	  default:
+	    /* Atomic, transaction, parallel and future statement forms
+	       have no implicit template-preservation permission.  */
+	    return false;
+	  }
+	if (is_gimple_assign (stmt)
+	    && TREE_CODE (gimple_assign_lhs (stmt)) != SSA_NAME)
+	  return false;
+	if (gcall *call = dyn_cast<gcall *> (stmt))
+	  {
+	    const rvtt_insn_data *id = rvtt_get_insn_data (call);
+	    if (!id || id->id == rvtt_insn_data::ttinsn
+		|| id->id == rvtt_insn_data::ttreplay) return false;
+	    /* A nondefault instruction-delivery pointer is not a promise
+	       that scalar writes avoid the template aperture.  */
+	    for (unsigned i = 0; i != gimple_call_num_args (call); ++i)
+	      if (POINTER_TYPE_P (TREE_TYPE (gimple_call_arg (call, i)))
+		  && !integer_zerop (gimple_call_arg (call, i))) return false;
+	  }
+      }
+  return true;
+}
+
+bool
+rvtt_gimple_mop_initialized_p (function *fn)
+{
+  if (!fn || !fn->cfg || (fn->curr_properties & PROP_rtl))
+    return false;
+  const unsigned all = 0x1ff;
+  auto_vec<unsigned> out;
+  out.safe_grow (last_basic_block_for_fn (fn));
+  for (unsigned i = 0; i != out.length (); ++i)
+    out[i] = all;
+  auto input = [&] (basic_block bb) -> unsigned {
+    unsigned mask = EDGE_COUNT (bb->preds) ? all : 0;
+    edge e;
+    edge_iterator ei;
+    FOR_EACH_EDGE (e, ei, bb->preds)
+    mask &= (e->src == ENTRY_BLOCK_PTR_FOR_FN (fn)
+	     || (e->flags & (EDGE_ABNORMAL | EDGE_EH)))
+		? 0
+		: out[e->src->index];
+    return mask;
+  };
+  hash_map<gimple *, rvtt_mop_delivery_event> delivery;
+  basic_block scan_bb;
+  FOR_EACH_BB_FN (scan_bb, fn)
+    for (gimple_stmt_iterator gsi = gsi_start_bb (scan_bb); !gsi_end_p (gsi);
+	 gsi_next (&gsi))
+      {
+	gimple *stmt = gsi_stmt (gsi);
+	rvtt_mop_delivery_event event = rvtt_mop_gimple_delivery (stmt);
+	/* Missing decoding must not become a vacuous no-launch proof. */
+	if (event == RVTT_MOP_DELIVERY_UNKNOWN)
+	  return false;
+	delivery.put (stmt, event);
+      }
+  auto template_store = [] (unsigned mask, uint32_t addr, tree value) -> unsigned {
+    if (addr < XTT_MOP_CFG_MMIO_BASE || addr > XTT_MOP_CFG_MMIO_LIMIT)
+      return mask;
+    if (addr > XTT_MOP_CFG_MMIO_BASE + 8 * 4 || (addr & 3))
+      return 0;
+    unsigned slot = (addr - XTT_MOP_CFG_MMIO_BASE) / 4;
+    uint32_t lo, hi;
+    bool valid = rvtt_gimple_word_bounds (value, &lo, &hi)
+      && lo == hi && rvtt_mop_lane_slot_word_p (slot, lo);
+    return valid ? mask | (1u << slot) : mask & ~(1u << slot);
+  };
+  auto step = [&] (gimple *stmt, unsigned mask) -> unsigned {
+    if (is_gimple_debug (stmt))
+      return mask;
+    if (is_gimple_assign (stmt))
+      {
+	tree lhs = gimple_assign_lhs (stmt);
+	if (TREE_CODE (lhs) == SSA_NAME || DECL_P (lhs))
+	  return mask;
+	rvtt_mop_delivery_event *event = delivery.get (stmt);
+	if (event && (*event == RVTT_MOP_PROVEN_NON_MOP
+		      || *event == RVTT_MOP_MAY_LAUNCH))
+	  return mask;
+	uint32_t addr;
+	if (TREE_CODE (lhs) != MEM_REF
+	    || !mop_gimple_address (TREE_OPERAND (lhs, 0), &addr)
+	    || TREE_CODE (TREE_OPERAND (lhs, 1)) != INTEGER_CST)
+	  return 0;
+	addr += TREE_INT_CST_LOW (TREE_OPERAND (lhs, 1));
+	if (addr < XTT_MOP_CFG_MMIO_BASE || addr > XTT_MOP_CFG_MMIO_LIMIT)
+	  return mask;
+	if (!INTEGRAL_TYPE_P (TREE_TYPE (lhs))
+	    || TYPE_PRECISION (TREE_TYPE (lhs)) != 32)
+	  return 0;
+	return template_store (mask, addr, gimple_assign_rhs1 (stmt));
+      }
+    if (gcall *call = dyn_cast<gcall *> (stmt))
+      if (!rvtt_get_insn_data (call)
+	  && !private_tensix_callee_keeps_mop (gimple_call_fndecl (call)))
+	return 0;
+    if (gasm *a = dyn_cast<gasm *> (stmt))
+      {
+	tree value = NULL_TREE, address = NULL_TREE;
+	if (rvtt_mop_blocking_store_operands (a, &value, &address))
+	  {
+	    rvtt_mop_delivery_event *event = delivery.get (stmt);
+	    if (!event)
+	      return 0;
+	    /* A decoded FIFO push never writes the scalar template file. */
+	    if (*event == RVTT_MOP_PROVEN_NON_MOP || *event == RVTT_MOP_MAY_LAUNCH)
+	      return mask;
+	    uint32_t addr;
+	    return mop_gimple_address (address, &addr)
+	      ? template_store (mask, addr, value) : 0;
+	  }
+	uint32_t w;
+	if (rvtt_raw_ttinsn_word_p (a, &w))
+	  return mask;
+	const char *s = gimple_asm_string (a);
+	s += strspn (s, " \t");
+	if (*s && strcmp (s, "fence") && strcmp (s, "fence rw,rw"))
+	  return 0;
+      }
+    /* The separate completed MAY audit validates opaque channels.
+       Scalar fences issue nothing; raw MOPs do not change the template
+       when all their payload words have the inert contract.  */
+    return mask;
+  };
+  bool changed;
+  basic_block bb;
+  do
+    {
+      changed = false;
+      FOR_EACH_BB_FN (bb, fn)
+      {
+	unsigned mask = input (bb);
+	for (gimple_stmt_iterator gsi = gsi_start_bb (bb); !gsi_end_p (gsi);
+	     gsi_next (&gsi))
+	  mask = step (gsi_stmt (gsi), mask);
+	if (mask != out[bb->index])
+	  out[bb->index] = mask, changed = true;
+      }
+    }
+  while (changed);
+  FOR_EACH_BB_FN (bb, fn)
+  {
+    unsigned mask = input (bb);
+    for (gimple_stmt_iterator gsi = gsi_start_bb (bb); !gsi_end_p (gsi);
+	 gsi_next (&gsi))
+      {
+	rvtt_mop_delivery_event *event = delivery.get (gsi_stmt (gsi));
+	if (!event || (*event == RVTT_MOP_MAY_LAUNCH && mask != all))
+	  return false;
+	mask = step (gsi_stmt (gsi), mask);
+      }
+  }
+  return true;
+}
+
+bool
+rvtt_gimple_mop_preserves_lanes_p (function *fn)
+{
+  return rvtt_mop_lane_proof_hook && rvtt_mop_lane_proof_hook (fn)
+	 && rvtt_gimple_mop_initialized_p (fn);
+}
+
+static void
+lane_direct_node_removed (cgraph_node *node, void *)
+{
+  if (lane_direct_digests)
+    lane_direct_digests->remove (node->decl);
+}
+
+static bool
+lane_word_direct_issue_p (uint32_t word, function *fn)
+{
+  rvtt_word_facts facts;
+  rvtt_word_facts_classify (word, &facts);
+  if (facts.is_mop)
+    return rvtt_gimple_mop_preserves_lanes_p (fn);
+  if (facts.row != RVTT_WF_UNAUDITED)
+    return !facts.is_mop && !facts.is_replay;
+  /* The flag writers deliberately have no all-lanes verdict in the
+     raw-boundary table, but cannot start an instruction recorder.  */
+  if (TARGET_XTT_TENSIX_WH_BH)
+    switch (word >> 24)
+      {
+      case 0x77: case 0x79: case 0x7b: case 0x81:
+      case 0x87: case 0x88: case 0x8a: case 0x8b:
+      case 0x96: case 0x97:
+	return true;
+      }
+  return false;
+}
+
+static bool
+lane_opaque_issue_p (gimple *stmt, function *fn, hash_set<function *> &active,
+		     hash_set<function *> &proved)
+{
+  if (gasm *a = dyn_cast<gasm *> (stmt))
+    {
+      const char *s = gimple_asm_string (a);
+      s += strspn (s, " \t");
+      uint32_t word;
+      return *s && (!rvtt_raw_ttinsn_word_p (a, &word)
+		    || !lane_word_direct_issue_p (word, fn));
+    }
+  if (gcall *call = dyn_cast<gcall *> (stmt))
+    {
+      const rvtt_insn_data *insnd = rvtt_get_insn_data (call);
+      if (insnd && insnd->id == rvtt_insn_data::ttinsn)
+	{
+	  unsigned word;
+	  return !rvtt_call_const_uarg (call, 1, &word)
+	    || !lane_word_direct_issue_p (word, fn);
+	}
+      if (insnd)
+	return insnd->id == rvtt_insn_data::ttreplay;
+      if (gimple_call_internal_p (call))
+	return false;
+      tree decl = gimple_call_fndecl (call);
+      cgraph_node *node = decl ? cgraph_node::get (decl) : nullptr;
+      /* No opaque ABI assumption: only a bound, available definition
+	 audited recursively can prove absence of recorder setup.  Calls
+	 still kill lane facts at their own program point.  */
+      function *body = node && node->binds_to_current_def_p ()
+	? DECL_STRUCT_FUNCTION (decl) : nullptr;
+      if (body && body->cfg && !(body->curr_properties & PROP_rtl))
+	return !lane_function_direct_issue_p (body, active, proved);
+      lane_body_digest *digest = node && node->binds_to_current_def_p ()
+	&& lane_direct_digests ? lane_direct_digests->get (decl) : nullptr;
+      return !digest || !digest->direct;
+    }
+  return gimple_has_volatile_ops (stmt);
+}
+
+/* A deliberately narrow body digest: these statements cannot modify either
+   lane fact.  Balanced flag-stack regions could be admitted in future, but
+   must not be inferred just from an opcode name or an unknown call ABI.  */
+static bool
+lane_stmt_preserving_p (gimple *stmt, function *fn)
+{
+  if (gasm *a = dyn_cast<gasm *> (stmt))
+    {
+      const char *s = gimple_asm_string (a);
+      s += strspn (s, " \t");
+      uint32_t word;
+      if (!*s)
+	return true;
+      if (!rvtt_raw_ttinsn_word_p (a, &word))
+	return false;
+      rvtt_word_facts facts;
+      rvtt_word_facts_classify (word, &facts);
+      return facts.cc == RVTT_RAW_CC_INERT
+	|| (facts.is_mop && rvtt_gimple_mop_preserves_lanes_p (fn));
+    }
+  gcall *call = dyn_cast<gcall *> (stmt);
+  if (!call)
+    return !gimple_has_volatile_ops (stmt);
+  const rvtt_insn_data *insnd = rvtt_get_insn_data (call);
+  if (!insnd)
+    {
+      if (gimple_call_internal_p (call))
+	return true;
+      tree decl = gimple_call_fndecl (call);
+      cgraph_node *node = decl ? cgraph_node::get (decl) : nullptr;
+      lane_body_digest *digest = node && node->binds_to_current_def_p ()
+	&& lane_direct_digests ? lane_direct_digests->get (decl) : nullptr;
+      return digest && digest->direct && digest->preserves;
+    }
+  if (rvtt_cc_writer_id_p (insnd->id) || insnd->sets_cc (call)
+      || insnd->id == rvtt_insn_data::sfpencc_all_lanes)
+    return false;
+  if (insnd->id == rvtt_insn_data::sfpconfig_i
+      || insnd->id == rvtt_insn_data::sfpwriteconfig_i
+      || insnd->id == rvtt_insn_data::sfpwriteconfig_v)
+    {
+      unsigned arg = insnd->id == rvtt_insn_data::sfpconfig_i ? 1
+	: insnd->id == rvtt_insn_data::sfpwriteconfig_i ? 5 : 2;
+      unsigned dest;
+      return rvtt_call_const_uarg (call, arg, &dest) && dest != 15;
+    }
+  return rvtt_cc_quiet_compute_id_p (insnd->id)
+    || insnd->id == rvtt_insn_data::sfpwritelreg
+    || insnd->id == rvtt_insn_data::sfpconcat2
+    || insnd->id == rvtt_insn_data::sfprawlreg_access
+    || !strcmp (insnd->name, "sfprawlreg_effect")
+    || insnd->id == rvtt_insn_data::ttregion_begin
+    || insnd->id == rvtt_insn_data::ttregion_end
+    || insnd->id == rvtt_insn_data::lreg_pressure
+    || !strcmp (insnd->name, "sfptransp_gather")
+    || insnd->id == rvtt_insn_data::ttincrwc
+    || insnd->id == rvtt_insn_data::ttsetrwc
+    || insnd->id == rvtt_insn_data::ttsetc16;
+}
+
+static bool
+lane_function_direct_issue_p (function *fn, hash_set<function *> &active,
+			      hash_set<function *> &proved)
+{
+  if (proved.contains (fn))
+    return true;
+  if (!fn->cfg || (fn->curr_properties & PROP_rtl)
+	|| active.elements () >= 64 || active.add (fn))
+    return false;
+  bool direct = true;
+  bool preserves = true;
+  basic_block bb;
+  FOR_EACH_BB_FN (bb, fn)
+    for (gimple_stmt_iterator gsi = gsi_start_bb (bb); !gsi_end_p (gsi);
+	 gsi_next (&gsi))
+      {
+	if (lane_opaque_issue_p (gsi_stmt (gsi), fn, active, proved))
+	  direct = false;
+	if (!lane_stmt_preserving_p (gsi_stmt (gsi), fn))
+	  preserves = false;
+      }
+  active.remove (fn);
+  if (direct)
+    proved.add (fn);
+  if (!lane_direct_digests)
+    {
+      lane_direct_digests = new hash_map<tree, lane_body_digest>;
+      symtab->add_cgraph_removal_hook (lane_direct_node_removed, nullptr);
+    }
+  /* Prove a conditional FULL->FULL contract, not an incoming ABI.
+     Seed the digest false before solving, so recursive calls cannot
+     bootstrap their own preservation.  Every normal and abnormal exit
+     must retain both independent facts.  */
+  lane_direct_digests->put (fn->decl, { direct, preserves, false });
+  if (direct)
+    {
+      rvtt_gimple_lane_facts full (fn, RVTT_LANE_ALL, 1);
+      bool exits_full = EDGE_COUNT (EXIT_BLOCK_PTR_FOR_FN (fn)->preds) != 0;
+      edge e;
+      edge_iterator ei;
+      FOR_EACH_EDGE (e, ei, EXIT_BLOCK_PTR_FOR_FN (fn)->preds)
+	exits_full &= !(e->flags & (EDGE_ABNORMAL | EDGE_EH))
+	  && full.block_out (e->src) == RVTT_LANE_ALL;
+      lane_direct_digests->put (fn->decl, { direct, preserves, exits_full });
+    }
+  return direct;
+}
+
+bool
+rvtt_gimple_direct_issue_p (function *fn)
+{
+  hash_set<function *> active, proved;
+  return lane_function_direct_issue_p (fn, active, proved);
+}
+
+void
+rvtt_gimple_direct_issue_invalidate (function *fn)
+{
+  if (lane_direct_digests && fn && fn->decl)
+    lane_direct_digests->remove (fn->decl);
+}
+
+static const lane_body_digest *
+retained_callee_lane_digest (tree decl)
+{
+  cgraph_node *node = decl ? cgraph_node::get (decl) : nullptr;
+  if (!node || !node->definition || !node->binds_to_current_def_p ()
+      || !lane_direct_digests)
+    return nullptr;
+  function *body = DECL_STRUCT_FUNCTION (decl);
+  if (body && body->cfg && !(body->curr_properties & PROP_rtl))
+    return nullptr;
+  return lane_direct_digests->get (decl);
+}
+
+bool
+rvtt_callee_direct_issue_p (tree decl)
+{
+  const lane_body_digest *digest = retained_callee_lane_digest (decl);
+  return digest && digest->direct;
+}
+
+bool
+rvtt_callee_preserves_lanes_p (tree decl, bool full)
+{
+  const lane_body_digest *digest = retained_callee_lane_digest (decl);
+  return digest && digest->direct
+    && (digest->preserves || (full && digest->full_preserves));
+}
+
+unsigned
+rvtt_gimple_lane_facts::transfer (gimple *stmt, unsigned state) const
+{
+  if (is_gimple_debug (stmt))
+    return state;
+  int issued = rvtt_tu_stmt_issue_hook
+    ? rvtt_tu_stmt_issue_hook (m_fn, stmt) : -1;
+  if (issued == 0)
+    return state;
+  bool direct_issue = (m_direct_issue || issued == 1) && m_mop_initialized;
+  bool opaque_preserves = issued == 1
+    || (rvtt_tu_opaque_lane_hook && rvtt_tu_opaque_lane_hook (m_fn));
+  if (gasm *a = dyn_cast<gasm *> (stmt))
+    {
+      const char *s = gimple_asm_string (a);
+      s += strspn (s, " \t");
+      if (!*s)
+	return state;
+      uint32_t word;
+      if (!rvtt_raw_ttinsn_word_p (a, &word))
+	return opaque_preserves ? state : 0;
+      rvtt_word_facts facts;
+      rvtt_word_facts_classify (word, &facts);
+      if (facts.is_mop)
+	return rvtt_gimple_mop_preserves_lanes_p (m_fn) ? state : 0;
+      if (TARGET_XTT_TENSIX_WH_BH && word == 0x8a00300a)
+	return direct_issue ? state | RVTT_LANE_FLAGS_ALL : state;
+      if (TARGET_XTT_TENSIX_WH_BH && word == 0x910000f1)
+	return direct_issue && (state & RVTT_LANE_FLAGS_ALL)
+	  ? state | RVTT_LANE_ROW_MASK_CLEAR : state;
+      return rvtt_raw_cc_word_class (word) == RVTT_RAW_CC_INERT
+	|| opaque_preserves
+	? state : 0;
+    }
+  gcall *call = dyn_cast<gcall *> (stmt);
+  if (!call)
+    return !gimple_has_volatile_ops (stmt) || opaque_preserves
+      ? state : 0;
+  const rvtt_insn_data *insnd = rvtt_get_insn_data (call);
+  if (!insnd)
+    {
+      if (lane_stmt_preserving_p (stmt, m_fn))
+	return state;
+      tree decl = gimple_call_fndecl (call);
+      cgraph_node *node = decl ? cgraph_node::get (decl) : nullptr;
+      lane_body_digest *digest = node && node->binds_to_current_def_p ()
+	&& lane_direct_digests ? lane_direct_digests->get (decl) : nullptr;
+      return state == RVTT_LANE_ALL && digest && digest->direct
+	&& digest->full_preserves ? state : 0;
+    }
+  if (insnd->id == rvtt_insn_data::ttinsn)
+    {
+      unsigned word;
+      if (!rvtt_call_const_uarg (call, 1, &word))
+	return 0;
+      rvtt_word_facts facts;
+      rvtt_word_facts_classify (word, &facts);
+      if (facts.is_mop)
+	return rvtt_gimple_mop_preserves_lanes_p (m_fn) ? state : 0;
+      if (TARGET_XTT_TENSIX_WH_BH && word == 0x8a00300a)
+	return direct_issue ? state | RVTT_LANE_FLAGS_ALL : state;
+      if (TARGET_XTT_TENSIX_WH_BH && word == 0x910000f1)
+	return direct_issue && (state & RVTT_LANE_FLAGS_ALL)
+	  ? state | RVTT_LANE_ROW_MASK_CLEAR : state;
+      return rvtt_raw_cc_word_class (word) == RVTT_RAW_CC_INERT
+	|| opaque_preserves
+	? state : 0;
+    }
+  if (insnd->id == rvtt_insn_data::sfpencc_all_lanes
+      || rvtt_encc_all_lanes_call_p (call, insnd))
+    return direct_issue ? state | RVTT_LANE_FLAGS_ALL : state;
+  if (insnd->id == rvtt_insn_data::sfpconfig_i)
+    {
+      unsigned value, dest, mod;
+      if (!rvtt_call_const_uarg (call, 1, &dest))
+	return 0;
+      if (dest != 15)
+	return state;
+      if (rvtt_call_const_uarg (call, 0, &value) && value == 0
+	  && rvtt_call_const_uarg (call, 2, &mod) && mod == 1
+	  && direct_issue && (state & RVTT_LANE_FLAGS_ALL))
+	return state | RVTT_LANE_ROW_MASK_CLEAR;
+      return state & ~RVTT_LANE_ROW_MASK_CLEAR;
+    }
+  if (insnd->id == rvtt_insn_data::sfpwriteconfig_i
+      || insnd->id == rvtt_insn_data::sfpwriteconfig_v)
+    {
+      bool imm = insnd->id == rvtt_insn_data::sfpwriteconfig_i;
+      unsigned dest, mod, value;
+      if (!rvtt_call_const_uarg (call, imm ? 5 : 2, &dest))
+	return 0;
+      if (dest != 15)
+	return state;
+      if (imm && rvtt_call_const_uarg (call, 4, &mod) && mod == 1
+	  && rvtt_call_const_uarg (call, 1, &value) && value == 0
+	  && direct_issue && (state & RVTT_LANE_FLAGS_ALL))
+	return state | RVTT_LANE_ROW_MASK_CLEAR;
+      return state & ~RVTT_LANE_ROW_MASK_CLEAR;
+    }
+  if (rvtt_cc_writer_id_p (insnd->id) || insnd->sets_cc (call))
+    return state & ~RVTT_LANE_FLAGS_ALL;
+  if (rvtt_cc_quiet_compute_id_p (insnd->id)
+      || insnd->id == rvtt_insn_data::sfprawlreg_access
+      || !strcmp (insnd->name, "sfprawlreg_effect")
+      || insnd->id == rvtt_insn_data::sfpwritelreg
+      || insnd->id == rvtt_insn_data::sfpconcat2
+      || insnd->id == rvtt_insn_data::lreg_pressure
+      || insnd->id == rvtt_insn_data::ttregion_begin
+      || insnd->id == rvtt_insn_data::ttregion_end
+      || !strcmp (insnd->name, "sfptransp_gather")
+      || insnd->id == rvtt_insn_data::ttincrwc
+      || insnd->id == rvtt_insn_data::ttsetrwc
+      || insnd->id == rvtt_insn_data::ttsetc16)
+    return state;
+  return 0;
+}
+
+rvtt_gimple_lane_facts::rvtt_gimple_lane_facts (function *fn,
+					    int entry_contract,
+					    int direct_contract)
+  : m_fn (fn), m_entry (entry_contract < 0 ? 0 : entry_contract),
+    m_direct_issue (true), m_mop_initialized (rvtt_gimple_mop_initialized_p (fn))
+{
+  m_out.safe_grow (last_basic_block_for_fn (fn));
+  for (unsigned i = 0; i != m_out.length (); ++i)
+    m_out[i] = RVTT_LANE_ALL;
+  m_direct_issue = direct_contract < 0 ? rvtt_gimple_direct_issue_p (fn)
+    : direct_contract;
+  if (!m_direct_issue && rvtt_tu_no_recorder_hook)
+    m_direct_issue = rvtt_tu_no_recorder_hook (fn);
+  /* A MAY-inert TU audit cannot make an uninitialized actual launch
+     safe: its old hardware template could contain a recorder.  */
+  m_direct_issue &= m_mop_initialized;
+  /* Only a genuinely private closed callee may inherit caller facts.
+     Public entry points keep the unknown ABI, even if this TU happens
+     to contain direct calls to them.  Re-entrant/cyclic proofs refuse.  */
+  static hash_set<function *> incoming_active;
+  cgraph_node *node = cgraph_node::get (fn->decl);
+  if (entry_contract < 0 && node && !TREE_PUBLIC (fn->decl) && node->definition
+      && !node->address_taken && !node->alias && !node->thunk
+      && !node->clones && node->callers && !DECL_PRESERVE_P (fn->decl)
+      && !node->force_output && !node->forced_by_abi
+      && !DECL_STATIC_CONSTRUCTOR (fn->decl)
+      && !DECL_STATIC_DESTRUCTOR (fn->decl)
+      && !lookup_attribute ("interrupt", DECL_ATTRIBUTES (fn->decl))
+      && !incoming_active.add (fn))
+    {
+      unsigned incoming = RVTT_LANE_ALL;
+      for (cgraph_edge *e = node->callers; e; e = e->next_caller)
+	{
+	  function *caller = DECL_STRUCT_FUNCTION (e->caller->decl);
+      if (!e->call_stmt || !caller || !caller->cfg
+	  || (caller->curr_properties & PROP_rtl)
+	      || incoming_active.contains (caller))
+	    {
+	      incoming = 0;
+	      break;
+	    }
+	  rvtt_gimple_lane_facts caller_facts (caller);
+	  incoming &= caller_facts.before (e->call_stmt);
+	}
+      incoming_active.remove (fn);
+      m_entry = incoming;
+    }
+  basic_block bb;
+  bool changed;
+  do
+    {
+      changed = false;
+      FOR_EACH_BB_FN (bb, fn)
+	{
+	  unsigned state = block_in (bb);
+	  for (gimple_stmt_iterator gsi = gsi_start_bb (bb); !gsi_end_p (gsi);
+	       gsi_next (&gsi))
+	    state = transfer (gsi_stmt (gsi), state);
+	  if (state != m_out[bb->index])
+	    {
+	      m_out[bb->index] = state;
+	      changed = true;
+	    }
+	}
+    }
+  while (changed);
+}
+
+unsigned
+rvtt_gimple_lane_facts::block_in (basic_block bb) const
+{
+  if (bb == ENTRY_BLOCK_PTR_FOR_FN (m_fn))
+    return m_entry;
+  if (EDGE_COUNT (bb->preds) == 0)
+    return 0;
+  unsigned state = RVTT_LANE_ALL;
+  edge e;
+  edge_iterator ei;
+  FOR_EACH_EDGE (e, ei, bb->preds)
+    state &= (e->flags & (EDGE_ABNORMAL | EDGE_EH)) ? 0
+      : e->src == ENTRY_BLOCK_PTR_FOR_FN (m_fn) ? m_entry
+      : m_out[e->src->index];
+  return state;
+}
+
+unsigned
+rvtt_gimple_lane_facts::before (gimple *stmt) const
+{
+  unsigned state = block_in (gimple_bb (stmt));
+  for (gimple_stmt_iterator gsi = gsi_start_bb (gimple_bb (stmt));
+       !gsi_end_p (gsi); gsi_next (&gsi))
+    {
+      if (gsi_stmt (gsi) == stmt)
+	return state;
+      state = transfer (gsi_stmt (gsi), state);
+    }
+  return 0;
+}
+
+unsigned
+rvtt_gimple_lane_facts::after (gimple *stmt) const
+{
+  return transfer (stmt, before (stmt));
+}
+
+bool
+rvtt_gimple_all_lanes_after_p (gimple *stmt)
+{
+  rvtt_gimple_lane_facts facts (cfun);
+  return facts.after (stmt) == RVTT_LANE_ALL;
 }
 
 long

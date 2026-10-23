@@ -232,15 +232,12 @@ constexpr unsigned HOST_WIDE_INT XTT_DEBUG_REGS_MMIO_LIMIT = 0xFFB12FFF;
    TU-defined object or a C-runtime data anchor cannot reach an
    instruction FIFO.  */
 
-/* XTT_RESET_TEMPLATE_AUDITED: a MOP launched before any template
-   programming in the TU expands the reset template state, all-zero
-   words.  A type-1 MOP over them does nothing (zero loop lengths; [SIM]
-   mop_expander's early return, which matches the RTL MOP decoder), and a
-   type-0 MOP expands the zero word, whose opcode (0x00) has a row in the
-   raw word table.  [SIM] sim.h TensixState::mop_cfg lives in
-   zero-initialized global tile state.  The hardware reset value is
-   taken from the RTL for type 1 but has not been confirmed
-   independently for the type-0 zero-word path.  */
+/* Reset-template observations are NOT a source-function entry contract.
+   [SIM] sim.h TensixState::mop_cfg starts as zero-initialized tile state,
+   and a zero-count type-1 expansion returns early.  Neither observation
+   establishes current hardware state on entry to an arbitrary function.
+   Issuance certificates require the current-CFG nine-slot MUST proof at
+   every actual launch; no XTT_RESET_TEMPLATE_AUDITED permission is used.  */
 
 /* mop_type 1 (the ckernel_template double-loop class, the production
    math datacopy dispatch TTI_MOP (1, 0, 0)) consumes MOP config words
@@ -270,11 +267,10 @@ constexpr unsigned HOST_WIDE_INT XTT_DEBUG_REGS_MMIO_LIMIT = 0xFFB12FFF;
    `opcode = bits<31,24>(inst)' switch: 0x01 -> mop_expander, 0x03 ->
    mop_cfg, everything else never reads MOP template state.  Run-time
    composed pushes (the TT_OP macro family: `(opcode << 24) + params')
-   are classified by the constant opcode base of their PLUS/BIT_IOR
-   composition, assuming run-time operands stay inside their bit fields
-   as the macros intend (tt-op-field-discipline; [PROD] ckernel_ops.h
-   TT_OP).  A push with no constant base is treated as a MOP launch that
-   reads everything.  */
+   require unsigned bounds proving their opcode, not a field-discipline
+   promise from the macro spelling.  PHI/select unions retain every possible
+   delivered class.  An unknown delivery word cannot certify physical
+   issuance or template initialization.  */
 
 /* Reprogramming the MOP config registers while a previously issued MOP
    is still streaming is a race (the expander reads them live).  The

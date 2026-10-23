@@ -31,7 +31,10 @@ void ldexp1 () {
 /*
 **_Z6ldexp1v:
 **	# READ L0
-**	SFPDIVP2	L0, L0, 22, 1
+**	SFPLOADI	L1, 22, 2
+**	SFPIADD	L1, L1, 127, 5
+**	SFPSETEXP	L1, L9, 0, 0
+**	SFPMUL	L0, L0, L1, 0
 **	# WRITE L0
 **	ret
 */
