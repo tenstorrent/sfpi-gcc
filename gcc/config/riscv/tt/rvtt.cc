@@ -166,15 +166,19 @@ rvtt_insn_data::init ()
     }
 
   // Remaining arguments must be integers
-  for (bool first = true; ops[ix]; first = false, ix++)
+  for (; ops[ix]; ix++)
     {
       auto kind = ops[ix].kind ();
       if (kind == op_t::MOD || kind == op_t::XMOD)
 	{
-	  gcc_checking_assert (first);
+	  /* Some typed operations, such as sfploaddiscard(address, mode,
+	     addr_mode), put the modifier after another immediate.  Record
+	     its actual descriptor rather than assuming it is the first.  */
+	  gcc_checking_assert (!has_mod ());
 	  gcc_checking_assert (!(kind == op_t::MOD && !ops[ix].mod ()));
 	  flags = flags_t (flags | HAS_MOD);
 	  mod_pos = argno;
+	  mod_op = ix;
 	}
       gcc_checking_assert (TREE_CODE (TREE_VALUE (arg_types)) == INTEGER_TYPE);
       ops.set_argno (ix, argno);
