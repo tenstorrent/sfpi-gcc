@@ -1804,6 +1804,10 @@ rvtt_crosscall_prgm_hoist (function *fn, unsigned regs)
       || cn->clones || !cn->callers)
     return prgm_refuse ("crosscall-caller-body-unavailable", fn->decl,
 			nullptr);
+  if (TREE_PUBLIC (fn->decl) || tu_facts.scan_unrooted || !tu_facts.entry_roots
+      || tu_facts.entry_roots->contains (cn))
+    return prgm_refuse ("crosscall-callee-entry-unproved", fn->decl,
+			nullptr);
   auto_vec<caller_plan> plans;
   for (cgraph_edge *e = cn->callers; e; e = e->next_caller)
     {
