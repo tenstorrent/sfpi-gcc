@@ -22,6 +22,9 @@ store_dst (vec_t value, unsigned address)
 __attribute__ ((noinline)) void
 eligible_pair ()
 {
+  // Establish the entry state independently of the refusal tested below.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   vec_t a0 = load_dst (0);
   vec_t b0 = load_dst (64);
   vec_t p0 = __builtin_rvtt_sfpmul (a0, b0, 0);
@@ -40,6 +43,9 @@ eligible_pair ()
 __attribute__ ((noinline)) void
 dynamic_pair (unsigned input)
 {
+  // Establish the entry state independently of the refusal tested below.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   unsigned base = (input & 31) * 64;
   vec_t a0 = load_dst (base);
   vec_t b0 = load_dst (base + 256);
@@ -55,6 +61,9 @@ dynamic_pair (unsigned input)
 __attribute__ ((noinline)) void
 dynamic_overflow (unsigned input)
 {
+  // Establish the entry state independently of the refusal tested below.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   unsigned base = (input & 1) + DST_LIMIT - 1;
   vec_t a0 = load_dst (base);
   vec_t b0 = load_dst (64);
@@ -74,6 +83,9 @@ dynamic_overflow (unsigned input)
 __attribute__ ((noinline)) void
 late_cross_half_dependency ()
 {
+  // Establish the entry state independently of the refusal tested below.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   vec_t a0 = load_dst (0);
   vec_t b0 = load_dst (64);
   vec_t p0 = __builtin_rvtt_sfpmul (a0, b0, 0);
@@ -90,6 +102,9 @@ late_cross_half_dependency ()
 __attribute__ ((noinline)) void
 late_external_vector ()
 {
+  // Establish the entry state independently of the refusal tested below.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   vec_t external = __builtin_rvtt_sfpreadlreg (3);
   vec_t a0 = load_dst (0);
   vec_t b0 = load_dst (64);
@@ -104,6 +119,9 @@ late_external_vector ()
 __attribute__ ((noinline)) void
 late_cc_state ()
 {
+  // Establish the entry state independently of the refusal tested below.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   vec_t a0 = load_dst (0);
   vec_t b0 = load_dst (64);
   __builtin_rvtt_sfppushc (0);
@@ -120,6 +138,9 @@ late_cc_state ()
 __attribute__ ((noinline)) void
 late_address_alias ()
 {
+  // Establish the entry state independently of the refusal tested below.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   vec_t a0 = load_dst (0);
   vec_t b0 = load_dst (64);
   store_dst (__builtin_rvtt_sfpmul (a0, b0, 0), 128);
@@ -135,6 +156,9 @@ late_address_alias ()
 __attribute__ ((noinline)) void
 late_store_load_alias ()
 {
+  // Establish the entry state independently of the refusal tested below.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   vec_t a0 = load_dst (0);
   vec_t b0 = load_dst (64);
   store_dst (__builtin_rvtt_sfpmul (a0, b0, 0), 2);
@@ -151,6 +175,9 @@ late_store_load_alias ()
 __attribute__ ((noinline)) void
 shape_mismatch ()
 {
+  // Establish the entry state independently of the refusal tested below.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   vec_t a0 = load_dst (0);
   vec_t b0 = load_dst (64);
   store_dst (__builtin_rvtt_sfpmul (a0, b0, 0), 128);
@@ -168,6 +195,9 @@ shape_mismatch ()
 __attribute__ ((noinline)) void
 live_out ()
 {
+  // Establish the entry state independently of the refusal tested below.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   vec_t a0 = load_dst (0);
   vec_t b0 = load_dst (64);
   vec_t result0 = __builtin_rvtt_sfpmul (a0, b0, 0);
@@ -185,6 +215,9 @@ live_out ()
 __attribute__ ((noinline)) void
 opaque_barrier ()
 {
+  // Establish the entry state independently of the refusal tested below.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   vec_t a0 = load_dst (0);
   asm volatile ("" ::: "memory");
   vec_t b0 = load_dst (64);
@@ -201,6 +234,9 @@ opaque_barrier ()
 __attribute__ ((noinline)) void
 rwc_mismatch ()
 {
+  // Establish the entry state independently of the refusal tested below.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   vec_t a0 = load_dst (0);
   vec_t b0 = load_dst (64);
   store_dst (__builtin_rvtt_sfpmul (a0, b0, 0), 128);
@@ -216,6 +252,9 @@ rwc_mismatch ()
 __attribute__ ((noinline)) void
 address_overflow ()
 {
+  // Establish the entry state independently of the refusal tested below.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   vec_t a0 = load_dst (DST_LIMIT);
   vec_t b0 = load_dst (64);
   store_dst (__builtin_rvtt_sfpmul (a0, b0, 0), 128);
@@ -231,6 +270,9 @@ address_overflow ()
 __attribute__ ((noinline)) void
 access_mode_mismatch ()
 {
+  // Establish the entry state independently of the refusal tested below.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   vec_t a0 = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 1, DST_MODE);
   vec_t b0 = load_dst (64);
   store_dst (__builtin_rvtt_sfpmul (a0, b0, 0), 128);
@@ -245,6 +287,9 @@ access_mode_mismatch ()
 __attribute__ ((noinline)) void
 address_mode_mismatch ()
 {
+  // Establish the entry state independently of the refusal tested below.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   vec_t a0 = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, DST_BAD_MODE);
   vec_t b0 = load_dst (64);
   store_dst (__builtin_rvtt_sfpmul (a0, b0, 0), 128);
@@ -260,6 +305,9 @@ address_mode_mismatch ()
 __attribute__ ((noinline)) void
 cc_state ()
 {
+  // Establish the entry state independently of the refusal tested below.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   vec_t a0 = load_dst (0);
   vec_t b0 = load_dst (64);
   __builtin_rvtt_sfppushc (0);
@@ -279,6 +327,9 @@ cc_state ()
 __attribute__ ((noinline)) void
 scalar_mismatch ()
 {
+  // Establish the entry state independently of the refusal tested below.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   vec_t a0 = load_dst (0);
   vec_t b0 = load_dst (64);
   vec_t k0 = __builtin_rvtt_sfpxloadi (nullptr, 1, 0, 0, -32);
@@ -299,6 +350,9 @@ scalar_mismatch ()
 __attribute__ ((noinline)) void
 live_rvtt ()
 {
+  // Establish the entry state independently of the refusal tested below.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   vec_t external = __builtin_rvtt_sfpreadlreg (3);
   vec_t a0 = load_dst (0);
   vec_t b0 = load_dst (64);
@@ -317,6 +371,9 @@ live_rvtt ()
 __attribute__ ((noinline)) void
 cross_basic_block (bool condition)
 {
+  // Establish the entry state independently of the refusal tested below.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   vec_t a0 = load_dst (0);
   vec_t b0 = load_dst (64);
   store_dst (__builtin_rvtt_sfpmul (a0, b0, 0), 128);

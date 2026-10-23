@@ -18,6 +18,9 @@ constexpr inline volatile unsigned long (&instrn_buffer)[] = ::__instrn_buffer;
 void
 guarded_rows ()
 {
+  // Lane flags and LaneConfig ROW_MASK are independent hardware state.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   for (int d = 0; d < 32; ++d)
     {
       const sfpi::vFloat x = sfpi::dst_reg[0];
