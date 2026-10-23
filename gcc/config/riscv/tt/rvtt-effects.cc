@@ -676,6 +676,28 @@ rvtt_shadow_coupling_possible (function *fn)
 	    continue;
 	  if (get_attr_type (insn) != TYPE_TENSIX)
 	    continue;
+	  /* Inspect typed configuration writes even when their other effects
+	     are opaque (notably the synthesized runtime-immediate form).
+	     The exact immediate-zero LaneConfig write cannot enable index
+	     tracking, even if lane flags gate some or all columns.  It does
+	     not prove that earlier coupling was cleared: any other possible
+	     enable anywhere in the function still makes this summary sticky.  */
+	  if (get_attr_xtt_config_effect (insn) == XTT_CONFIG_EFFECT_DEST)
+	    {
+	      extract_insn (insn);
+	      int pos = get_attr_xtt_config_dest_op (insn) - 1;
+	      if (pos < 0 || pos >= recog_data.n_operands
+		  || !CONST_INT_P (recog_data.operand[pos]))
+		return true;
+	      if (INTVAL (recog_data.operand[pos]) == 15)
+		{
+		  if (recog_memoized (insn) == CODE_FOR_rvtt_sfpconfig_i
+		      && recog_data.operand[0] == const0_rtx
+		      && INTVAL (recog_data.operand[2]) == 1)
+		    continue;
+		  return true;
+		}
+	    }
 	  xtt_effect_set e = rvtt_insn_effects (insn);
 	  if (e.opaque)
 	    continue;

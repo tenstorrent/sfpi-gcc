@@ -631,11 +631,12 @@ region_scanner::scan_bb (basic_block bb)
 	  refuse (macro_region_refusal::row_config_write);
 	  span_.truncate (0);
 	  span_effects_.truncate (0);
-	  /* A configuration write does not change lane state, so a
-	     pending ambient enable still applies to the next row.  */
-	  rtx_insn *enable = pending_enable_;
 	  finalize_region (bb);
-	  pending_enable_ = enable;
+	  /* Configuration can change LaneConfig as well as descriptor
+	     state.  Never move an earlier ENCC/configuration prefix across
+	     this boundary: an exact reset must execute before the new
+	     region's actual all-lanes placement proof.  */
+	  pending_enable_ = nullptr;
 	  continue;
 	}
       if (e.cc_write)
