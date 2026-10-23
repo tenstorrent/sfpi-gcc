@@ -7,6 +7,9 @@
 
 void lreg_alloc_reserved_sentinel (void)
 {
+  /* Establish both lane facts; ENCC alone does not clear ROW_MASK.  */
+  __builtin_rvtt_sfpencc (10, 3);
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   /* Raw code has filled L7; it stays reserved until read below.  */
   __builtin_rvtt_sfprawlreg_access (0, 0x80);
   auto a0 = __builtin_rvtt_sfpreadlreg (0);
