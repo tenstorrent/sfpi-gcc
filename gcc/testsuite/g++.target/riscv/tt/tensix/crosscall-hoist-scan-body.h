@@ -8,6 +8,10 @@
 
 typedef volatile unsigned int vu32;
 
+#ifndef CCH_LOCAL_TEMPLATE_INIT
+#define CCH_LOCAL_TEMPLATE_INIT() do {} while (0)
+#endif
+
 static inline void
 CCH_TMPL (unsigned CCH_OUTER, unsigned CCH_INNER)
 {
@@ -22,7 +26,7 @@ CCH_TMPL (unsigned CCH_OUTER, unsigned CCH_INNER)
   ((vu32 *) 0xFFB80000)[8] = 0x02000000;
 }
 
-__attribute__((noinline)) void
+static __attribute__((noinline)) void
 CCH_CALLEE ()
 {
   auto CCH_A0 = __builtin_rvtt_sfpxloadi (nullptr, CCH_VAL_A0, 0, 0, -32);
@@ -45,6 +49,9 @@ CCH_CALLEE ()
 __attribute__((noinline)) void
 CCH_CALLER (int CCH_TILES)
 {
+  CCH_LOCAL_TEMPLATE_INIT ();
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   for (int CCH_T = 0; CCH_T != CCH_TILES; ++CCH_T)
     {
       /* The MOP launch: expands the programmed template slots.  */

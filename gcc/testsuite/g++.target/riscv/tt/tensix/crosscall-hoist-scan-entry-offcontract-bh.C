@@ -26,5 +26,8 @@
 #define CCH_VAL_B1 0xbd23d70a
 #define CCH_VAL_B2 0x3f2e147b
 #define CCH_SLOT_WORD 0x71312345
+// Own exactly the same 4/2 template at this entry; main is not
+// an initialization ABI for this independently callable function.
+#define CCH_LOCAL_TEMPLATE_INIT() CCH_TMPL (4, 2)
 #define CCH_ENTRY_DEF int main () { ccho_tmpl (4, 2); ccho_caller (4); return 0; }
 #include "crosscall-hoist-scan-body.h"

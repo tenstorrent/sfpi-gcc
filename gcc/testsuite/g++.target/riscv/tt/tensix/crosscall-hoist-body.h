@@ -32,7 +32,11 @@
 #define CCH_LUT_MOD 4		/* FP32 3-entry, SGN_RETAIN */
 #endif
 
+#ifdef CCH_CALLEE_PUBLIC
 __attribute__((noinline)) void
+#else
+static __attribute__((noinline)) void
+#endif
 CCH_CALLEE ()
 {
   CCH_CALLEE_HEAD ();
@@ -58,6 +62,12 @@ CCH_CALLEE ()
 void
 CCH_CALLER (int CCH_TILES)
 {
+#ifndef CCH_UNKNOWN_ENTRY
+  // The closed-callgraph contract is conditional on a real full-lane caller.
+  // Keep this before injected negative prefixes so they can invalidate it.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
+#endif
   CCH_CALLER_HEAD ();
   for (int CCH_T = 0; CCH_T != CCH_TILES; ++CCH_T)
     {

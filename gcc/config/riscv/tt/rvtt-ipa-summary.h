@@ -143,10 +143,10 @@ extern void rvtt_ipa_summary_invalidate (function *fn);
    state across its execution.  Used only in dumps.  */
 extern bool rvtt_ipa_cc_ambient_preserving_p (cgraph_node *node);
 
-/* Entry points of the translation unit, enumerated from decls and the
-   symbol table.  These back the assumptions that a kernel is a single TU
-   and that crt0 does not touch Tensix state.  No function body is read,
-   so computing them does not affect any body-based analysis.  */
+/* Live entry-point diagnostics enumerated from decls and the symbol table.
+   No function body is read, so refreshing this snapshot is safe after
+   lowering too.  It does not authorize an unscanned body or supply an
+   incoming lane/template ABI.  */
 
 struct rvtt_ipa_tu_anchor_facts
 {
@@ -155,9 +155,8 @@ struct rvtt_ipa_tu_anchor_facts
      public `main'.  */
   bool has_start = false;
   bool has_main = false;
-  /* Enumerable external entries under the model: the anchor, or every
-     externally-visible non-comdat definition when no anchor pins the
-     surface; asm-callable forced definitions always.  */
+  /* Public definitions, including COMDAT, remain possible external
+     entries even with main/_start; forced entries count as well.  */
   unsigned n_entry_roots = 0;
   /* Some root exists (entries, static ctors/dtors, address-taken
      definitions), so the reachable code can be enumerated.  A TU with

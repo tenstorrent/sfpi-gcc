@@ -286,7 +286,10 @@ classify_delivered_value (tree val, unsigned contract_mask,
 					   & 0xffffffff), contract_mask,
 			       region_strict, config_strict);
   uint32_t base;
-  if (!pushed_word_base (val, &base))
+  uint32_t lo, hi;
+  if (!pushed_word_base (val, &base)
+      || !rvtt_gimple_word_bounds (val, &lo, &hi)
+      || (lo >> 24) != (hi >> 24) || (base >> 24) != (lo >> 24))
     {
       /* In strict region mode a PHI-joined delivered word (one push
 	 site fed by branch-selected compositions) is inert exactly
@@ -310,7 +313,7 @@ classify_delivered_value (tree val, unsigned contract_mask,
       return v;
     }
   unsigned opcode = base >> 24;
-  if (opcode == 0x71)
+  if (opcode == 0x71 || opcode == 0x91)
     /* Runtime-completed SFPLOADI: the base does not pin the
        destination field.  */
     return v;
@@ -799,7 +802,8 @@ param_not_template_p (tree parm, hash_set<cgraph_node *> *executable,
   if (!fndecl || TREE_CODE (fndecl) != FUNCTION_DECL)
     return false;
   cgraph_node *cn = cgraph_node::get (fndecl);
-  if (!cn || !cn->definition || cn->address_taken || cn->alias
+  if (!cn || TREE_PUBLIC (fndecl) || !cn->definition || cn->address_taken
+      || cn->alias
       || cn->thunk || cn->clones || !cn->callers)
     return false;
   /* A closure root can be entered from outside the TU (crt0/firmware):
@@ -1040,23 +1044,11 @@ template_scan_asm (gasm *stmt, hash_set<cgraph_node *> *executable)
   scan_slot_refusal ("mop-template-alias-unproven");
 }
 
-/* The executable closure of the TU, assuming each TRISC thread program
-   is this single TU plus crt0/firmware.  Roots are everything the link
-   image can enter from outside the TU, given a fixed external surface:
-
-   - a TU that carries its own `_start' is entered only at `_start'
-     (the reset vector; no external component exists that could call
-     anything else).  A public body no live code calls is then an
-     orphaned out-of-line copy of an inlined function, not a hidden
-     entry;
-   - a TU with `main' but no `_start' is entered only at `main' (the
-     external crt0 calls exactly `main');
-   - a TU with neither anchor can be entered at any externally-visible
-     non-comdat definition (firmware -> run_kernel; pre-built external
-     components can call the public surface but cannot name this TU's
-     comdat instantiations, which exist only where instantiated);
-   - attribute/ABI-forced and interrupt definitions can additionally
-     be entered from assembly or vectors in every model.
+/* The executable closure of the TU.  Public definitions, including
+   emitted COMDAT bodies, remain possible external entries even when
+   main or a reset anchor exists.  Only actual internalization closes
+   their caller set; startup spelling is not a whole-program contract.
+   Attribute/ABI-forced and interrupt definitions are also roots.
 
    Roots further include static constructors and destructors, address-
    taken definitions, and every function a variable initializer
@@ -1102,20 +1094,15 @@ compute_executable_closure (hash_set<cgraph_node *> *executable,
     {
       if (!node->definition)
 	continue;
-      bool externally_visible
-	= TREE_PUBLIC (node->decl) && !DECL_COMDAT (node->decl);
+      bool externally_visible = TREE_PUBLIC (node->decl);
       bool forced = DECL_PRESERVE_P (node->decl)
 	|| node->force_output || node->forced_by_abi
 	|| lookup_attribute ("interrupt", DECL_ATTRIBUTES (node->decl));
-      /* The external entries: the anchor when there is one (with an
-	 in-TU `_start' the reset vector is the image's only external
-	 entry, so a public body no live code calls is an orphaned
-	 out-of-line copy, not a hidden entry); every externally-visible
-	 non-comdat definition when there is no anchor; asm-callable
-	 forced definitions always.  */
-      bool entry = node == anchor
-	|| (!anchor && externally_visible)
-	|| forced;
+      /* Main/reset anchors do not internalize other public definitions.
+	 COMDAT is a linkage/coalescing rule, not a closed-callgraph
+	 guarantee.  Only genuinely private bodies can inherit the
+	 enumerated callers' parameter bindings.  */
+      bool entry = node == anchor || externally_visible || forced;
       if (entry
 	  || DECL_STATIC_CONSTRUCTOR (node->decl)
 	  || DECL_STATIC_DESTRUCTOR (node->decl)
@@ -1156,9 +1143,13 @@ compute_executable_closure (hash_set<cgraph_node *> *executable,
    of the deferred parameter-relative slot words at every reachable
    call site.  */
 
+static bool early_cch_mop_lanes_p (function *);
+static void early_cch_prepare_lane_hooks ();
+
 void
 compute_tu_facts ()
 {
+  rvtt_mop_lane_proof_hook = early_cch_mop_lanes_p;
   if (tu_facts.computed)
     return;
   tu_facts.computed = true;
@@ -1361,6 +1352,7 @@ compute_tu_facts ()
 	     tu_facts.slots_unproven ? tu_facts.slot_reason : "",
 	     tu_facts.slots_unproven ? ")" : "",
 	     tu_facts.slot_loadi_dests);
+  early_cch_prepare_lane_hooks ();
 }
 
 /* The MOP admission for a contract: every instruction slot checked,
@@ -1385,4 +1377,198 @@ mop_contract_ok_p (unsigned contract_mask, const char **why)
       return false;
     }
   return true;
+}
+
+/* Chronology-only producer for CCH prefixes before the complete PRGM TU
+   producer exists.  Removed when that producer is introduced.  No opaque
+   lane-preservation hook is installed: no-recorder is not CC/ROW_MASK inert. */
+static hash_set<tree> early_cch_lane_members;
+static bool early_cch_lane_complete;
+static bool early_cch_lane_direct;
+static bool early_cch_lane_auditing;
+
+/* Pure retained membership consult, safe after bodies have become RTL.
+   A new definition cannot borrow an older whole-TU certificate. */
+static bool
+early_cch_lane_members_current_p (function *fn)
+{
+  if (!fn || !early_cch_lane_members.contains (fn->decl))
+    return false;
+  cgraph_node *node;
+  FOR_EACH_FUNCTION (node)
+    if (node->definition && !node->alias && !node->thunk
+	&& !early_cch_lane_members.contains (node->decl))
+      return false;
+  return true;
+}
+
+/* MAY-inert payload proof only.  The common wrapper additionally checks
+   actual current-CFG MUST initialization of all nine slots. */
+static bool
+early_cch_mop_lanes_p (function *fn)
+{
+  cgraph_node *node = fn ? cgraph_node::get (fn->decl) : nullptr;
+  if ((!early_cch_lane_auditing
+	&& (!early_cch_lane_complete || !early_cch_lane_direct))
+      || !tu_facts.computed || tu_facts.scan_unrooted
+      || tu_facts.slots_unproven || tu_facts.slot_replay
+      || !node || !tu_facts.executable
+      || !tu_facts.executable->contains (node)
+      || !early_cch_lane_members_current_p (fn))
+    return false;
+  for (uint32_t word : tu_facts.slot_words)
+    {
+      rvtt_word_facts facts;
+      rvtt_word_facts_classify (word, &facts);
+      if (facts.is_mop || facts.is_mop_cfg || facts.is_replay
+	  || facts.cc != RVTT_RAW_CC_INERT)
+	return false;
+    }
+  return true;
+}
+
+static bool
+early_cch_word_direct_p (function *fn, uint32_t word)
+{
+  rvtt_word_facts facts;
+  rvtt_word_facts_classify (word, &facts);
+  /* Raw template-expander configuration is not an ordinary delivered
+     instruction: this adapter models only exact scalar slot stores. */
+  if (facts.is_mop_cfg)
+    return false;
+  if (facts.is_mop)
+    /* Check every launched body's actual MUST9 as well, not merely the
+       queried caller's mask: an uninitialized callee could start capture. */
+    return early_cch_mop_lanes_p (fn) && rvtt_gimple_mop_initialized_p (fn);
+  if (facts.row != RVTT_WF_UNAUDITED)
+    return !facts.is_replay;
+  /* The same closed flag-writer opcode family admitted by the common
+     direct-issuance scan.  These may change flags, but cannot record. */
+  if (TARGET_XTT_TENSIX_WH_BH)
+    switch (word >> 24)
+      {
+      case 0x77: case 0x79: case 0x7b: case 0x81:
+      case 0x87: case 0x88: case 0x8a: case 0x8b:
+      case 0x96: case 0x97:
+	return true;
+      }
+  return false;
+}
+
+static bool
+early_cch_stmt_direct_p (function *fn, gimple *stmt)
+{
+  if (gasm *a = dyn_cast<gasm *> (stmt))
+    {
+      const char *s = gimple_asm_string (a);
+      s += strspn (s, " \t");
+      if (!*s)
+	return true;
+      if (!gimple_asm_ninputs (a) && !gimple_asm_noutputs (a)
+	  && (!strcmp (s, "fence") || !strcmp (s, "fence rw,rw")))
+	return true;
+      uint32_t word;
+      return rvtt_raw_ttinsn_word_p (a, &word)
+	&& early_cch_word_direct_p (fn, word);
+    }
+  if (gcall *call = dyn_cast<gcall *> (stmt))
+    {
+      const rvtt_insn_data *insnd = rvtt_get_insn_data (call);
+      if (insnd)
+	for (unsigned i = 0; i < gimple_call_num_args (call); ++i)
+	  {
+	    tree arg = gimple_call_arg (call, i);
+	    if (POINTER_TYPE_P (TREE_TYPE (arg)) && !integer_zerop (arg))
+	      return false;
+	  }
+      if (insnd && insnd->id == rvtt_insn_data::ttinsn)
+	{
+	  unsigned word;
+	  return rvtt_call_const_uarg (call, 1, &word)
+	    && early_cch_word_direct_p (fn, word);
+	}
+      if (insnd)
+	return insnd->id != rvtt_insn_data::ttreplay;
+      tree decl = gimple_call_fndecl (call);
+      cgraph_node *node = decl ? cgraph_node::get (decl) : nullptr;
+      if (!node || !node->binds_to_current_def_p ())
+	return false;
+      node = node->ultimate_alias_target ();
+      /* Every represented body is separately scanned below; no incoming
+	 ABI, recursive preservation contract, or opaque external call. */
+      return node && node->definition && !node->thunk
+	&& early_cch_lane_members.contains (node->decl)
+	&& tu_facts.executable && tu_facts.executable->contains (node);
+    }
+  if (is_gimple_assign (stmt))
+    {
+      tree lhs = gimple_assign_lhs (stmt);
+      if (TREE_CODE (lhs) == SSA_NAME)
+	return !gimple_has_volatile_ops (stmt);
+      unsigned HOST_WIDE_INT address;
+      tree size = TYPE_SIZE_UNIT (TREE_TYPE (lhs));
+      /* These exact stores program future MOP words; they issue none.
+	 Unknown aliases, FIFO stores and other MMIO remain opaque. */
+      return size && tree_fits_uhwi_p (size) && tree_to_uhwi (size) == 4
+	&& ref_constant_address (lhs, &address)
+	&& address >= XTT_MOP_CFG_MMIO_BASE
+	&& address <= XTT_MOP_CFG_MMIO_BASE + 8 * 4
+	&& (address - XTT_MOP_CFG_MMIO_BASE) % 4 == 0;
+    }
+  switch (gimple_code (stmt))
+    {
+    case GIMPLE_COND: case GIMPLE_GOTO: case GIMPLE_SWITCH:
+    case GIMPLE_RETURN: case GIMPLE_LABEL: case GIMPLE_NOP:
+    case GIMPLE_PREDICT: case GIMPLE_DEBUG:
+      return true;
+    default:
+      return false;
+    }
+}
+
+/* Callback is a pure retained consult; never re-read a released CFG. */
+static bool
+early_cch_no_recorder_p (function *fn)
+{
+  cgraph_node *node = fn ? cgraph_node::get (fn->decl) : nullptr;
+  return early_cch_lane_complete && early_cch_lane_direct
+    && node && tu_facts.executable && tu_facts.executable->contains (node)
+    && early_cch_lane_members_current_p (fn);
+}
+
+static void
+early_cch_prepare_lane_hooks ()
+{
+  if (early_cch_lane_complete)
+    return;
+  early_cch_lane_auditing = true;
+  early_cch_lane_direct = !tu_facts.scan_unrooted;
+  cgraph_node *node;
+  FOR_EACH_FUNCTION (node)
+    if (node->definition && !node->alias && !node->thunk)
+      early_cch_lane_members.add (node->decl);
+  /* All executable definitions, including an uncalled public poison,
+     participate.  No demanded body's absence is accepted vacuously. */
+  FOR_EACH_FUNCTION (node)
+    if (node->definition && !node->alias && !node->thunk
+	&& tu_facts.executable && tu_facts.executable->contains (node))
+      {
+	function *body = DECL_STRUCT_FUNCTION (node->decl);
+	if (!body || !body->cfg || (body->curr_properties & PROP_rtl))
+	  {
+	    early_cch_lane_direct = false;
+	    continue;
+	  }
+	basic_block bb;
+	FOR_EACH_BB_FN (bb, body)
+	  for (gimple_stmt_iterator gsi = gsi_start_bb (bb); !gsi_end_p (gsi);
+	       gsi_next (&gsi))
+	    if (!early_cch_stmt_direct_p (body, gsi_stmt (gsi)))
+	      early_cch_lane_direct = false;
+      }
+  early_cch_lane_auditing = false;
+  early_cch_lane_complete = true;
+  rvtt_tu_no_recorder_hook = early_cch_no_recorder_p;
+  /* Intentionally do not install opaque-lane or statement-issuance
+     permission.  No-recorder alone must not preserve partial CC state. */
 }
