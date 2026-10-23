@@ -91,6 +91,10 @@ extern rvtt_raw_cc_class rvtt_raw_cc_word_class (uint32_t word);
    take the lane-enable state away from all-lanes.  */
 extern bool rvtt_raw_cc_word_ambient_preserving_p (uint32_t word);
 
+/* Return true if every word with opcode OPCODE is CC-inert whatever its
+   other fields; used for words whose operand fields are run-time
+   values.  */
+extern bool rvtt_raw_cc_opcode_inert_p (unsigned opcode);
 
 /* The raw word fact table.
 
