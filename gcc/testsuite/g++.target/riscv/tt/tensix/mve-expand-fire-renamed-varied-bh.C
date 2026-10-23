@@ -6,6 +6,9 @@
 
 void some_other_kernel (int n)
 {
+  // Establish physical full lanes independently of the entry ABI.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   (void) n;
   for (unsigned qq = 0; qq != 64; ++qq)
     {

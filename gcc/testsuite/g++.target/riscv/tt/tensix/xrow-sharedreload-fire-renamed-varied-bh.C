@@ -6,6 +6,8 @@
 
 void audit_ip_owner_init (void)
 {
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   auto w6 = __builtin_rvtt_sfpxloadi (nullptr, 0x3c23d70a, 0, 0, 31);
   __builtin_rvtt_sfpwriteconfig_v (w6, 0, 12);
   auto w5 = __builtin_rvtt_sfpxloadi (nullptr, 0xbd4ccccd, 0, 0, 31);
@@ -16,6 +18,8 @@ void audit_ip_owner_init (void)
 
 void audit_ip_poly_row (void)
 {
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   auto w6 = __builtin_rvtt_sfpxloadi (nullptr, 0x3c23d70a, 0, 0, 31);
   auto w5 = __builtin_rvtt_sfpxloadi (nullptr, 0xbd4ccccd, 0, 0, 31);
   auto w4 = __builtin_rvtt_sfpxloadi (nullptr, 0x3e6b851f, 0, 0, 31);

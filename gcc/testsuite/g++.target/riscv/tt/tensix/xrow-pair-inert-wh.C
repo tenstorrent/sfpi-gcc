@@ -6,6 +6,8 @@
 
 void wh_row ()
 {
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   for (unsigned r = 0; r != 32; ++r)
     {
       auto x = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 3);
