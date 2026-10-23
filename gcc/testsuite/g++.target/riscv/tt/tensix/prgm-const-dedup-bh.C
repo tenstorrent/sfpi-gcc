@@ -2,10 +2,13 @@
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-unroll-loops -mtt-tensix-optimize-prgm-const -fdump-tree-rvtt_prgm_const-details" }
 // { dg-final { scan-tree-dump-times "prgm-const: allocated PRGM L\\d+ for invariant immediate" 3 "rvtt_prgm_const" } }
 // { dg-final { scan-tree-dump-times "prgm-const: reused PRGM L\\d+ for identical immediate" 1 "rvtt_prgm_const" } }
-// { dg-final { scan-assembler-times "SFPCONFIG" 3 } }
+// { dg-final { scan-assembler-times "SFPCONFIG" 5 } }
 
 void two_loops_one_immediate ()
 {
+  // Both predicate flags and ROW_MASK are unknown at entry.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   auto x = __builtin_rvtt_sfpreadlreg (0);
   auto s = __builtin_rvtt_sfpreadlreg (1);
   for (unsigned ix = 0; ix != 32; ++ix)
@@ -26,6 +29,9 @@ void two_loops_one_immediate ()
 
 void varied_two_immediates ()
 {
+  // Both predicate flags and ROW_MASK are unknown at entry.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   auto x = __builtin_rvtt_sfpreadlreg (0);
   auto s = __builtin_rvtt_sfpreadlreg (1);
   for (unsigned ix = 0; ix != 32; ++ix)

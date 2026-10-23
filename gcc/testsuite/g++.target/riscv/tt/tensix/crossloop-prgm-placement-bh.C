@@ -8,6 +8,9 @@ extern volatile unsigned long __instrn_buffer[];
 void
 xlh_prgm_kernel (int tiles)
 {
+  // Prove physical full lanes; do not infer an entry-state ABI.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   for (int t = 0; t != tiles; ++t)
     {
       __asm__ __volatile__ (".ttinsn %0" : : "n" (0x37000104));

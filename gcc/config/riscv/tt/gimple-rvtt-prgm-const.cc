@@ -85,6 +85,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt-protos.h"
 #include "rvtt-refuse.h"
 #include "rvtt.h"
+#include "rvtt-effects.h"
 #include "rvtt-pressure.h"
 #include "rvtt-delivery-cost.h"
 #include "rvtt-macro-ownership.h"
@@ -98,6 +99,18 @@ along with GCC; see the file COPYING3.  If not see
 /* TU-wide PRGM freedom facts, computed once.			      */
 
 static prgm_tu_facts tu_facts;
+static bool tu_no_recorder = true;
+static bool tu_unproved_recorder;
+static bool tu_lane_audit_complete;
+/* A payload MAY audit does not prove that a launched template was ever
+   initialized.  Retain the independent actual-point MUST proof for every
+   audited body: an uninitialized callee could start capture before its
+   caller apparently programs a template and resets its lane state. */
+static bool tu_mop_initializations_proven = true;
+static hash_set<tree> tu_lane_audited;
+static bool tu_no_recorder_p (function *);
+static bool tu_opaque_lanes_preserving_p (function *);
+static int tu_stmt_issue (function *, gimple *);
 
 /* Defined in gimple-rvtt-prgm-remat.cc.  */
 bool staged_config_value (tree staged, unsigned *value);
@@ -203,6 +216,12 @@ scan_function_body (function *fn, unsigned *claimed, const char **why,
 		    rvtt_mop_scan_ctx *ctx,
 		    hash_set<function *> &active)
 {
+  tu_lane_audited.add (fn->decl);
+  /* MUST-only, without consulting the MAY audit being built here.
+     Include on-demand bound bodies as well as the outer TU walk.  An
+     uninitialized launch in any callee can capture its caller's reset. */
+  if (!rvtt_gimple_mop_initialized_p (fn))
+    tu_mop_initializations_proven = false;
   /* A bound scan re-reads the body under its call site's parameter
      bindings, so it is not memoized.  Call cycles refuse.  */
   if ((!ctx || !ctx->parms) && visited.contains (fn))
@@ -324,6 +343,9 @@ scan_function_body (function *fn, unsigned *claimed, const char **why,
 
 	  if (gasm *a = dyn_cast <gasm *> (stmt))
 	    {
+	      uint32_t word;
+	      if (rvtt_raw_ttinsn_word_p (a, &word) && (word >> 24) == 0x04)
+		tu_no_recorder = false;
 	      if (ctx && ctx->scan)
 		for (unsigned i = 0; i != gimple_asm_ninputs (a); ++i)
 		  poison_bare_addr (TREE_VALUE (gimple_asm_input_op (a, i)));
@@ -342,7 +364,10 @@ scan_function_body (function *fn, unsigned *claimed, const char **why,
 	      if (const char **v = replay_verdict.get (a))
 		{
 		  if (*v)
-		    refuse (*v, stmt);
+		    {
+		      tu_unproved_recorder = true;
+		      refuse (*v, stmt);
+		    }
 		  else if (dump_file)
 		    {
 		      fprintf (dump_file, "prgm-const: replay record word "
@@ -352,6 +377,9 @@ scan_function_body (function *fn, unsigned *claimed, const char **why,
 		    }
 		  continue;
 		}
+	      if (rvtt_raw_ttinsn_word_p (a, &word)
+		  && (word >> 24) == XTT_REPLAY_OPCODE)
+		tu_unproved_recorder = true;
 	      const char *w = nullptr;
 	      unsigned local_claims = 0;
 	      if (!scan_raw_asm (a, &local_claims, &w, st))
@@ -394,6 +422,31 @@ scan_function_body (function *fn, unsigned *claimed, const char **why,
 	    {
 	      poison_call_addr_args ();
 	      gcall *call = as_a <gcall *> (stmt);
+	      if (insnd->id == rvtt_insn_data::ttreplay)
+		tu_no_recorder = false, tu_unproved_recorder = true;
+	      if (insnd->id == rvtt_insn_data::ttinsn)
+		{
+		  unsigned word;
+		  const char *word_why = nullptr;
+		  unsigned local_claims = 0;
+		  if (!rvtt_call_const_uarg (call, 1, &word))
+		    {
+		      tu_no_recorder = false;
+		      tu_unproved_recorder = true;
+		      refuse ("runtime ttinsn word is unaudited", stmt);
+		    }
+		  else
+		    {
+		      if ((word >> 24) == 0x04)
+			tu_no_recorder = false, tu_unproved_recorder = true;
+		      if (!rvtt_mop_audited_word_p (word, &local_claims,
+					    &word_why, st))
+			refuse (word_why, stmt);
+		      *claimed |= local_claims;
+		      tu_mark_claims_unknown (local_claims);
+		    }
+		  continue;
+		}
 	      if (insnd->id == rvtt_insn_data::ttregion_begin
 		  || insnd->id == rvtt_insn_data::ttregion_end)
 		{
@@ -422,12 +475,19 @@ scan_function_body (function *fn, unsigned *claimed, const char **why,
 		}
 	      else if (insnd->id == rvtt_insn_data::sfpconfig_i)
 		{
-		  /* The immediate form always writes LaneConfig (15); refuse
-		     as for the value form above, since LaneConfig bits such as
-		     DISABLE_BACKDOOR_LOAD change how template-slot programming
-		     behaves.  */
-		  refuse ("user SFPCONFIG writes LaneConfig", stmt);
-		  continue;
+		  /* Match the already audited raw 0x910000f1 word exactly.
+		     It writes no PRGM register and preserves the default
+		     template-programming mode.  This is NOT a reset proof:
+		     the separate lane analysis still requires executed ENCC
+		     first, and unknown/nonzero/register writes remain barred.  */
+		  unsigned value, dest, mod;
+		  if (!rvtt_call_const_uarg (call, 0, &value) || value != 0
+		      || !rvtt_call_const_uarg (call, 1, &dest) || dest != 15
+		      || !rvtt_call_const_uarg (call, 2, &mod) || mod != 1)
+		    {
+		      refuse ("user SFPCONFIG writes LaneConfig", stmt);
+		      continue;
+		    }
 		}
 	      /* Other typed builtins, including the matrix-unit family
 		 (ttmovd2b, ttmovb2a, ttmovb2d, ttmova2d, tttrnspsrcb,
@@ -560,6 +620,10 @@ scan_function_body (function *fn, unsigned *claimed, const char **why,
 const prgm_tu_facts &
 tu_prgm_facts ()
 {
+  rvtt_tu_no_recorder_hook = tu_no_recorder_p;
+  rvtt_tu_opaque_lane_hook = tu_opaque_lanes_preserving_p;
+  rvtt_tu_stmt_issue_hook = tu_stmt_issue;
+  rvtt_mop_lane_proof_hook = tu_opaque_lanes_preserving_p;
   if (tu_facts.computed)
     return tu_facts;
   tu_facts.computed = true;
@@ -582,21 +646,22 @@ tu_prgm_facts ()
       /* Keep scanning after a refusal so later functions still record
 	 their claims; only the first blocker is reported.  */
       static char reason_buf[192];
-      if (!ofn || !ofn->cfg)
+      if (!ofn || !ofn->cfg || (ofn->curr_properties & PROP_rtl))
 	{
 	  /* As above, scan an IPA-SRA clone through its origin's body.  */
 	  for (cgraph_node *origin = node->clone_of; origin;
 	       origin = origin->clone_of)
 	    if (function *orig_fn = DECL_STRUCT_FUNCTION (origin->decl))
-	      if (orig_fn->cfg)
+	      if (orig_fn->cfg && !(orig_fn->curr_properties & PROP_rtl))
 		{
 		  ofn = orig_fn;
 		  break;
 		}
-	  if (!ofn || !ofn->cfg)
+	  if (!ofn || !ofn->cfg || (ofn->curr_properties & PROP_rtl))
 	    {
 	      /* A defined body that cannot be walked refuses.  */
 	      tu_facts.refused = true;
+	      tu_mop_initializations_proven = false;
 	      if (!tu_facts.reason)
 		tu_facts.reason = "function body unavailable to the scan";
 	      if (!tu_facts.mop.cc_dirty)
@@ -672,8 +737,24 @@ tu_prgm_facts ()
     }
   /* Compute the entry roots now, whether or not we dump.  */
   rvtt_ipa_tu_anchors ();
+  tu_lane_audit_complete = true;
+  return tu_facts;
+}
+
+/* A lane consumer can demand the audit before this pass opens its dump.
+   Emit the completed cached snapshot at the actual PRGM pass, without
+   rescanning bodies (some may already have been released).  */
+static void
+dump_tu_prgm_facts ()
+{
+  static bool dumped;
+  if (!dump_file || dumped || !tu_lane_audit_complete)
+    return;
+  dumped = true;
   if (dump_file)
     {
+      for (const auto &diagnostic : tu_facts.mop.slot_refusals)
+	fprintf (dump_file, "prgm-const: mop-derive: %s\n", diagnostic.text);
       const rvtt_ipa_tu_anchor_facts &anchors = rvtt_ipa_tu_anchors ();
       fprintf (dump_file,
 	       "tu-facts: claimed %#x value-known %#x creg-read %#x%s\n",
@@ -697,7 +778,102 @@ tu_prgm_facts ()
 	       anchors.n_entry_roots,
 	       anchors.rooted ? "rooted" : "unrooted");
     }
-  return tu_facts;
+}
+
+/* These are pure consults of a completed all-body audit.  A replay record
+   with no playback may be harmless for PRGM ownership, but it still cannot
+   prove physical issuance of a subsequent reset: keep that face separate.
+   Typed CC instructions are not covered by the opaque-channel face and
+   calls must still use the callee-specific lane-preservation proof.  */
+static bool
+tu_no_recorder_p (function *fn)
+{
+  /* Lane consumers run even when PRGM optimization itself is disabled.
+     Demand the same complete audit while GIMPLE is still available;
+     never start a source audit from an RTL consumer.  COMPUTED is set
+     before scanning and COMPLETE only at the end, so re-entry fails
+     closed rather than consulting a partially built result.  */
+  if (fn && fn->cfg && !(fn->curr_properties & PROP_rtl)
+      && !tu_facts.computed)
+    tu_prgm_facts ();
+  return fn && tu_lane_audit_complete && !tu_facts.refused && tu_no_recorder
+    && tu_mop_initializations_proven
+    && tu_lane_audited.contains (fn->decl) && rvtt_ipa_tu_anchors ().rooted;
+}
+
+static bool
+tu_opaque_lanes_preserving_p (function *fn)
+{
+  return tu_no_recorder_p (fn) && !tu_facts.mop.cc_dirty;
+}
+
+/* Do not cache GIMPLE-pointer membership: motion can move an existing
+   statement into a capture window.  Re-walk every current window at the
+   query point, using the same bounded payload/CFG proof as TU admission.
+   A new/deleted/moved word or changed record length must prove itself
+   again.  Unknown playback, nested recording, and expanded bodies fail
+   closed.  Only exact raw constant windows are eligible.  */
+static int
+tu_stmt_issue (function *fn, gimple *stmt)
+{
+  if (!riscv_tt_opt_opaque_replay_record || !fn || !fn->cfg
+      || (fn->curr_properties & PROP_rtl) || tu_no_recorder)
+    return -1;
+  if (!tu_lane_audit_complete || tu_facts.refused || tu_unproved_recorder
+      || !tu_mop_initializations_proven
+      || tu_facts.mop.cc_dirty || !tu_lane_audited.contains (fn->decl)
+      || !rvtt_ipa_tu_anchors ().rooted)
+    return -1;
+  hash_set<gimple *> swallowed;
+  bool found = false;
+  basic_block bb;
+  FOR_EACH_BB_FN (bb, fn)
+    for (gimple_stmt_iterator gsi = gsi_start_bb (bb); !gsi_end_p (gsi);
+	 gsi_next (&gsi))
+      {
+	gimple *s = gsi_stmt (gsi);
+	found |= s == stmt;
+	if (gcall *call = dyn_cast<gcall *> (s))
+	  {
+	    const rvtt_insn_data *id = rvtt_get_insn_data (call);
+	    if (id && (id->id == rvtt_insn_data::ttreplay
+		       || id->id == rvtt_insn_data::ttinsn))
+	      return -1;
+	  }
+	if (gasm *a = dyn_cast<gasm *> (s))
+	  {
+	    uint32_t word;
+	    if (!rvtt_raw_ttinsn_word_p (a, &word))
+	      {
+		const char *text = gimple_asm_string (a);
+		text += strspn (text, " \t");
+		if (!strncmp (text, ".ttinsn", 7))
+		  return -1;
+		continue;
+	      }
+	    if ((word >> 24) == XTT_REPLAY_OPCODE)
+	      {
+		const char *why = nullptr;
+		if (!rvtt_mop_replay_record_admit (a, word, &swallowed, &why))
+		  return -1;
+	      }
+	  }
+      }
+  /* Revalidate executed raw words too.  The complete original TU audit
+     is not permission for a subsequently introduced lane writer.  */
+  FOR_EACH_BB_FN (bb, fn)
+    for (gimple_stmt_iterator gsi = gsi_start_bb (bb); !gsi_end_p (gsi);
+	 gsi_next (&gsi))
+      if (gasm *a = dyn_cast<gasm *> (gsi_stmt (gsi)))
+	{
+	  uint32_t word;
+	  if (!swallowed.contains (a) && rvtt_raw_ttinsn_word_p (a, &word)
+	      && (word >> 24) != XTT_REPLAY_OPCODE
+	      && rvtt_raw_cc_word_class (word) != RVTT_RAW_CC_INERT
+	      && word != 0x8a00300a && word != 0x910000f1)
+	    return -1;
+	}
+  return !found ? -1 : swallowed.contains (stmt) ? 0 : 1;
 }
 
 const pass_data pass_data_rvtt_prgm_const =
@@ -737,7 +913,10 @@ public:
     /* Compute the TU facts on the first function, while every body in
        the TU is still in gimple.  Remat does not need them.  */
     if (riscv_tt_opt_prgm_const)
-      tu_prgm_facts ();
+      {
+	tu_prgm_facts ();
+	dump_tu_prgm_facts ();
+      }
     loop_optimizer_init (AVOID_CFG_MODIFICATIONS);
     prgm_state st;
     bool changed = false;
@@ -755,6 +934,10 @@ public:
 gimple_opt_pass *
 make_pass_rvtt_prgm_const (gcc::context *ctxt)
 {
+  rvtt_tu_no_recorder_hook = tu_no_recorder_p;
+  rvtt_tu_opaque_lane_hook = tu_opaque_lanes_preserving_p;
+  rvtt_tu_stmt_issue_hook = tu_stmt_issue;
+  rvtt_mop_lane_proof_hook = tu_opaque_lanes_preserving_p;
   return new pass_rvtt_prgm_const (ctxt);
 }
 

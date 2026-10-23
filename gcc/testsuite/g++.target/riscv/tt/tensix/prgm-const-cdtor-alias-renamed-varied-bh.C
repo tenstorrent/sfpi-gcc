@@ -32,6 +32,9 @@ void
 bracketed_body ()
 {
   bracket<4242> b;
+  // Both predicate flags and ROW_MASK are unknown at entry.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   auto acc = __builtin_rvtt_sfpreadlreg (2);
   auto scale = __builtin_rvtt_sfpreadlreg (3);
   for (unsigned k = 0; k != 24; ++k)

@@ -2,11 +2,14 @@
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-unroll-loops -mtt-tensix-optimize-prgm-const -fdump-tree-rvtt_prgm_const-details" }
 // { dg-final { scan-tree-dump-times "prgm-const: allocated PRGM L1\\d for invariant immediate" 2 "rvtt_prgm_const" } }
 // { dg-final { scan-tree-dump-not "sfpmad" "rvtt_prgm_const" } }
-// { dg-final { scan-assembler-times "SFPCONFIG" 2 } }
+// { dg-final { scan-assembler-times "SFPCONFIG" 4 } }
 // { dg-final { scan-assembler-times "SFPMAD" 2 } }
 
 void muladd_fire ()
 {
+  // Both predicate flags and ROW_MASK are unknown at entry.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   auto x = __builtin_rvtt_sfpreadlreg (0);
   for (unsigned ix = 0; ix != 32; ++ix)
     {
@@ -20,6 +23,9 @@ void muladd_fire ()
 
 void renamed_offset_blend ()
 {
+  // Both predicate flags and ROW_MASK are unknown at entry.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   auto acc = __builtin_rvtt_sfpreadlreg (4);
   for (unsigned row = 0; row != 20; ++row)
     {
