@@ -6,6 +6,8 @@
 // { dg-final { scan-rtl-dump-not "regrename-postcommit-divergence" "rvtt_lreg_rename_chains" } }
 void renc_ccr_alllanes ()
 {
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   auto k1 = __builtin_rvtt_sfpreadlreg (0);
   auto k2 = __builtin_rvtt_sfpreadlreg (1);
   auto x = __builtin_rvtt_sfpreadlreg (2);
