@@ -38,8 +38,8 @@
    A raw instruction writes only the enabled lanes; the others keep the old
    value, which is then also an input of the write if a later read may see
    one of those lanes enabled again.  A forward must-problem finds where all
-   lanes are known to be enabled (function entry, after a typed all-lanes
-   SFPENCC, across CC-inert raw words), and a backward problem finds reads
+   lanes are known to be enabled (after all-column flags and a clear
+   LaneConfig ROW_MASK have both been established), and a backward problem finds reads
    that may follow a lane re-enable.  Headers that declare only true reads
    (see __riscv_xtt_sfprawlreg_merge) then reserve the old value only where
    a disabled lane can leak it.
