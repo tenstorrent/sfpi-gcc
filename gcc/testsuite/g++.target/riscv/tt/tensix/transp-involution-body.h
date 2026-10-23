@@ -32,6 +32,8 @@ struct parked
 
   static void run ()
   {
+    __builtin_rvtt_sfpencc_all_lanes ();
+    __builtin_rvtt_sfpconfig_i (0, 15, 1);
     auto acc0 = __builtin_rvtt_sfpreadlreg (9);
     auto acc1 = __builtin_rvtt_sfpreadlreg (9);
     block<B0> (acc0, acc1);
