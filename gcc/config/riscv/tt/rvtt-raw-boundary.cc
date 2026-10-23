@@ -617,3 +617,25 @@ rvtt_raw_cc_word_ambient_preserving_p (uint32_t word)
 {
   return rvtt_raw_cc_word_class (word) != RVTT_RAW_CC_UNPROVEN;
 }
+
+/* See rvtt-raw-boundary.h.  Opcodes whose CC class depends on other
+   fields of the word are never inert by opcode alone.  */
+
+bool
+rvtt_raw_cc_opcode_inert_p (unsigned opcode)
+{
+  switch (opcode)
+    {
+    case 0x77: /* SFPEXEXP */
+    case 0x79: /* SFPIADD */
+    case 0x81: /* SFPLZ */
+    case 0x8A: /* SFPENCC */
+    case 0x91: /* SFPCONFIG */
+    case 0x96: /* SFPLE */
+    case 0x97: /* SFPGT */
+      return false;
+    default:
+      return (opcode < 0x100
+	      && rvtt_raw_cc_word_class (opcode << 24) == RVTT_RAW_CC_INERT);
+    }
+}
