@@ -73,6 +73,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt-effects.h"
 #include "rvtt-raw-boundary.h"
 #include "rvtt-cc-region.h"
+#include "rvtt-rtl-lane-state.h"
 
 /* ==================================================================
    Event classification.  */
@@ -123,12 +124,13 @@ classify_cc_rtl_event (rtx_insn *insn)
     return CC_RTL_EV_NONE;
   int code = recog_memoized (insn);
   if (code < 0 || get_attr_type (insn) != TYPE_TENSIX)
-    return CC_RTL_EV_NONE;	/* scalar payload */
+    return rvtt_rtl_lane_effect_of (insn) == LANES_KEPT
+      ? CC_RTL_EV_NONE : CC_RTL_EV_OPAQUE;	/* scalar payload */
   if (!get_attr_length (insn))
     return CC_RTL_EV_NONE;	/* zero-length bookkeeping */
 
   xtt_effect_set fx = rvtt_insn_effects (insn);
-  if (fx.opaque)
+  if (fx.opaque || (fx.config_dests_written & (1u << 15)))
     return CC_RTL_EV_OPAQUE;
   if (!fx.cc_write)
     return CC_RTL_EV_NONE;
@@ -163,163 +165,15 @@ classify_cc_rtl_event (rtx_insn *insn)
    All-lanes entry proof (the RTL counterpart of the GIMPLE
    edge_entry_all_lanes_p walk).  */
 
-/* Forward-scan verdict for the lane-enable state a block's positions
-   see, relative to its entry state.  */
-
-enum cc_rtl_flow
-{
-  CC_RTL_FLOW_ENTRY,	/* no event yet: the entry state */
-  CC_RTL_FLOW_ALL,	/* last event: an executed all-lanes ENCC */
-  CC_RTL_FLOW_OTHER,	/* unproven */
-};
-
-/* Step the flow state ST across INSN.  *POISONED is set once a
-   replay-owner instruction is seen in the block: later positions can be
-   inside a record window and stored rather than executed
-   (rvtt-raw-boundary.h), so no later event may be trusted to set the
-   all-lanes state.  Events that only preserve the state remain safe.  */
-
-static cc_rtl_flow
-cc_rtl_flow_step (cc_rtl_flow st, rtx_insn *insn, bool *poisoned)
-{
-  if (!NONDEBUG_INSN_P (insn))
-    return st;
-  if (CALL_P (insn))
-    return CC_RTL_FLOW_OTHER;
-  if (asm_noperands (PATTERN (insn)) >= 0)
-    {
-      /* Raw `.ttinsn' words in the inert and all-lanes classes only
-	 preserve the state (the word may be captured by a replay record
-	 rather than executed).  Any other asm loses the proof.  */
-      uint32_t word;
-      if (rvtt_raw_ttinsn_word (insn, &word)
-	  && rvtt_raw_cc_word_ambient_preserving_p (word))
-	return st;
-      return CC_RTL_FLOW_OTHER;
-    }
-  if (GET_CODE (PATTERN (insn)) == USE
-      || GET_CODE (PATTERN (insn)) == CLOBBER)
-    return st;
-  int code = recog_memoized (insn);
-  if (code < 0 || get_attr_type (insn) != TYPE_TENSIX)
-    return st;			/* scalar payload */
-  if (get_attr_xtt_replay (insn) == XTT_REPLAY_OWNER)
-    *poisoned = true;
-  if (!get_attr_length (insn))
-    return st;			/* zero-length bookkeeping */
-  uint32_t marker_mask;
-  if (rvtt_lreg_marker (insn, &marker_mask))
-    return st;
-  xtt_effect_set fx = rvtt_insn_effects (insn);
-  if (fx.opaque)
-    return CC_RTL_FLOW_OTHER;
-  if (!fx.cc_write)
-    return st;
-  if (fx.cc_write_all_lanes && !*poisoned)
-    return CC_RTL_FLOW_ALL;
-  /* Any other CC write -- including a possibly-swallowed all-lanes
-     ENCC after a replay owner, and sfppushc, whose stack effect this
-     walk does not model -- loses the proof.  */
-  return CC_RTL_FLOW_OTHER;
-}
-
-/* Tri-state memo for the per-block entry fact.  */
-
-enum cc_rtl_entry_memo
-{
-  CC_RTL_ENTRY_UNSEEN = 0,
-  CC_RTL_ENTRY_IN_PROGRESS,
-  CC_RTL_ENTRY_ALL,
-  CC_RTL_ENTRY_NOT,
-};
-
-static bool cc_rtl_block_entry_all_p (basic_block,
-				      hash_map<basic_block, int> &);
-
-/* Return true if the lane-enable state at the end of BB is provably
-   all-lanes.  MEMO caches per-block entry results.  */
-
-static bool
-cc_rtl_block_exit_all_p (basic_block bb, hash_map<basic_block, int> &memo)
-{
-  cc_rtl_flow st = CC_RTL_FLOW_ENTRY;
-  bool poisoned = false;
-  rtx_insn *insn;
-  FOR_BB_INSNS (bb, insn)
-    st = cc_rtl_flow_step (st, insn, &poisoned);
-  if (st == CC_RTL_FLOW_ALL)
-    return true;
-  if (st == CC_RTL_FLOW_ENTRY)
-    return cc_rtl_block_entry_all_p (bb, memo);
-  return false;
-}
-
-/* Return true if the lane-enable state at the start of BB is provably
-   all-lanes: every predecessor path reaches the function entry (where all
-   lanes are enabled, as the GIMPLE side also assumes) or an executed
-   all-lanes SFPENCC with no later CC event.  Cycles give false.  */
-
-static bool
-cc_rtl_block_entry_all_p (basic_block bb, hash_map<basic_block, int> &memo)
-{
-  int &slot = memo.get_or_insert (bb);
-  if (slot == CC_RTL_ENTRY_ALL)
-    return true;
-  if (slot == CC_RTL_ENTRY_NOT || slot == CC_RTL_ENTRY_IN_PROGRESS)
-    return false;
-  slot = CC_RTL_ENTRY_IN_PROGRESS;
-
-  bool all = EDGE_COUNT (bb->preds) > 0;
-  edge e;
-  edge_iterator ei;
-  FOR_EACH_EDGE (e, ei, bb->preds)
-    {
-      if (e->flags & (EDGE_ABNORMAL | EDGE_EH))
-	{
-	  all = false;
-	  break;
-	}
-      if (e->src == ENTRY_BLOCK_PTR_FOR_FN (cfun))
-	continue;		/* the all-lanes ambient axiom */
-      if (!cc_rtl_block_exit_all_p (e->src, memo))
-	{
-	  all = false;
-	  break;
-	}
-    }
-  /* SLOT may be stale after the recursive inserts, so store through
-     put.  */
-  memo.put (bb, all ? CC_RTL_ENTRY_ALL : CC_RTL_ENTRY_NOT);
-  return all;
-}
-
-/* Return true if the lane-enable state just before AT is provably the
-   architectural all-lanes state: either an all-lanes SFPENCC precedes AT
-   in its block with no later CC event and no earlier replay owner, or
-   there is no CC event before AT in its block and the block entry is
-   all-lanes.  Cycles and abnormal edges give false.  */
-
+/* Both lane facts must hold at the span boundary.  ENCC changes flags,
+   not ROW_MASK, and neither is guaranteed at function entry.  */
 bool
 rvtt_cc_rtl_entry_all_lanes_p (rtx_insn *at)
 {
-  basic_block bb = BLOCK_FOR_INSN (at);
-  if (!bb)
+  if (!BLOCK_FOR_INSN (at))
     return false;
-  cc_rtl_flow st = CC_RTL_FLOW_ENTRY;
-  bool poisoned = false;
-  rtx_insn *insn;
-  FOR_BB_INSNS (bb, insn)
-    {
-      if (insn == at)
-	break;
-      st = cc_rtl_flow_step (st, insn, &poisoned);
-    }
-  if (st == CC_RTL_FLOW_ALL)
-    return true;
-  if (st != CC_RTL_FLOW_ENTRY)
-    return false;
-  hash_map<basic_block, int> memo;
-  return cc_rtl_block_entry_all_p (bb, memo);
+  rvtt_rtl_lane_facts lanes (cfun);
+  return lanes.before (at) == RVTT_RTL_ALL_LANES;
 }
 
 /* ==================================================================
