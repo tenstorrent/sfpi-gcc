@@ -7245,45 +7245,28 @@ wp_rows_disjoint (int addr_a, int mod0_a, int addr_b, int mod0_b)
   return true;
 }
 
-/* Return true if the column-exchange LaneConfig bits stay at their
-   default throughout FN: no possible writer of SFPCONFIG destination 15
-   (typed dest-15 writes, calls, unknown asm words and Tensix instructions
-   with unknown effects all count).  Scalar instructions cannot issue an
-   SFPCONFIG.  */
+/* Prove the identity LaneConfig at each actual participating Dst access.
+   No function-entry reset is assumed.  The shared ROW_MASK_CLEAR bit is
+   established only by an executed full LaneConfig=0 write; every other
+   destination-15 write invalidates it, so it also proves the column
+   exchange bits are zero.  A reset in a disjoint part of FN is not enough. */
 
 static bool
-wp_laneconfig_default_proved (function *fn)
+wp_laneconfig_default_proved (function *fn, const macro_region &region)
 {
-  basic_block bb;
-  FOR_EACH_BB_FN (bb, fn)
-    {
-      rtx_insn *insn;
-      FOR_BB_INSNS (bb, insn)
-	{
-	  if (!NONDEBUG_INSN_P (insn))
-	    continue;
-	  rtx pat = PATTERN (insn);
-	  if (GET_CODE (pat) == USE || GET_CODE (pat) == CLOBBER)
-	    continue;
-	  if (CALL_P (insn))
-	    return false;
-	  if (asm_noperands (pat) >= 0)
-	    {
-	      xtt_rwc_effect_t rwc;
-	      if (!rvtt_raw_pure_dst_rwc (insn, &rwc))
-		return false;
-	      continue;
-	    }
-	  if (recog_memoized (insn) < 0)
-	    return false;
-	  if (get_attr_type (insn) != TYPE_TENSIX)
-	    continue;
-	  xtt_effect_set e = rvtt_insn_effects (insn);
-	  if (e.opaque || (e.config_dests_written & (1u << 15)))
-	    return false;
-	}
-    }
-  return true;
+  rvtt_rtl_lane_facts lanes (fn);
+  bool saw_access = false;
+  for (const macro_row &row : region.rows)
+    for (rtx_insn *insn : row.insns)
+      {
+	xtt_effect_set e = rvtt_insn_effects (insn);
+	if (!e.dst_mem_read && !e.dst_mem_write)
+	  continue;
+	saw_access = true;
+	if (!(lanes.before (insn) & RVTT_RTL_ROW_MASK_CLEAR))
+	  return false;
+      }
+  return saw_access;
 }
 
 /* Return true if two Dst accesses are disjoint.  LANECFG caches
@@ -7291,7 +7274,7 @@ wp_laneconfig_default_proved (function *fn)
    failing rule.  */
 
 static bool
-wp_dst_disjoint (const wp_event &a, const wp_event &b, function *fn,
+wp_dst_disjoint (const wp_event &a, const wp_event &b, function *,
 		 int *lanecfg, const char **why)
 {
   if (!a.dst_typed || !b.dst_typed)
@@ -7304,8 +7287,6 @@ wp_dst_disjoint (const wp_event &a, const wp_event &b, function *fn,
   /* Column-parity clause.  */
   if (((a.dst_addr >> 1) & 1) != ((b.dst_addr >> 1) & 1))
     {
-      if (*lanecfg < 0)
-	*lanecfg = wp_laneconfig_default_proved (fn) ? 1 : 0;
       if (*lanecfg == 1)
 	return true;
       *why = "window-pairing-laneconfig-unproven";
@@ -7729,7 +7710,7 @@ rvtt_macro_interrow_drain_tuned (function *fn, const macro_region &region,
       }
 
   /* Find the smallest spacing that works.  */
-  int lanecfg = -1;
+  int lanecfg = wp_laneconfig_default_proved (fn, region) ? 1 : 0;
   const char *blocker_at[8] = {};
   int best = full;
   for (int n = 0; n < full; ++n)
