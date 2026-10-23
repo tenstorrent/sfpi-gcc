@@ -2,6 +2,11 @@
 
 void NAME (void)
 {
+#ifdef CONST_RESIDENCY_ENTRY_PROLOGUE
+  // Residency tests require actual full-lane programming, unlike remat alone.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
+#endif
   auto x = __builtin_rvtt_sfpreadlreg (0);
   auto C (0) = __builtin_rvtt_sfpxloadi (nullptr, K (0), 0, 0, 31);
   auto C (1) = __builtin_rvtt_sfpxloadi (nullptr, K (1), 0, 0, 31);
