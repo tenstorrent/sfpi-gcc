@@ -227,7 +227,8 @@ rvtt_all_lanes_encc_p (gimple *stmt)
   uint32_t word;
   return rvtt_macro::sfpencc_encode (TREE_INT_CST_LOW (imm12),
 				     TREE_INT_CST_LOW (mod1), &word)
-    && word == rvtt_macro::sfpencc_all_lanes_word ();
+    && word == rvtt_macro::sfpencc_all_lanes_word ()
+    && rvtt_gimple_all_lanes_after_p (stmt);
 }
 
 /* Single-block body check for CC-carrying loops (see rvtt-macro-ownership.h).
