@@ -10,6 +10,7 @@ using namespace sfpi;
 __attribute__((noinline)) void
 zug_quantize_row ()
 {
+  dst_ownership_enable_all_lanes ();
   vFloat gamma = dst_reg[0];
   vFloat acc = gamma * -7.771561f + 0.0044717f;
   v_if (gamma >= 3.0F) { acc = 11.375f; }

@@ -11,6 +11,7 @@ using namespace sfpi;
 __attribute__((noinline)) void
 different_address ()
 {
+  dst_ownership_enable_all_lanes ();
   vFloat a = dst_reg[0];
   vFloat r = a * 4.0f + 5.0f;
   vFloat b = dst_reg[2];		// different logical address
