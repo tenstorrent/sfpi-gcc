@@ -1,3 +1,5 @@
+#include "rtl-lane-reset.h"
+
 // Check that George's test merges a copy into a precolored destination with no spills.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -mtt-tensix-optimize-lreg-alloc -mtt-tensix-optimize-lreg-coalesce -mtt-tensix-dst-layout-32b -fdump-rtl-rvtt_lp_alloc-details -fdump-rtl-rvtt_dst_ownership" }
 // { dg-final { scan-rtl-dump "1 reload.s. folded" "rvtt_dst_ownership" } }
@@ -12,6 +14,7 @@
 
 void coalesce_george_fire (void)
 {
+  RVTT_TEST_LANE_RESET ();
   auto v = __builtin_rvtt_sfpload (nullptr, 320, 0, 0, 4, 7);
   auto w = __builtin_rvtt_sfpload (nullptr, 320, 0, 0, 4, 7); /* -> w = v */
   auto h = __builtin_rvtt_sfpxor (v, v);

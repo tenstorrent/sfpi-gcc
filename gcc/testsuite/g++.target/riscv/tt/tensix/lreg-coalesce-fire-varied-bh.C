@@ -1,3 +1,5 @@
+#include "rtl-lane-reset.h"
+
 // Check that Briggs coalescing fires with renamed variables, moved rows and shifted anchor registers.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -mtt-tensix-optimize-lreg-alloc -mtt-tensix-optimize-lreg-coalesce -mtt-tensix-dst-layout-32b -fdump-rtl-rvtt_lp_alloc-details -fdump-rtl-rvtt_dst_ownership" }
 // { dg-final { scan-rtl-dump "1 reload.s. folded" "rvtt_dst_ownership" } }
@@ -12,6 +14,7 @@
 
 void coalesce_fire_varied (void)
 {
+  RVTT_TEST_LANE_RESET ();
   auto seed  = __builtin_rvtt_sfpload (nullptr, 64, 0, 0, 4, 7);
   auto blend = __builtin_rvtt_sfpxor (seed, seed);
   auto echo  = __builtin_rvtt_sfpload (nullptr, 64, 0, 0, 4, 7);

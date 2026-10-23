@@ -1,3 +1,5 @@
+#include "rtl-lane-reset.h"
+
 // Check that interfering copy halves and reload temporaries are never coalesced (coalesce-interfering-copy, coalesce-web-class).
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-unroll-loops -mtt-tensix-optimize-lreg-alloc -mtt-tensix-optimize-lreg-coalesce -mtt-tensix-dst-layout-32b -fdump-rtl-rvtt_lp_alloc-details" }
 // { dg-final { scan-rtl-dump "coalesce-refusal: coalesce-interfering-copy" "rvtt_lp_alloc" } }
@@ -10,6 +12,7 @@
 
 void lreg_coalesce_interfering (void)
 {
+  RVTT_TEST_LANE_RESET ();
   auto a0 = __builtin_rvtt_sfpreadlreg (0);
   auto a1 = __builtin_rvtt_sfpreadlreg (1);
   auto a2 = __builtin_rvtt_sfpreadlreg (2);

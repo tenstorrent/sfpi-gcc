@@ -6,6 +6,9 @@
 
 void lreg_alloc_cc_refuse (void)
 {
+  /* Establish both lane facts; ENCC alone does not clear ROW_MASK.  */
+  __builtin_rvtt_sfpencc (10, 3);
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   auto a0 = __builtin_rvtt_sfpreadlreg (0);
   auto a1 = __builtin_rvtt_sfpreadlreg (1);
   auto a2 = __builtin_rvtt_sfpreadlreg (2);
@@ -15,6 +18,9 @@ void lreg_alloc_cc_refuse (void)
   auto a6 = __builtin_rvtt_sfpreadlreg (6);
   auto a7 = __builtin_rvtt_sfpreadlreg (7);
   auto a8 = __builtin_rvtt_sfpiadd_v (a0, a1, 4);
+  /* Leave a genuine partial flag state at the spill region.  The integer
+     add's structured wrapper may legally restore all flags before here.  */
+  __builtin_rvtt_sfpencc (8, 0);
   for (unsigned ix = 0; ix != 32; ++ix)
     {
       auto t = a0;

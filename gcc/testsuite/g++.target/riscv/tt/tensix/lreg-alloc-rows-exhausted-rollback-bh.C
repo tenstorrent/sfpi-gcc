@@ -7,6 +7,9 @@
 
 void lreg_alloc_rows_exhausted (void)
 {
+  /* Establish both lane facts; ENCC alone does not clear ROW_MASK.  */
+  __builtin_rvtt_sfpencc (10, 3);
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   auto x = __builtin_rvtt_sfpreadlreg (0);
   auto c0 = __builtin_rvtt_sfpxloadi (nullptr, 0x3e4b0000u, 0, 0, 31);
   auto c1 = __builtin_rvtt_sfpxloadi (nullptr, 0x3e4b0001u, 0, 0, 31);

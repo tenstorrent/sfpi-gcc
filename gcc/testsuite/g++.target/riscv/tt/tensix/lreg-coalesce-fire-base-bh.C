@@ -1,3 +1,5 @@
+#include "rtl-lane-reset.h"
+
 // Check that without coalescing the fold-minted copy web is spilled along with the real victim (2 spills).
 // { dg-options "-mcpu=tt-bh-tensix -O2 -mtt-tensix-optimize-lreg-alloc -mtt-tensix-dst-layout-32b -fdump-rtl-rvtt_lp_alloc-details -fdump-rtl-rvtt_dst_ownership" }
 // { dg-final { scan-rtl-dump "1 reload.s. folded" "rvtt_dst_ownership" } }
@@ -12,6 +14,7 @@
 
 void coalesce_fire_base (void)
 {
+  RVTT_TEST_LANE_RESET ();
   /* Fold source + identity reload: dst-ownership replaces the reload
      with the plain copy w = v.  */
   auto v  = __builtin_rvtt_sfpload (nullptr, 320, 0, 0, 4, 7);

@@ -8,6 +8,9 @@ extern volatile unsigned long __instrn_buffer[];
 
 void lreg_alloc_dst32 (void)
 {
+  /* Establish both lane facts; ENCC alone does not clear ROW_MASK.  */
+  __builtin_rvtt_sfpencc (10, 3);
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   auto a0 = __builtin_rvtt_sfpload (__instrn_buffer, 0, 0, 0, 4, 7);
   auto a1 = __builtin_rvtt_sfpload (__instrn_buffer, 252, 0, 0, 4, 7);
   auto a2 = __builtin_rvtt_sfpreadlreg (2);
