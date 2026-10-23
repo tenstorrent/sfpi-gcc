@@ -10,8 +10,6 @@ ra_pressure_refuse (void)
   auto k1 = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 6, 7);
   auto k2 = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 6, 7);
   auto k3 = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 6, 7);
-  auto k4 = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 6, 7);
-  auto k5 = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 6, 7);
   auto x0 = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 6, 7);
   auto x1 = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 6, 7);
   auto x2 = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 6, 7);
@@ -19,12 +17,13 @@ ra_pressure_refuse (void)
   auto s1 = __builtin_rvtt_sfpadd (x0, x1, 0);
   auto s2 = __builtin_rvtt_sfpadd (s1, x2, 0);
   auto s3 = __builtin_rvtt_sfpadd (s2, x3, 0);
-  /* The six k-values stay live past the chain.  */
+  /* Four k-values plus the four inputs fit the original 8-LREG file.
+     The proposed rebalance needs one additional partial and must refuse.
+     Keeping six k-values would make the original program itself invalid,
+     so that would not exercise the intended compilability contract.  */
   __builtin_rvtt_sfpstore (nullptr, s3, 0, 0, 0, 6, 7);
   __builtin_rvtt_sfpstore (nullptr, k0, 0, 0, 0, 6, 7);
   __builtin_rvtt_sfpstore (nullptr, k1, 0, 0, 0, 6, 7);
   __builtin_rvtt_sfpstore (nullptr, k2, 0, 0, 0, 6, 7);
   __builtin_rvtt_sfpstore (nullptr, k3, 0, 0, 0, 6, 7);
-  __builtin_rvtt_sfpstore (nullptr, k4, 0, 0, 0, 6, 7);
-  __builtin_rvtt_sfpstore (nullptr, k5, 0, 0, 0, 6, 7);
 }
