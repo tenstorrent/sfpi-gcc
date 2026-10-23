@@ -12,9 +12,26 @@
 typedef volatile unsigned int vu32;
 extern volatile unsigned long __instrn_buffer[];
 
+// Give every negative a complete known template before poisoning its
+// named slot.  Otherwise unknown entry/missing slots can hide the reason
+// this fixture is meant to exercise.
+static inline __attribute__((always_inline)) void program_inert_template ()
+{
+  ((vu32 *) 0xFFB80000)[0] = 4;
+  ((vu32 *) 0xFFB80000)[1] = 0;
+  ((vu32 *) 0xFFB80000)[2] = 0x02000000;
+  ((vu32 *) 0xFFB80000)[3] = 0x02000000;
+  ((vu32 *) 0xFFB80000)[4] = 0x02000000;
+  ((vu32 *) 0xFFB80000)[5] = 0x02000000;
+  ((vu32 *) 0xFFB80000)[6] = 0x02000000;
+  ((vu32 *) 0xFFB80000)[7] = 0x02000000;
+  ((vu32 *) 0xFFB80000)[8] = 0x02000000;
+}
+
 // 1. An unaudited raw opcode in an instruction slot.
 void slot_word_unproven ()
 {
+  program_inert_template ();
   ((vu32 *) 0xFFB80000)[5] = 0x9f000000;
   asm volatile (".ttinsn %0" :: "i" (0x01800000));
 }
@@ -22,32 +39,42 @@ void slot_word_unproven ()
 // 2. A REPLAY word in a slot: the replayed content is not audited.
 void slot_replay_unproven ()
 {
+  program_inert_template ();
   ((vu32 *) 0xFFB80000)[3] = 0x04000040;
+  asm volatile (".ttinsn %0" :: "i" (0x01800000));
 }
 
 // 3. A nested MOP word in a slot: expander re-dispatch unproven.
 void slot_nested_mop ()
 {
+  program_inert_template ();
   ((vu32 *) 0xFFB80000)[4] = 0x01800000;
+  asm volatile (".ttinsn %0" :: "i" (0x01800000));
 }
 
 // 4. A runtime slot value with no constant opcode base.
 void slot_opaque_value (unsigned w)
 {
+  program_inert_template ();
   ((vu32 *) 0xFFB80000)[6] = w;
+  asm volatile (".ttinsn %0" :: "i" (0x01800000));
 }
 
 // 5. A runtime composition over a field-sensitive class (SFPLOADI:
 // the destination field could hide in the runtime operand).
 void slot_field_sensitive (unsigned imm)
 {
+  program_inert_template ();
   ((vu32 *) 0xFFB80000)[7] = 0x71000000 + (imm & 0xffff);
+  asm volatile (".ttinsn %0" :: "i" (0x01800000));
 }
 
 // The candidate loop that must NOT allocate while any slot is
 // unproven and a MOP is delivered.
 void wants_a_constant ()
 {
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   auto x = __builtin_rvtt_sfpreadlreg (0);
   auto s = __builtin_rvtt_sfpreadlreg (1);
   for (unsigned ix = 0; ix != 32; ++ix)

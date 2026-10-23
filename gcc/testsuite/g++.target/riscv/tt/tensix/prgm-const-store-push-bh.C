@@ -24,6 +24,9 @@ void audited_pushes_then_math ()
   // An ordinary L1 mailbox store at a constant address: inert MMIO.
   *(vu32 *) 0x0001FFBC = 1;
 
+  // Both predicate flags and ROW_MASK are unknown at entry.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   auto x = __builtin_rvtt_sfpreadlreg (0);
   auto s = __builtin_rvtt_sfpreadlreg (1);
   __builtin_rvtt_sfpwriteconfig_v (s, 0, 14);   // typed claim of L14

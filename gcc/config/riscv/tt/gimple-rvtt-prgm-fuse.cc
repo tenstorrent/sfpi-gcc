@@ -593,36 +593,26 @@ transform (function *fn, prgm_state *st)
       return false;
     }
 
-  /* The all-lanes proof, scoped by reachability: a candidate refuses
-     exactly when some fn-local CC writer can execute before its
-     programming point.  One reach set from the candidate loop's header
-     covers the (possibly cross-loop hoisted) entry-edge point and every
-     block between it and the loop: the point can reach the header, so
-     each of the point's CFG ancestors is an ancestor of the header
-     too.  */
+  /* Programming writes must cover every lane, not just have no visible
+     flag writer.  Entry has no ROW_MASK or flags ABI guarantee.  */
   {
-    auto_vec<gimple *> cc_writers;
-    collect_cc_writers (fn, &cc_writers);
-    if (!cc_writers.is_empty ())
+    rvtt_gimple_lane_facts lanes (fn);
+    unsigned kept = 0;
+    for (candidate &c : candidates)
       {
-	unsigned kept = 0;
-	for (candidate &c : candidates)
+	if (lanes.block_out (c.entry->src) != RVTT_LANE_ALL)
 	  {
-	    if (cc_write_reaches_point_p (cc_writers, c.loop->header,
-					  nullptr))
-	      {
-		rvtt_refuse (RVTT_REF_CC_REGION_UNPROVEN, dump_file,
-			     "prgm-const: loop bb %d refused "
-			     "(cc-region-unproven): a CC write reaches the "
-			     "programming point\n", c.loop->header->index);
-		continue;
-	      }
-	    candidates[kept++] = c;
+	    rvtt_refuse (RVTT_REF_CC_REGION_UNPROVEN, dump_file,
+			 "prgm-const: loop bb %d refused "
+			 "(cc-region-unproven): flags/ROW_MASK unproved\n",
+			 c.loop->header->index);
+	    continue;
 	  }
-	candidates.truncate (kept);
-	if (candidates.is_empty ())
-	  return false;
+	candidates[kept++] = c;
       }
+    candidates.truncate (kept);
+    if (candidates.is_empty ())
+      return false;
   }
 
   if (!st->initialized)

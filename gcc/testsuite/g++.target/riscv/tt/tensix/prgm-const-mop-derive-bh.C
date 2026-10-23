@@ -24,9 +24,14 @@ static inline void program_elw_template (unsigned outer, unsigned inner)
 
 void datacopy_then_math (unsigned rows)
 {
-  program_elw_template (rows, 4);
+  // Prove both control slots locally; an arbitrary incoming row count is
+  // not an initialized, bounded MOP control word.
+  program_elw_template (4, 0);
   asm volatile (".ttinsn %0" :: "i" (0x01800000));   // TTI_MOP (1, 0, 0)
 
+  // Both predicate flags and ROW_MASK are unknown at entry.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   auto x = __builtin_rvtt_sfpreadlreg (0);
   auto s = __builtin_rvtt_sfpreadlreg (1);
   for (unsigned ix = 0; ix != 32; ++ix)
@@ -55,11 +60,16 @@ static inline void arm_gather_template (unsigned reps, unsigned stride)
 
 void gather_rows_then_blend (unsigned reps, unsigned zmask)
 {
-  arm_gather_template (reps, 8);
-  __instrn_buffer[0] = 0x03000000 + (zmask >> 16);	  // TT_MOP_CFG
-  __instrn_buffer[0] = 0x01000000 + ((reps - 1) << 16)
+  arm_gather_template (2, 8);
+  // Pin the architected FIFO address as well as the word bounds: an
+  // unbound external pointer could alias the just-programmed slots.
+  ((vu32 *) 0xFFE40000)[0] = 0x03000000 + (zmask >> 16); // TT_MOP_CFG
+  ((vu32 *) 0xFFE40000)[0] = 0x01000000 + ((reps & 0x3f) << 16)
 		       + (zmask & 0xffff);		  // TT_MOP (0, ...)
 
+  // Both predicate flags and ROW_MASK are unknown at entry.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   auto acc = __builtin_rvtt_sfpreadlreg (2);
   auto gain = __builtin_rvtt_sfpreadlreg (3);
   for (unsigned step = 0; step != 12; ++step)

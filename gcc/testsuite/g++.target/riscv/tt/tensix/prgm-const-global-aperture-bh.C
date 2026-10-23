@@ -17,7 +17,9 @@ static inline void sync_blocking (vu32 *w)
 
 struct params { unsigned words[16]; };
 
-__attribute__ ((noinline)) void copy_into (params *dst)
+// Caller-join provenance applies only to a genuinely closed private helper;
+// a public entry can receive an arbitrary MMIO pointer from outside this TU.
+__attribute__ ((noinline, noclone, noipa)) static void copy_into (params *dst)
 {
   volatile char *d = (volatile char *) dst;
   for (unsigned i = 0; i != sizeof (params); ++i)
@@ -32,6 +34,9 @@ void kernel_with_apertures ()
   params locals;
   copy_into (&locals);			// parameter caller-join
 
+  // Both predicate flags and ROW_MASK are unknown at entry.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   auto x = __builtin_rvtt_sfpreadlreg (0);
   auto s = __builtin_rvtt_sfpreadlreg (1);
   for (unsigned ix = 0; ix != 32; ++ix)
@@ -49,6 +54,9 @@ void renamed_counter_clear ()
 {
   for (vu32 *q = lane_counters; q < lane_counters + 16; ++q)
     *q = 0;
+  // Both predicate flags and ROW_MASK are unknown at entry.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   auto acc = __builtin_rvtt_sfpreadlreg (2);
   auto gain = __builtin_rvtt_sfpreadlreg (3);
   for (unsigned step = 0; step != 12; ++step)

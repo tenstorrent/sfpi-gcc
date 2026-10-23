@@ -38,6 +38,9 @@ void
 guarded_kernel ()
 {
   guard<11> g;
+  // Both predicate flags and ROW_MASK are unknown at entry.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   auto x = __builtin_rvtt_sfpreadlreg (0);
   auto s = __builtin_rvtt_sfpreadlreg (1);
   for (unsigned ix = 0; ix != 32; ++ix)

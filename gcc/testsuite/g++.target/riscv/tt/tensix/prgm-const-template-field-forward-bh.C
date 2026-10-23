@@ -11,8 +11,30 @@ struct mop_template
   unsigned start_op, end_op0, end_op1, loop_op0, loop_op1, last0, last1;
 };
 
+// The context-bound MAY audit must still validate program_it's aggregate
+// field loads.  The independent per-body MUST proof cannot inherit an
+// initialized template from an out-of-line call, so reaffirm the identical
+// nine literal bindings locally before the actual launch.  An unaudited
+// programmer body still blocks the whole-TU audit even with these stores.
+#define CONFIRM_LOCAL_TEMPLATE(outer, inner, loop) do { \
+  ((vu32 *) 0xFFB80000)[0] = outer; \
+  ((vu32 *) 0xFFB80000)[1] = inner; \
+  ((vu32 *) 0xFFB80000)[2] = 0x02000000; \
+  ((vu32 *) 0xFFB80000)[3] = 0x37020044; \
+  ((vu32 *) 0xFFB80000)[4] = 0x02000000; \
+  ((vu32 *) 0xFFB80000)[5] = loop; \
+  ((vu32 *) 0xFFB80000)[6] = 0x02000000; \
+  ((vu32 *) 0xFFB80000)[7] = 0x02000000; \
+  ((vu32 *) 0xFFB80000)[8] = 0x02000000; \
+} while (0)
+
 static inline void program_it (const mop_template *t)
 {
+#ifdef POISON_CONTEXT_PROGRAMMER
+  // The companion negative proves that local MUST initialization cannot
+  // waive the independent MAY audit of this aggregate programmer body.
+  ((vu32 *) 0xFFB80000)[5] = 0x9f000000;
+#endif
   while (((vu32 *) 0xFFB88030)[0] & 1)	/* mop_sync-like volatile spin */
     ;
   while (((vu32 *) 0xFFB88034)[0] & 2)
@@ -52,8 +74,10 @@ static inline void program_it (const mop_template *t)
 void datacopy_like (unsigned rows)
 {
   mop_template t;
-  t.outer = rows;
-  t.inner = 4;
+  // Every executed slot, including both controls, has a concrete local
+  // value.  Entry state and an unbounded incoming row count prove nothing.
+  t.outer = 4;
+  t.inner = 0;
   t.start_op = 0x02000000;
   t.end_op0 = 0x37020044;
   t.end_op1 = 0x02000000;
@@ -62,8 +86,12 @@ void datacopy_like (unsigned rows)
   t.last0 = 0x02000000;
   t.last1 = 0x02000000;
   program_it (&t);
+  CONFIRM_LOCAL_TEMPLATE (4, 0, 0x28008000);
   asm volatile (".ttinsn %0" :: "i" (0x01800000));	/* TTI_MOP */
 
+  // Both predicate flags and ROW_MASK are unknown at entry.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   auto x = __builtin_rvtt_sfpreadlreg (0);
   auto s = __builtin_rvtt_sfpreadlreg (1);
   for (unsigned ix = 0; ix != 32; ++ix)
@@ -77,8 +105,8 @@ void datacopy_like (unsigned rows)
 void datacopy_like_twice (unsigned rows)
 {
   mop_template u;
-  u.outer = rows;
-  u.inner = 8;
+  u.outer = 8;
+  u.inner = 1;
   u.start_op = 0x02000000;
   u.end_op0 = 0x37020044;
   u.end_op1 = 0x02000000;
@@ -87,8 +115,12 @@ void datacopy_like_twice (unsigned rows)
   u.last0 = 0x02000000;
   u.last1 = 0x02000000;
   program_it (&u);
+  CONFIRM_LOCAL_TEMPLATE (8, 1, 0x12010000);
   asm volatile (".ttinsn %0" :: "i" (0x01800000));
 
+  // Both predicate flags and ROW_MASK are unknown at entry.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   auto y = __builtin_rvtt_sfpreadlreg (2);
   auto q = __builtin_rvtt_sfpreadlreg (3);
   for (unsigned ix = 0; ix != 32; ++ix)

@@ -1,12 +1,15 @@
 // Check that a loop-invariant SFPADDI immediate is programmed into a PRGM register and the pair fuses to SFPMAD.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-unroll-loops -mtt-tensix-optimize-prgm-const -fdump-tree-rvtt_prgm_const-details" }
 // { dg-final { scan-tree-dump-times "prgm-const: allocated PRGM L\\d+ for invariant immediate" 2 "rvtt_prgm_const" } }
-// { dg-final { scan-assembler-times "SFPCONFIG" 2 } }
+// { dg-final { scan-assembler-times "SFPCONFIG" 4 } }
 // { dg-final { scan-assembler-not "SFPADDI" } }
 // { dg-final { scan-assembler "SFPMAD" } }
 
 void prgm_const_fire ()
 {
+  // Both predicate flags and ROW_MASK are unknown at entry.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   auto x = __builtin_rvtt_sfpreadlreg (0);
   auto s = __builtin_rvtt_sfpreadlreg (1);
   for (unsigned ix = 0; ix != 32; ++ix)
@@ -19,6 +22,9 @@ void prgm_const_fire ()
 
 void renamed_scaled_bias ()
 {
+  // Both predicate flags and ROW_MASK are unknown at entry.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   auto north = __builtin_rvtt_sfpreadlreg (2);
   auto gain = __builtin_rvtt_sfpreadlreg (3);
   for (unsigned step = 0; step != 12; ++step)
