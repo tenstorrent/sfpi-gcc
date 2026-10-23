@@ -216,6 +216,7 @@ public:
 
 private:
   uint8_t mod_pos = 0;
+  uint8_t mod_op = 0;
   int8_t src_pos : 4;
   uint8_t arg_num : 4;
   uint8_t src_num : 4;
@@ -271,7 +272,7 @@ public:
 
   bool has_mod () const { return flags & HAS_MOD; }
   int mod_arg () const { return mod_pos; }
-  auto &mod_info () const { return ops[has_var ()]; }
+  auto &mod_info () const { return ops[mod_op]; }
 
   bool has_iptr () const { return flags & HAS_IPTR; }
   bool has_var () const { return flags & HAS_VAR; }
