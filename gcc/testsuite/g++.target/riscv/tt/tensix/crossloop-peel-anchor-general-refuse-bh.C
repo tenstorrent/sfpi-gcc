@@ -4,10 +4,13 @@
 // { dg-final { scan-tree-dump-times "lift refused .crossloop-peel-entry-anchored" 1 "rvtt_prgm_const" } }
 // { dg-final { scan-tree-dump-times "peeled first iteration" 1 "rvtt_prgm_const" } }
 // { dg-final { scan-tree-dump-times "allocated PRGM L1\\d for constant 0x3e4b1a3d .loop class, 1 uses" 1 "rvtt_prgm_const" } }
-// { dg-final { scan-assembler-times "SFPCONFIG" 1 } }
+// { dg-final { scan-assembler-times "SFPCONFIG" 2 } }
 
 void ccpeel_lift_anchored (int tiles)
 {
+  // Prove physical full lanes; do not infer an entry-state ABI.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   for (int t = 0; t != tiles; ++t)
     {
       /* Per-tile vector definition the inner body consumes: a lifted
