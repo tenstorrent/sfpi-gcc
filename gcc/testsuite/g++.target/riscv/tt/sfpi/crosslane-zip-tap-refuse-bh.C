@@ -8,6 +8,7 @@ using namespace sfpi;
 void zip3_tapped ()
 {
   __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   vFloat a = dst_reg[0], b = dst_reg[2];
   rowvec_zip (a, b);        // z1
   dst_reg[8] = a;           // external tap of z1's out_a

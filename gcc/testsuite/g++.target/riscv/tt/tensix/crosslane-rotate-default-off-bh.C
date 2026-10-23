@@ -6,6 +6,7 @@
 void full_turn ()
 {
   __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   auto v = __builtin_rvtt_sfpreadlreg (0);
   auto r = ROR1 (ROR1 (ROR1 (ROR1 (ROR1 (ROR1 (ROR1 (ROR1 (v))))))));
   __builtin_rvtt_sfpwritelreg (r, 1);
