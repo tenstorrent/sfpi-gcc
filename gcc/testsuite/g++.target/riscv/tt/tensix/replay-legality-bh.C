@@ -80,6 +80,7 @@ void opaque_barrier ()
 **	SFPMUL	L0, L0, L0, 0
 **	SFPMUL	L0, L0, L0, 0
 **	SFPMUL	L0, L0, L0, 0
+**	.ttinsn	1879048192
 **	TTREPLAY	0, 4, 0, 0
 **	# WRITE L0
 **	ret
