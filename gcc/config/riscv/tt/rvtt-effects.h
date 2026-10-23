@@ -299,8 +299,10 @@ extern xtt_replay_epoch rvtt_replay_epoch_close (rtx_insn *capture,
 
 /* Whether index-tracking shadow coupling (LaneConfig.ENABLE_DEST_INDEX,
    written through SFPCONFIG destination 15) may be enabled anywhere in
-   FN: true when FN contains a typed indexed SFPSWAP or any typed
-   configuration write that can reach destination 15.  SFPTRANSP does
+   FN: true when FN contains a typed indexed SFPSWAP or a typed
+   configuration write that can reach destination 15, except the exact
+   immediate zero write (which cannot enable coupling).  That exception
+   does not clear a possible enable elsewhere in FN.  SFPTRANSP does
    not depend on the coupling and does not count.  The reset state is
    disabled; an enable through a raw TTI word is not visible here.
    There is no disabling transition, so one enable covers the whole
