@@ -23,7 +23,7 @@ nonfloatb_creg_slot_keeps ()
       sfpi::vFloat a = sfpi::abs (x);
       sfpi::vFloat t = 1.0f;
       v_if (a < 1.0f) { t = a * 0.90625f; }
-      v_elseif (a < 2.0f) { t = a * 0.09375f + sfpi::vConst0p8373; }
+      v_elseif (a < 2.0f) { t = a * 0.09375f + sfpi::impl_::LRegFile::vCReg<sfpi::vFloat>(sfpi::CREG_IDX_0P837300003); }
       v_endif;
       sfpi::dst_reg[0] = t * (-t) + 1.0f;
       sfpi::dst_reg++;
