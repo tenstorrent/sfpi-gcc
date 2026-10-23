@@ -3,9 +3,9 @@
 // { dg-final { scan-tree-dump-times "crosscall-prgm: moved 1 programming pair" 1 "rvtt_prgm_const" } }
 // { dg-final { scan-tree-dump "placed config pair .creg 1\\d. in void cph_host" "rvtt_prgm_const" } }
 // { dg-final { scan-tree-dump "refused .crosscall-caller-stmt-unproven." "rvtt_prgm_const" } }
-// { dg-final { scan-assembler-times "SFPCONFIG" 2 } }
+// { dg-final { scan-assembler-times "SFPCONFIG" 4 } }
 
-__attribute__((noinline)) void
+static __attribute__((noinline)) void
 cph_callee ()
 {
   for (int row = 0; row != 8; ++row)
@@ -27,11 +27,14 @@ cph_once ()
 void
 cph_host (int tiles)
 {
+  // Caller setup proves the incoming state of the closed private callee.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   for (int t = 0; t != tiles; ++t)
     cph_once ();
 }
 
-__attribute__((noinline)) void
+static __attribute__((noinline)) void
 renamed_vec_callee ()
 {
   for (int row = 0; row != 4; ++row)
@@ -56,6 +59,9 @@ renamed_vec_once ()
 void
 renamed_vec_host (int count)
 {
+  // Caller setup proves the incoming state of the closed private callee.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   for (int i = 0; i != count; ++i)
     renamed_vec_once ();
 }

@@ -5,9 +5,9 @@
 // { dg-final { scan-tree-dump-times "contract placement lifted to enclosing loop" 2 "rvtt_prgm_const" } }
 // { dg-final { scan-tree-dump-times "allocated PRGM L12 for constant" 1 "rvtt_prgm_const" } }
 // { dg-final { scan-tree-dump-times "allocated PRGM L13 for constant" 1 "rvtt_prgm_const" } }
-// { dg-final { scan-assembler-times "SFPCONFIG" 2 } }
+// { dg-final { scan-assembler-times "SFPCONFIG" 4 } }
 
-__attribute__((noinline)) void
+static __attribute__((noinline)) void
 cpf_callee ()
 {
   for (int row = 0; row != 8; ++row)
@@ -25,6 +25,9 @@ int cpf_pace;
 void
 cpf_caller (int batches, int tiles)
 {
+  // Caller setup proves the incoming state of the closed private callee.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   for (int b = 0; b != batches; ++b)
     {
       cpf_pace = b;			/* scalar batch bookkeeping */
@@ -33,7 +36,7 @@ cpf_caller (int batches, int tiles)
     }
 }
 
-__attribute__((noinline)) void
+static __attribute__((noinline)) void
 renamed_scale_rows ()
 {
   for (int step = 0; step != 16; ++step)
@@ -49,6 +52,9 @@ renamed_scale_rows ()
 void
 renamed_tile_driver (int passes, int count)
 {
+  // Caller setup proves the incoming state of the closed private callee.
+  __builtin_rvtt_sfpencc_all_lanes ();
+  __builtin_rvtt_sfpconfig_i (0, 15, 1);
   for (int p = 0; p != passes; ++p)
     for (int i = 0; i != count; ++i)
       renamed_scale_rows ();
