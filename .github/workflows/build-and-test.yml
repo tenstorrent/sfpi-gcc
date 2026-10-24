@@ -1,0 +1,128 @@
+name: Build and test
+
+permissions:
+  contents: read
+
+on:
+  pull_request:
+  push:
+    branches: [main, nkapre/sfpi]
+  workflow_dispatch:
+    inputs:
+      compiler_ref:
+        description: Exact compiler commit or branch to build (empty uses workflow commit)
+        required: false
+        type: string
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rvtt:
+    name: checking build and rvtt.exp
+    runs-on: ubuntu-22.04
+    timeout-minutes: 180
+    env:
+      # Shared with SFPI's integration pin. The compiler suite also assembles
+      # test output, so the host distribution's RISC-V assembler is unsuitable.
+      BINUTILS_REVISION: a64f45d8a1c581a728951fe52103b56af01e2601
+    steps:
+      - name: Checkout test harness
+        uses: actions/checkout@v4
+        with:
+          path: ci
+          persist-credentials: false
+
+      - name: Checkout compiler
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ inputs.compiler_ref || github.event.pull_request.head.sha || github.sha }}
+          path: compiler
+          persist-credentials: false
+
+      - name: Record compiler revision
+        run: git -C compiler rev-parse HEAD
+
+      - name: Checkout pinned binutils
+        uses: actions/checkout@v4
+        with:
+          repository: tenstorrent/sfpi-binutils
+          ref: ${{ env.BINUTILS_REVISION }}
+          path: binutils
+          persist-credentials: false
+
+      - name: Install build and test tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bison dejagnu expect flex gawk texinfo \
+            libexpat1-dev libgmp-dev libmpc-dev libmpfr-dev zlib1g-dev
+
+      - name: Check the result parser
+        run: python3 -m unittest discover -s ci/.github/scripts -p 'test_*.py'
+
+      - name: Build pinned assembler and linker
+        run: |
+          mkdir binutils-build
+          cd binutils-build
+          ../binutils/configure --target=riscv-tt-elf --with-arch=rv32im --with-abi=ilp32 \
+            --prefix="$GITHUB_WORKSPACE/tools" --disable-nls \
+            --disable-gdb --disable-sim --disable-werror
+          make -j2 all-binutils all-gas all-ld
+          make install-binutils install-gas install-ld
+
+      - name: Build C and C++ compilers with checking
+        run: |
+          mkdir compiler-build
+          cd compiler-build
+          ../compiler/configure --target=riscv-tt-elf \
+            --prefix="$GITHUB_WORKSPACE/tools" --disable-bootstrap \
+            --enable-languages=c,c++ --disable-multilib --disable-shared \
+            --disable-threads --disable-tls --disable-nls --disable-plugin \
+            --with-newlib --without-headers --with-arch=rv32im --with-abi=ilp32 \
+            --with-as="$GITHUB_WORKSPACE/tools/bin/riscv-tt-elf-as" \
+            --with-ld="$GITHUB_WORKSPACE/tools/bin/riscv-tt-elf-ld" \
+            --enable-checking=assert,df,extra,gimple,misc,rtl,rtlflag,tree
+          make -j2 all-gcc
+          if make -C gcc -n rvtt-unit-tests >/dev/null 2>&1; then
+            make -C gcc rvtt-unit-tests
+          fi
+
+      - name: Provision the standard C and C++ headers
+        run: |
+          # These tests use <cstdint> and the C++17 <type_traits> backport.
+          # Use a reproducible header sysroot without building target libraries.
+          curl --fail --location --retry 3 \
+            https://github.com/tenstorrent/sfpi/releases/download/7.79.0/sfpi_7.79.0_x86_64_debian.txz \
+            --output stdlib.txz
+          echo 'b02a9ac4803cb6882f8d3b10151fa01a8fe04303f103fef0815451274ab9b793  stdlib.txz' \
+            | sha256sum --check
+          mkdir stdlib
+          tar -xJf stdlib.txz --strip-components=1 -C stdlib
+
+      - name: Run compiler rvtt.exp tests
+        run: |
+          # Header-dependent SFPI tests are exercised by the SFPI integration
+          # build, which pins this compiler and its matching headers together.
+          # The compiler repository's checks must run independently of headers
+          # introduced by later PRs in the compiler stack.
+          unset SFPI
+          stdlib_headers="$GITHUB_WORKSPACE/stdlib/compiler/riscv-tt-elf/include"
+          export CPLUS_INCLUDE_PATH="$stdlib_headers/c++/15.1.0:$stdlib_headers/c++/15.1.0/riscv-tt-elf:$stdlib_headers"
+          set +e
+          make -C compiler-build/gcc -k check-g++ RUNTESTFLAGS=rvtt.exp
+          runner_exit=$?
+          set -e
+          python3 ci/.github/scripts/check-rvtt.py \
+            compiler-build/gcc/testsuite/g++/g++.sum --runner-exit "$runner_exit"
+
+      - name: Upload build and test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rvtt-results
+          path: |
+            compiler-build/gcc/testsuite/g++/g++.*
+            compiler-build/config.log
+            compiler-build/gcc/config.log

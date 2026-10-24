@@ -1,12 +1,5 @@
-// { dg-options "-mcpu=tt-bh-tensix -O2 -I [SFPI]/include -fno-exceptions -fno-rtti" }
+// { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti" }
 // { dg-final { check-function-bodies "**" "" } }
-
-namespace ckernel{
-    unsigned long *instrn_buffer;
-}
-#include <sfpi.h>
-
-using namespace sfpi;
 
 void one () {
   auto a = __builtin_rvtt_sfpreadlreg (0);
