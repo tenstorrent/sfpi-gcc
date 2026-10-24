@@ -637,6 +637,10 @@ mtt-tensix-optimize-reassoc-mad-restructure
 Target Var(riscv_tt_opt_reassoc_mad_restructure) Init(0)
 Allow fusing separate multiply and add instructions into one fused multiply-add; requires -fassociative-math to take effect.
 
+mtt-tensix-optimize-ccmask
+Target Var(riscv_tt_opt_ccmask) Init(0)
+Fold a single-zero-assign predicated SFPU region into a value-mask compare and AND.
+
 mtt-tensix-optimize-cc-region-general
 Target Var(riscv_tt_opt_cc_region_general) Init(0)
 Accept any CC layout that is proven equivalent to a recognized shape.

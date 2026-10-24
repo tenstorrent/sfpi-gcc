@@ -126,8 +126,8 @@ RVTT_FN (sfpexman,           ,,XTT_VEC_FTYPE_XTT_VEC_USI,                       
 RVTT_FN (sfpexman_lv,        ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,                            LV, ({M, 0x3}))
 RVTT_FN (sfpabs,             ,,XTT_VEC_FTYPE_XTT_VEC_USI,                                    0, ({M, 0x3}))
 RVTT_FN (sfpabs_lv,          ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,                            LV, ({M, 0x3}))
-RVTT_FN (sfplz,              ,,XTT_VEC_FTYPE_XTT_VEC_USI,                                    CC(0x54), ({M, 0x5555}))
-RVTT_FN (sfplz_lv,           ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,                            LV|CC(0x54), ({M, 0x5555}))
+RVTT_FN (sfplz,              ,,XTT_VEC_FTYPE_XTT_VEC_USI,                                    CC(0x4444), ({M, 0x5555}))
+RVTT_FN (sfplz_lv,           ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,                            LV|CC(0x4444), ({M, 0x5555}))
 
 RVTT_FN (sfpand,             ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC,                                0, ())
 RVTT_OVR(sfpand,           bh,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC,                                0, ())

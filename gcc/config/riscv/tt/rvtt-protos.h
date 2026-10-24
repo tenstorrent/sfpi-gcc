@@ -137,6 +137,7 @@ extern bool rvtt_reg_load_p (rtx pat);
 class gimple_opt_pass;
 extern gimple_opt_pass *make_pass_rvtt_attrib (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_cc (gcc::context *ctxt);
+extern gimple_opt_pass *make_pass_rvtt_ccmask (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_combine (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_check_early (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_check_late (gcc::context *ctxt);
@@ -316,6 +317,7 @@ constexpr unsigned int SFPXCMP_MOD1_TYPE_MASK = 3;
 
 constexpr unsigned int SFPXSCMP_SRC_ARG_POS = 1;
 
+constexpr unsigned int SFPABS_MOD1_INT = 0;
 constexpr unsigned int SFPABS_MOD1_FLOAT = 1;
 
 constexpr unsigned int SFPIADD_MOD1_ARG_LREG_DST = 0;
