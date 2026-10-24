@@ -1,0 +1,22 @@
+#include "rtl-lane-reset.h"
+
+// Check that a typed write to a planner-owned configuration destination between faces refuses every formation.
+// { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -fdump-rtl-rvtt_macro_planner-details" }
+// { dg-final { scan-rtl-dump "config-ownership-unproven" "rvtt_macro_planner" } }
+// { dg-final { scan-assembler-not "SFPLOADMACRO" } }
+// { dg-final { scan-assembler-not "\\.ttinsn" } }
+// { dg-final { scan-assembler "SFPSTOCHRND" } }
+// { dg-final { scan-assembler "TTSETRWC" } }
+
+#include "macro-planner-typecast-faces-body.h"
+
+__attribute__((noinline)) void typecast_faces_mutated ()
+{
+  RVTT_TEST_LANE_RESET ();
+  __builtin_rvtt_sfppushc (0);
+  __builtin_rvtt_sfppopc (0);
+  FACE ();
+  auto knob = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, no_increment);
+  __builtin_rvtt_sfpwriteconfig_v (knob, 0, 4);
+  FACE ();
+}

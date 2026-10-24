@@ -53,7 +53,10 @@ RVTT_OBJS := rvtt.o \
 	rvtt-raw-boundary.o \
 	rvtt-macro-ownership.o \
 	rvtt-macro-region.o \
+	rvtt-macro-sched.o \
+	rvtt-macro-desc.o \
 	rvtt-macro-epoch.o \
+	rvtt-macro-verify.o \
 	rvtt-macro-tables.o \
 	rvtt-mop-derive.o \
 	gimple-rvtt-attrib.o \
@@ -100,6 +103,8 @@ RVTT_OBJS := rvtt.o \
 	rtl-rvtt-fix-rocc.o \
 	rtl-rvtt-hll.o \
 	rtl-rvtt-lreg-rename.o \
+	rtl-rvtt-macro-planner.o \
+	rtl-rvtt-macro-planner-cost.o \
 	rtl-rvtt-mop-form.o \
 	rtl-rvtt-mop-outward.o \
 	rtl-rvtt-replay.o \
@@ -143,7 +148,10 @@ RVTT_UNIT_TEST_FLAGS = -Wall -Wextra -Werror -I$(srcdir)/config/riscv/tt
 
 RVTT_UNIT_TESTS = \
 	rvtt-unit-delivery-cost \
+	rvtt-unit-macro-derive \
+	rvtt-unit-macro-sched \
 	rvtt-unit-macro-tables \
+	rvtt-unit-macro-verify \
 	rvtt-unit-timing
 
 rvtt-unit-tests: $(RVTT_UNIT_TESTS)
@@ -153,11 +161,25 @@ rvtt-unit-delivery-cost: \
 	$(CXX) -std=c++11 $(RVTT_UNIT_TEST_FLAGS) $< -o tmp-$@
 	./tmp-$@ && rm -f tmp-$@
 
+rvtt-unit-macro-sched: $(srcdir)/config/riscv/tt/rvtt-macro-sched-test.cc
+	$(CXX) -std=c++11 $(RVTT_UNIT_TEST_FLAGS) $< -o tmp-$@
+	./tmp-$@ && rm -f tmp-$@
+
 rvtt-unit-timing: $(srcdir)/config/riscv/tt/rvtt-timing-test.cc
 	$(CXX) -std=c++11 $(RVTT_UNIT_TEST_FLAGS) $< -o tmp-$@
 	./tmp-$@ && rm -f tmp-$@
 
+rvtt-unit-macro-derive: $(srcdir)/config/riscv/tt/rvtt-macro-derive-test.cc \
+		$(srcdir)/config/riscv/tt/rvtt-macro-tables.cc
+	$(CXX) -std=c++17 $(RVTT_UNIT_TEST_FLAGS) $^ -o tmp-$@
+	./tmp-$@ && rm -f tmp-$@
+
 rvtt-unit-macro-tables: $(srcdir)/config/riscv/tt/rvtt-macro-tables-test.cc \
+		$(srcdir)/config/riscv/tt/rvtt-macro-tables.cc
+	$(CXX) -std=c++11 $(RVTT_UNIT_TEST_FLAGS) $^ -o tmp-$@
+	./tmp-$@ && rm -f tmp-$@
+
+rvtt-unit-macro-verify: $(srcdir)/config/riscv/tt/rvtt-macro-verify-test.cc \
 		$(srcdir)/config/riscv/tt/rvtt-macro-tables.cc
 	$(CXX) -std=c++11 $(RVTT_UNIT_TEST_FLAGS) $^ -o tmp-$@
 	./tmp-$@ && rm -f tmp-$@

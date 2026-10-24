@@ -39,6 +39,7 @@ namespace rvtt_macro {
   extern bool sfpencc_encode (uint64_t imm12, uint64_t mod1, uint32_t *word);
 }
 extern void rvtt_dump_insn_effects (FILE *, rtx_insn *);
+extern const char *rvtt_output_owned_setc16 (rtx *operands);
 extern rtx rvtt_gen_rtx_creg (machine_mode, unsigned sfpu_regno);
 extern rtx rvtt_gen_rtx_noval (machine_mode);
 extern bool rvtt_merge_lv_src (rtx *lv, rtx *src, rtx *commute = nullptr);
@@ -270,6 +271,7 @@ extern bool rvtt_lreg_rename_chain (struct basic_block_def *bb,
 				    enum rvtt_lreg_rename_pricing pricing
 				      = RVTT_RENAME_PRICE_TEMPORAL);
 extern void rvtt_lreg_rename_web_undo (const rvtt_lreg_rename_web &web);
+extern rtl_opt_pass *make_pass_rvtt_macro_planner (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_replay (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_replay_reform (gcc::context *ctxt);
 extern bool rvtt_fixed_replay_rtx_p (const_rtx);

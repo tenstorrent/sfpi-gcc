@@ -1,0 +1,50 @@
+#include "rtl-lane-reset.h"
+#include "ambient-walk-mop-template.h"
+
+// Check that one unauditable asm anywhere in the TU makes the entry-ambient walk refuse the fire body.
+// { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-macro-planner-verify -mtt-tensix-optimize-prgm-const -fdump-rtl-rvtt_macro_planner-details" }
+// A poisoned whole-TU no-recorder audit cannot establish ROW_MASK even from
+// the local reset. Retain the poison word and reject all macro formation.
+// { dg-final { scan-rtl-dump-times "Macro-planner formation-refusal: cc-enable-unproved \\(ROW_MASK at configuration\\)" 1 "rvtt_macro_planner" } }
+// { dg-final { scan-assembler-times {\.word[ \t]+0x00000013} 1 } }
+// { dg-final { scan-rtl-dump-not "Macro-planner formed:" "rvtt_macro_planner" } }
+// { dg-final { scan-rtl-dump-not "Macro-planner formation: entry-ambient all-lanes derived" "rvtt_macro_planner" } }
+
+#define TTI(w) __asm__ __volatile__ (".ttinsn %0" :: "n" (w))
+
+__attribute__((noinline)) void bogwood_poison_unaudited_asm ()
+{
+  RVTT_TEST_LANE_RESET ();
+  /* Not called by the fire function, but makes the TU audit fail: the
+     scan has no audited fact for a .word of the scalar NOP encoding.  */
+  __asm__ __volatile__ (".word 0x00000013");
+}
+
+__attribute__((noinline)) void reed_tulean_refuse ()
+{
+  program_ambient_nop_mop ();
+  RVTT_TEST_LANE_RESET ();
+  auto x = __builtin_rvtt_sfpload (nullptr, 64, 0, 0, 0, 7);
+  for (unsigned ix = 0; ix != 32; ++ix)
+    {
+      auto k = __builtin_rvtt_sfpxloadi (nullptr, 0x3fb8aa3b, 0, 0, 31);
+      auto prod = __builtin_rvtt_sfpmul (x, k, 0);
+      auto b = __builtin_rvtt_sfpxloadi (nullptr, 0x3f317218, 0, 0, 31);
+      x = __builtin_rvtt_sfpadd (prod, b, 0);
+    }
+  __builtin_rvtt_sfpstore (nullptr, x, 96, 0, 0, 0, 7);
+
+  __asm__ __volatile__ ("fence");
+  TTI (0x01800000);		/* MOP */
+
+#pragma GCC unroll 8
+  for (int row = 0; row < 32; ++row)
+    {
+      auto v = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 7);
+      auto cst = __builtin_rvtt_sfpreadlreg (9);
+      auto pair = __builtin_rvtt_sfpswap (cst, v, 1);
+      auto r = __builtin_rvtt_sfpselect2 (pair, 1);
+      __builtin_rvtt_sfpstore (nullptr, r, 0, 0, 0, 0, 7);
+      __builtin_rvtt_ttincrwc (0, 2, 0, 0);
+    }
+}
