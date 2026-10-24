@@ -169,4 +169,14 @@ extern bool rvtt_mop_derive_finish (const rvtt_mop_derive_state *st,
    input; on success store the 32-bit instruction word in *WORD.  */
 extern bool rvtt_raw_ttinsn_word_p (gasm *stmt, uint32_t *word);
 
+/* Check the raw REPLAY word WORD (opcode XTT_REPLAY_OPCODE) of
+   RECORD.  A load_mode=1/exec=0 record captures the following words
+   without executing them; on acceptance those raw-word statements are
+   added to *SUPPRESSED so the executed-word scan skips them.  Return
+   false with *WHY for playback words, malformed encodings and
+   unrecognized region shapes.  */
+extern bool rvtt_mop_replay_record_admit (gasm *record, uint32_t word,
+					  hash_set<gimple *> *suppressed,
+					  const char **why);
+
 #endif /* GCC_RVTT_MOP_DERIVE_H */

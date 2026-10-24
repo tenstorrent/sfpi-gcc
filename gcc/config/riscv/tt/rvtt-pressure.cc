@@ -188,7 +188,7 @@ rvtt_pressure_validate_lut_slot_facts ()
 /* Return true if NAME has a non-debug use as a LUT table slot, which
    needs a copy even when NAME is a constant-register value.  */
 
-static bool
+bool
 rvtt_pressure_lut_slot_use_p (tree name)
 {
   if (flag_checking)
