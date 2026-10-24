@@ -94,6 +94,17 @@ rvtt_dcost_replay_pricing (replay_shape shape, int64_t trips, int64_t words,
 			 min_benefit);
 }
 
+/* Return the one-off Dst auto-increment setup cost of a formed group, in
+   centislots x100.  rvtt-cost.md currently prices it at 0 because the
+   record delivery cost already covers the SETC16 program; all consumers
+   read it from here so that a non-zero value applies to all of them.  */
+
+int64_t
+rvtt_dcost_autoincr_setup_cost_x100 (void)
+{
+  return XTT_AUTOINCR_SETUP_COST_X100;
+}
+
 /* Return true if insns A and B deliver the same Tensix instruction word.
    Operands that do not reach the delivered word are ignored: GPR scratch
    (CLOBBER/SCRATCH) and the SImode MEMs of synthesized words.  A non-SImode

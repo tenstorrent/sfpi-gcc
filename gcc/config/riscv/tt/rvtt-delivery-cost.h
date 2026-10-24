@@ -52,6 +52,12 @@ rvtt_dcost_replay_pricing (rvtt_delivery_cost::replay_shape shape,
 			   int64_t launch_run, bool drain_contract,
 			   int64_t min_benefit);
 
+/* Dst-auto-increment setup charge of a replay-delivered shape, in
+   centislots, once per formed group: rvtt-cost.md
+   XTT_AUTOINCR_SETUP_COST_X100.  The model value is 0 because the
+   once-per-group record delivery absorbs the SETC16 program.  */
+extern int64_t rvtt_dcost_autoincr_setup_cost_x100 (void);
+
 #ifdef RTX_CODE
 /* Word-exact replay comparator: PATTERN equality of two delivered
    Tensix words under the scratch-operand tolerance (compiler GPR scratch
