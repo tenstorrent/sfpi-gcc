@@ -268,6 +268,18 @@ rvtt_get_insn_data (gcall const *call)
   return &sfpu_insn_data[ix];
 }
 
+/* Return true if value-changing FP reassociation of SFPU operations is
+   allowed.  It requires both -fassociative-math (the generic opt-in to
+   reassociation that may change results) and the default-off
+   -mtt-tensix-optimize-reassoc.  Without them every FP reassociation
+   site refuses.  */
+
+bool
+rvtt_reassoc_fp_licensed_p (void)
+{
+  return riscv_tt_opt_reassoc > 0 && flag_associative_math;
+}
+
 /* As above, for an arbitrary statement: return the insn descriptor
    when STMT is a call to an RVTT SFPU builtin, null otherwise.  */
 
