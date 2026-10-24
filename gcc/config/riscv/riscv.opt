@@ -657,6 +657,14 @@ mtt-tensix-optimize-addi-register-form
 Target Var(riscv_tt_opt_addi_register_form) Init(0)
 Use a later load of an SFPADDI's constant as an SFPADD operand when the add would otherwise need a copy.
 
+mtt-tensix-optimize-store-fold
+Target Var(riscv_tt_opt_store_fold) Init(0)
+Fold lane-predicated SFPU value merges into their consuming Dst stores where the round trip is proven the identity.
+
+mtt-tensix-optimize-store-sink
+Target Var(riscv_tt_opt_store_sink) Init(0)
+Allow sinking an all-lanes store of a predicated merge into its region as a predicated store; changes stored values on denormal pass-through lanes.
+
 mtt-tensix-optimize-setexp-fold
 Target Var(riscv_tt_opt_setexp_fold) Init(1)
 Fold a biased Tensix SFPU exponent extract feeding SFPSETEXP into the exponent-copy addressing mode.

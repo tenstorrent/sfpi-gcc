@@ -1304,6 +1304,7 @@ See RS/6000 and PowerPC Options.
 -mtt-tensix-optimize-ccmask
 -mtt-tensix-optimize-int-abs
 -mtt-tensix-optimize-int-not
+-mtt-tensix-optimize-store-fold
 -mtt-tensix-optimize-cc-region-general
 -mtt-tensix-optimize-round-interleave
 -mtt-tensix-optimize-invariant-loadi
@@ -1316,6 +1317,7 @@ See RS/6000 and PowerPC Options.
 -mtt-tensix-macro-planner-replay
 -mtt-tensix-optimize-reassoc
 -mtt-tensix-optimize-reassoc-mad-restructure
+-mtt-tensix-optimize-store-sink
 -mtt-tensix-dump-effects}
 
 @emph{RL78 Options} (@ref{RL78 Options})
@@ -31972,6 +31974,17 @@ Select the single @code{SFPNOT} instruction for the
 all-ones-minus-@var{x} spelling of one's complement, backed by an
 exhaustive equivalence check; other subtract shapes decline.
 
+@opindex mtt-tensix-optimize-store-fold
+@item -mtt-tensix-optimize-store-fold
+Fold lane-predicated value merges into the Dst stores that consume
+them: forward the merged source into a store executed under the same
+lane mask, and sink a store that follows a predicated region into the
+region as a predicated store where the format's Dst round trip is
+proven to be the identity.  Every unproven case declines.  This option
+never changes stored values; see
+@option{-mtt-tensix-optimize-store-sink} for the value-changing
+extension.
+
 @opindex mtt-tensix-optimize-cc-region-general
 @item -mtt-tensix-optimize-cc-region-general
 Generalize the recognizers of CC-consuming transformations.  The
@@ -32140,6 +32153,19 @@ dependent latency hop.  The value change is double versus single
 rounding on the fused product, plus the signed-zero flush the
 immediate-multiply form performs and @code{SFPMAD} does not.  Requires
 @option{-fassociative-math}.
+
+@opindex mtt-tensix-optimize-store-sink
+@item -mtt-tensix-optimize-store-sink
+With @option{-mtt-tensix-optimize-store-fold} also given, sink an
+all-lanes store of a lane-predicated value merge into the predicated
+region as a predicated store even for the floating-point format pairs
+whose elided complement write-back would have canonicalized Dst.  The
+predicated store preserves the original Dst bits on untouched lanes,
+where the all-lanes write-back would have flushed denormal values on
+those lanes; the delivered values therefore change exactly on denormal
+pass-through lanes.  The option covers only the format pairs whose
+proven round-trip divergence is exclusively denormal flush; every other
+pair and shape declines regardless.
 
 @end table
 
