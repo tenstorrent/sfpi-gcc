@@ -224,6 +224,7 @@ RVTT_REFUSAL (REPLAY_LOOP_UNROLL_TRIP_COUNT_UNPROVEN, "replay-loop-unroll-trip-c
 RVTT_REFUSAL (REPLAY_LOOP_UNROLL_WORD_BUDGET, "replay-loop-unroll-word-budget")
 RVTT_REFUSAL (REPLAY_RECORD_REGION_SHAPE_UNPROVEN, "replay-record-region-shape-unproven")
 RVTT_REFUSAL (REPLAY_REISSUE_LATENCY_UNPROVED, "replay-reissue-latency-unproved")
+RVTT_REFUSAL (REPR_CONVERSION_UNAUDITED, "repr-conversion-unaudited")
 RVTT_REFUSAL (RESIDENCY_WALK_ORDERING, "residency-walk-ordering")
 RVTT_REFUSAL (ROUND_INTERLEAVE_BODY_BARRIER_CLASS, "round-interleave-body-barrier-class")
 RVTT_REFUSAL (ROUND_INTERLEAVE_BODY_NOT_FLAT, "round-interleave-body-not-flat")
