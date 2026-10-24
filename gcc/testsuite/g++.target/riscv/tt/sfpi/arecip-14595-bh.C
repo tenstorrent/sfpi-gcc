@@ -60,10 +60,16 @@ void foo () {
   vFloat r = approx_recip (a, RecipMode::IfNegative);
   l_reg[LRegs::LReg1] = r;
 }
+/* COND_RECIP reads its condition from LReg[VB] (imm12 low nibble), which
+   the assembler mnemonic forces to zero; SFPI requires VB == VC, so the
+   raw encoded word is emitted (0x99000011 == SFPARECIP VD=L1, VC=L0,
+   VB=L0, Mod1=1).  Both the exact word and its function position are checked.  */
+// { dg-final { scan-assembler "\\.ttinsn\t2566914065\t# SFPARECIP\tL1, L0, 1 \\(VB=L0\\)" } }
+// { dg-final { scan-assembler "\\.ttinsn\t2566914081\t# SFPARECIP\tL2, L0, 1 \\(VB=L0\\) LV" } }
 /*
 **_ZN8negrecip3fooEv:
 **	# READ L0
-**	SFPARECIP	L1, L0, 1
+**	.ttinsn	2566914065	# SFPARECIP	L1, L0, 1 \(VB=L0\)
 **	# WRITE L1
 **	ret
 */
@@ -90,7 +96,7 @@ void bar () {
 **	# READ L2
 **	SFPGT	L1, L0, 0, 1
 **	SFPCOMPC
-**	SFPARECIP	L2, L0, 1	# LV:L2
+**	.ttinsn	2566914081	# SFPARECIP	L2, L0, 1 \(VB=L0\) LV
 **	SFPMOV	L3, L2, 2
 **	SFPENCC	3, 10
 **	# WRITE L3

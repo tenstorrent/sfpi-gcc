@@ -1,5 +1,5 @@
 /* TT .md file fn prototypes, etc
-   Copyright (C) 2022-2025 Tenstorrent Inc.
+   Copyright (C) 2022-2026 Tenstorrent Inc.
    Originated by Paul Keller (pkeller@tenstorrent.com).
 
 This file is part of GCC.
@@ -25,14 +25,27 @@ along with GCC; see the file COPYING3.  If not see
 #include "sfpu-ops-bh.h"
 #include "sfpu-ops-qsr.h"
 
+/* Diagnose an SFPU register moved to or from memory.  Not noreturn: once
+   rtl-rvtt-spill-diag.cc has reported this compilation's SFPU memory moves
+   as register-pressure errors (rvtt_spill_diag_reported), it returns
+   without a further diagnostic.  */
 extern void rvtt_mov_error (const rtx_insn *) ATTRIBUTE_COLD;
+
+/* Capability-table architectural all-lanes SFPENCC word (defined in
+   rvtt-macro-tables.cc; redeclared here so instruction output templates
+   can emit it without pulling the whole tables header).  */
+namespace rvtt_macro {
+  extern uint32_t sfpencc_all_lanes_word ();
+  extern bool sfpencc_encode (uint64_t imm12, uint64_t mod1, uint32_t *word);
+}
+extern void rvtt_dump_insn_effects (FILE *, rtx_insn *);
 extern rtx rvtt_gen_rtx_creg (machine_mode, unsigned sfpu_regno);
 extern rtx rvtt_gen_rtx_noval (machine_mode);
 extern bool rvtt_merge_lv_src (rtx *lv, rtx *src, rtx *commute = nullptr);
 
 extern void rvtt_substitute_value (tree orig, tree replacement);
 
-// Instruction synthesis
+/* Instruction synthesis */
 class rvtt_synth
 {
  private:
@@ -43,26 +56,26 @@ class rvtt_synth
 
  public:
   enum RVTT_SYNTH_OFFSETS {
-    IX_mem,     // Memory operand (or zero)
-    IX_opcode,  // Opcode (or zero)
-    IX_encode,  // Encoded ID & src/dst shifts (or zero)
-    IX_insn,    // Instruction or immediate
-    IX_src,     // Src value (or noval)
-    IX_lv,      // Live value (if inside SET)
+    IX_mem,     /* Memory operand (or zero) */
+    IX_opcode,  /* Opcode (or zero) */
+    IX_encode,  /* Encoded ID & src/dst shifts (or zero) */
+    IX_insn,    /* Instruction or immediate */
+    IX_src,     /* Src value (or noval) */
+    IX_lv,      /* Live value (if inside SET) */
   };
 
  public:
   rvtt_synth (unsigned HOST_WIDE_INT val)
     : encode (unsigned (val)) {}
 
-  // Extract encode
+  /* Extract encode */
   operator int () const { return encode; }
 
-  // Generate pattern
+  /* Generate pattern */
   static const char *pattern (unsigned is_synthed, const char *tmpl,
 			      rtx operands[], bool is_set, int IX_tmp = -1);
 
-  // accessors
+  /* accessors */
   unsigned id () const {
     return encode & ((1u << ID_BITS) - 1u);
   }
@@ -75,7 +88,7 @@ class rvtt_synth
       & ((1u << REG_SHIFT_BITS) - 1u);
   }
 
-  // setters
+  /* setters */
   auto &dst_shift (unsigned shift) {
     encode |= shift << ID_BITS;
     return *this;
@@ -113,7 +126,7 @@ extern bool rvtt_hll_p (rtx pat);
 extern bool rvtt_l1_load_p (rtx pat);
 extern bool rvtt_reg_load_p (rtx pat);
 
-// Gimple passes
+/* Gimple passes */
 class gimple_opt_pass;
 extern gimple_opt_pass *make_pass_rvtt_attrib (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_cc (gcc::context *ctxt);
@@ -127,13 +140,31 @@ extern gimple_opt_pass *make_pass_rvtt_immvar_expand (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_noval_elide (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_live (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_schedule_ssa (gcc::context *ctxt);
+
+/* Typed-scan helpers of the replay-window loop-unroll pass, exported so
+   that other passes classify rows identically: the estimated delivered
+   words of a builtin (-1 refuses the class), and the
+   bounded-forward-evaluation trip-count proof.  */
+struct rvtt_insn_data;
+extern int rvtt_replay_unroll_row_words (const rvtt_insn_data *insnd);
 extern gimple_opt_pass *make_pass_rvtt_synth_cse (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_synth_renumber (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_synth_split (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_unspec_prop_ssa (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_vif (gcc::context *ctxt);
 
-// RTL passes
+/* The audited drained-frontend retirement window of a mod-write
+   (rvtt-cost.md W_drain; the per-target value lives in the Dst
+   auto-increment capability record).  Exported so every pass that must
+   check the no-exec-record x mod-write composition, which fails on hardware
+   (rvtt-cost.md), prices the same quantity: the auto-increment group guard
+   and the replay former's record placement.  Zero when the target has no
+   audited window, so that every distance refuses.  */
+extern unsigned rvtt_modwrite_drained_frontend_window (void);
+
+
+
+/* RTL passes */
 class rtl_opt_pass;
 extern rtl_opt_pass *make_pass_rvtt_fix_ebreak (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_fix_raw (gcc::context *ctxt);
@@ -146,14 +177,14 @@ extern rtl_opt_pass *make_pass_rvtt_synth_opcode (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_unspec_prop_rtl (gcc::context *ctxt);
 
 constexpr unsigned int SFPMAD_MOD1_OFFSET_NONE = 0;
-// A * B + C
-constexpr unsigned int SFPMAD_MOD1_BH_COMPL_A = 1; // negate A operand
-constexpr unsigned int SFPMAD_MOD1_BH_COMPL_C = 2; // negate C operand
+/* A * B + C */
+constexpr unsigned int SFPMAD_MOD1_BH_COMPL_A = 1; /* negate A operand */
+constexpr unsigned int SFPMAD_MOD1_BH_COMPL_C = 2; /* negate C operand */
 
 constexpr unsigned int SFPMOV_MOD1_NONE = 0;
-constexpr unsigned int SFPMOV_MOD1_COMPL = 1; // negate
-constexpr unsigned int SFPMOV_MOD1_ALL = 2; // copy all lanes
-constexpr unsigned int SFPMOV_MOD1_CFG = 8; // read cfg register
+constexpr unsigned int SFPMOV_MOD1_COMPL = 1; /* negate */
+constexpr unsigned int SFPMOV_MOD1_ALL = 2; /* copy all lanes */
+constexpr unsigned int SFPMOV_MOD1_CFG = 8; /* read cfg register */
 
 constexpr unsigned int SFPLOADI_MOD0_FLOATB = 0;
 constexpr unsigned int SFPLOADI_MOD0_FLOATA = 1;
@@ -206,6 +237,8 @@ constexpr unsigned int SFPENCC_MOD1_EI_RI = 10;
 constexpr unsigned int SFPPUSHCC_MOD1_PUSH = 0;
 constexpr unsigned int SFPPUSHCC_MOD1_REPLACE = 1;
 
+extern tree rvtt_build_loadimm32 (uint32_t, vec<gcall *> *);
+
 constexpr unsigned int SFPPOPCC_MOD1_POP = 0;
 
 constexpr unsigned int SFPCONFIG_MOD1_ARG_IMM = 1;
@@ -219,7 +252,7 @@ constexpr unsigned int SFPAND_MOD1_USE_VB = 1;
 
 constexpr unsigned int SFPOR_MOD1_USE_VB = 1;
 
-// sfpxor does not have USE_VB option
+/* sfpxor does not have USE_VB option */
 
 constexpr unsigned int SFPLZ_MOD1_CC_NONE = 0;
 constexpr unsigned int SFPLZ_MOD1_CC_NE0 = 2;
@@ -233,7 +266,7 @@ constexpr unsigned int SFPLZ_MOD1_NOSGN_CC_EQ0 = 14;
 
 constexpr unsigned int SFPCAST_MOD1_INT32_TO_FP32_RNE = 0;
 constexpr unsigned int SFPCAST_MOD1_INT32_TO_FP32_RNS = 1;
-// Added in BlackHole:
+/* Added in BlackHole: */
 constexpr unsigned int SFPCAST_MOD1_SM32_TO_INT32 = 2;
 constexpr unsigned int SFPCAST_MOD1_INT32_TO_SM32 = 3;
 
@@ -249,7 +282,7 @@ constexpr unsigned int SFPSTOCHRND_MOD1_INT32_TO_INT8 = 5;
 constexpr unsigned int SFPSTOCHRND_MOD1_FP32_TO_UINT16 = 6;
 constexpr unsigned int SFPSTOCHRND_MOD1_FP32_TO_INT16 = 7;
 constexpr unsigned int SFPSTOCHRND_MOD1_CONV_MASK = 7;
-constexpr unsigned int SFPSTOCHRND_MOD1_IMM8 = 8; // only on INT32 src
+constexpr unsigned int SFPSTOCHRND_MOD1_IMM8 = 8; /* only on INT32 src */
 
 constexpr unsigned int SFPXCMP_MOD1_CC_LT = 0;
 constexpr unsigned int SFPXCMP_MOD1_CC_GE = 1;
@@ -267,6 +300,8 @@ constexpr unsigned int SFPXCMP_MOD1_TYPE_SHIFT = 4;
 constexpr unsigned int SFPXCMP_MOD1_TYPE_MASK = 3;
 
 constexpr unsigned int SFPXSCMP_SRC_ARG_POS = 1;
+
+constexpr unsigned int SFPABS_MOD1_FLOAT = 1;
 
 constexpr unsigned int SFPIADD_MOD1_ARG_LREG_DST = 0;
 constexpr unsigned int SFPIADD_MOD1_ARG_IMM = 1;
@@ -292,7 +327,7 @@ constexpr unsigned int SFPXCONDI_TREE_ARG_POS = 0;
 
 constexpr unsigned int SFPSHFT_MOD1_SHFT_IMM = 1;
 constexpr unsigned int SFPSHFT_MOD1_SHFT_REG = 0;
-// Added in BlackHole
+/* Added in BlackHole */
 constexpr unsigned int SFPSHFT_MOD1_LOGICAL = 0;
 constexpr unsigned int SFPSHFT_MOD1_ARITHMETIC = 2;
 constexpr unsigned int SFPSHFT_MOD1_SRC_LREG_C = 4;
@@ -315,6 +350,12 @@ constexpr unsigned int SFPGTLE_IMM_TYPE_INT = 0;
 constexpr unsigned int SFPGTLE_IMM_TYPE_FLOAT = 1;
 constexpr unsigned int SFPGTLE_IMM_TYPE_SMAG = 1;
 
+// SFPARECIP (BH) Mod1 values, transcribed from the ISA functional model
+// (tt-isa-documentation BlackholeA0 SFPARECIP.md supporting definitions).
+constexpr unsigned SFPARECIP_MOD1_RECIP = 0;
+constexpr unsigned SFPARECIP_MOD1_COND_RECIP = 1;
+constexpr unsigned SFPARECIP_MOD1_EXP = 2;
+
 constexpr unsigned int CREG_IDX_0P837300003 = 8;
 constexpr unsigned int CREG_IDX_0 = 9;
 constexpr unsigned int CREG_IDX_1 = 10;
@@ -322,5 +363,62 @@ constexpr unsigned int CREG_IDX_NEG_1 = 11;
 constexpr unsigned int CREG_IDX_TILEID = 15;
 
 #define HAVE_CREG_NEG_1 TARGET_XTT_TENSIX_WH_BH
+
+/* Cross-call invariant-init hoist, a service for the macro planner: the
+   callee's idempotent init prefix as descriptor data.  The planner fills
+   the program from its own emission inputs; the service proves the (single)
+   caller and, on a complete proof, inserts the prefix as typed builtin
+   calls in the caller's loop preheader, returning NULL with STAGE set (1 =
+   descriptor words only, enable + SETC16 stay per call; 2 = full prefix
+   under the value-equality proof).  Any refusal returns its stable name and
+   inserts nothing.  */
+
+struct rvtt_init_hoist_program
+{
+  /* The enable is always the architectural all-lanes SFPENCC word (the
+     formation proof admits nothing else); the commit spells it as the
+     canonical zero-argument builtin.  */
+  unsigned n_setc16;
+  struct { unsigned reg; unsigned value; } setc16[8];
+  unsigned n_words;
+  struct { uint32_t word; unsigned dest; } words[16];
+  int stage;			/* out */
+  /* Out (init-hoist-aware run pricing): the proven caller
+     loop's profile trip weight as an unreduced entry/body fraction
+     (the planner's loop_trip_weight discipline: exact where the
+     profile is, the static estimate elsewhere; products kept inside
+     64 bits).  caller_weight_ok is false when the profile gives no
+     usable estimate -- profitability must then keep the
+     conservative per-run pricing.  Purely a profitability weight,
+     never a correctness input.  */
+  bool caller_weight_ok;
+  int64_t caller_entry_count;
+  int64_t caller_body_count;
+};
+
+/* COMMIT false runs every proof and sets the out fields but inserts
+   nothing (the pricing pre-run ahead of the planner's
+   profitability gate); COMMIT true is the committing call.  Both
+   evaluate the identical proof chain, so a proof-only success is
+   exactly the committing call's success.  */
+extern const char *rvtt_crosscall_init_hoist (function *callee,
+					      rvtt_init_hoist_program *,
+					      bool commit);
+
+/* Cross-call ADDR_MOD contract, a service for the Dst auto-increment pass:
+   the callee's owned address-modifier slot program as SETC16 rows.  The
+   service proves the (single) caller chain, scans the caller epoch at the
+   call's loop and at every enclosing loop the residency walk can lift the
+   placement across, audits the TU MOP template slots, and, on a complete
+   proof, inserts the program as typed ttsetc16 builtin calls in the final
+   placement level's dedicated preheader, returning NULL with LIFT_LEVELS
+   set.  There is no demotion stage: the callee will not re-emit the program
+   per call, so ANY possible owned-row (or watch-row) write in the scanned
+   epoch refuses.  Any refusal returns its stable name and inserts nothing.  */
+
+
+
+
+extern int audited_latency (rtx_insn *insn);
 
 #endif /* ! GCC_RVTT_PROTOS_H */

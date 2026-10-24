@@ -18,6 +18,34 @@ You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
+/* Two diagnostic passes over SFPU intrinsic usage, sharing one set of
+   checkers.  Both repair what they diagnose (substituting an in-range
+   value, the constant-zero register, or deleting the offending
+   statement) so that a single bad kernel produces one clear error
+   rather than a cascade of RTL-expansion failures or assembler errors.
+
+   rvtt_check_early (right after inlining):
+   - function signatures may not pass or return SFPU vector values
+     (they live in SFPU registers, outside the RISC-V ABI; functions
+     taking them must be inlined, hence the sfpi_inline hint);
+   - compile-time-constant ("early") integer operands must be in range
+     for their instruction fields, and mod operands in each op's
+     legal-mod mask;
+   - reads of uninitialized SFPU values are diagnosed once, here, where
+     SSA undefinedness is still exact;
+   - target-specific usage errors: the Quasar replay erratum
+     (exec-while-load unsupported, under -mtt-fix-qsrreplay) and the
+     immediate-form SFPCONFIG destination envelope (only LaneConfig,
+     destination 15, may be programmed directly).
+
+   rvtt_check_late (end of the GIMPLE pipeline): re-checks integer
+   operands whose constancy is only required by expand time ("late"
+   operands, now possibly constant-propagated), and rejects
+   reads/writes of SFPU objects from/to memory -- SFPU values cannot
+   live in memory, and by this point no further optimization could
+   have eliminated the access.  */
+
+
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
@@ -35,8 +63,9 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree-into-ssa.h"
 #include "diagnostic-core.h"
 #include "rvtt.h"
+#include "rvtt-effects.h"
 
-// Is TYPE an sfpu vector type?
+/* Is TYPE an SFPU vector type?  */
 
 static bool
 is_sfpu_type (tree type)
@@ -45,7 +74,10 @@ is_sfpu_type (tree type)
     && lookup_attribute ("__xtt_vector", TYPE_ATTRIBUTES (type));
 }
 
-// We can't pass or return sfpu vector types.  Barf if we are.
+/* Diagnose function type TYPE passing or returning SFPU vector values
+   (impossible: they have no ABI representation).  INLINE_P selects the
+   hint suggesting sfpi_inline.  Returns true if anything was
+   diagnosed.  */
 
 static bool
 check_function_type (location_t loc, tree type, bool inline_p)
@@ -57,7 +89,7 @@ check_function_type (location_t loc, tree type, bool inline_p)
 	      : "cannot %s sfpu type",
 	      ret ? "return" : "pass");
   };
-  
+
   if (is_sfpu_type (TREE_TYPE (type)))
     {
       bad = true;
@@ -75,7 +107,14 @@ check_function_type (location_t loc, tree type, bool inline_p)
 }
 
 
-// Check integral arguments passed to CALL, an INSND are within range.
+/* Check the integral arguments of CALL (an INSND intrinsic): constant
+   where required, within field range, and mod values within the op's
+   legal mask.  IS_EARLY selects which operand class to check (early
+   operands must be constant at the early pass, late ones only by
+   expand).  Out-of-range values are diagnosed (when the operand is
+   marked checked) and repaired -- clipped into the field or replaced
+   by the smallest legal value -- so compilation can continue.
+   Returns true if any argument was rewritten.  */
 
 static bool
 check_int_args (bool is_early, const rvtt_insn_data *insnd, gcall *call)
@@ -172,6 +211,8 @@ check_int_args (bool is_early, const rvtt_insn_data *insnd, gcall *call)
   return changed;
 }
 
+/* Is VAL an uninitialized SSA SFPU vector value?  */
+
 static bool
 is_undef_sfpu (tree val)
 {
@@ -180,6 +221,8 @@ is_undef_sfpu (tree val)
     && ssa_undefined_value_p (val, false);
 }
 
+/* Is ARG a memory reference to an SFPU vector object?  */
+
 static bool
 is_memory (tree arg)
 {
@@ -187,6 +230,10 @@ is_memory (tree arg)
 	  || TREE_CODE (arg) == COMPONENT_REF)
     && is_sfpu_type (TREE_TYPE (arg));
 }
+
+/* Insert, before GSI, a read of the constant-zero SFPU register into
+   RES (a fresh SSA name if none given); the repair value substituted
+   for erroneous operands.  Returns RES.  */
 
 static tree
 const_zero_reg (gimple_stmt_iterator *gsi, tree res = nullptr)
@@ -205,6 +252,12 @@ const_zero_reg (gimple_stmt_iterator *gsi, tree res = nullptr)
 
   return res;
 }
+
+/* Check assignment ASSIGN at GSI: early, diagnose reads of
+   uninitialized SFPU values; late, diagnose SFPU objects read from or
+   written to memory.  A diagnosed assignment is removed (its LHS, if
+   any, is fed by a constant-zero read).  Returns true (with GSI
+   already advanced) if the statement was removed.  */
 
 static bool
 check_assign (gimple_stmt_iterator &gsi, bool is_early)
@@ -246,6 +299,8 @@ check_assign (gimple_stmt_iterator &gsi, bool is_early)
   return true;
 }
 
+/* The rvtt_check_early pass body; see the file comment.  */
+
 static unsigned
 check_early (function *fn)
 {
@@ -268,6 +323,29 @@ check_early (function *fn)
 		  error_at (gimple_nonartificial_location (call),
 			    "Quasar replay instruction cannot exec-while-load, "
 			    "your program will behave erratically");
+	      }
+
+	    if (insnd->id == rvtt_insn_data::sfpconfig_i)
+	      {
+		// The immediate-form SFPCONFIG may only target LaneConfig
+		// (15).  Dests 0-8 program LoadMacroConfig, 9-10 are
+		// NonContractualBehavior, and 11-14 imm-form writes would
+		// change the programmable constants without the compiler
+		// modelling the change.
+		tree dest = gimple_call_arg (call, 1);
+		if (TREE_CODE (dest) == INTEGER_CST
+		    && TREE_INT_CST_LOW (dest) != 15)
+		  {
+		    error_at (gimple_nonartificial_location (call),
+			      "sfpconfig-imm-dest-unaudited: immediate-form "
+			      "SFPCONFIG destination %d is outside the audited "
+			      "envelope (only LaneConfig, destination 15)",
+			      int (TREE_INT_CST_LOW (dest)));
+		    gimple_call_set_arg
+		      (call, 1, build_int_cst (TREE_TYPE (dest), 15));
+		    update_stmt (call);
+		    changed = true;
+		  }
 	      }
 
 	    for (unsigned argno = 0, limit = gimple_call_num_args (call);
@@ -308,6 +386,8 @@ check_early (function *fn)
   return changed ? TODO_update_ssa : 0;
 }
 
+/* The rvtt_check_late pass body; see the file comment.  */
+
 static unsigned
 check_late (function *fn)
 {
@@ -338,7 +418,7 @@ const pass_data pass_data_rvtt_check_early =
 {
   GIMPLE_PASS, /* type */
   "rvtt_check_early", /* name */
-  OPTGROUP_NONE, /* optinfo_flags */
+  OPTGROUP_OTHER, /* optinfo_flags */
   TV_NONE, /* tv_id */
   PROP_ssa, /* properties_required */
   0, /* properties_provided */
@@ -346,6 +426,54 @@ const pass_data pass_data_rvtt_check_early =
   0, /* todo_flags_start */
   0, /* todo_flags_finish */
 };
+
+/* Current SFPI comparison objects carry both operands through concat/select
+   identities.  Expose their scalar vector operands before the structured
+   optimizers run; waiting until immvar expansion hides constants and carried
+   values from those analyses.  The same identities are folded again by the
+   late immvar pass for plumbing introduced after this point.  */
+static bool
+fold_concat_select (function *fn)
+{
+  bool changed = false;
+  basic_block bb;
+  FOR_EACH_BB_FN (bb, fn)
+    for (gimple_stmt_iterator gsi = gsi_start_bb (bb); !gsi_end_p (gsi);)
+      {
+	auto *insnd = rvtt_get_insn_data (*gsi);
+	if (insnd && insnd->id == rvtt_insn_data::sfpselect2)
+	  {
+	    gcall *select = as_a <gcall *> (*gsi);
+	    tree aggregate = gimple_call_arg (select, 0);
+	    tree index = gimple_call_arg (select, 1);
+	    if (TREE_CODE (aggregate) == SSA_NAME
+		&& TREE_CODE (index) == INTEGER_CST
+		&& tree_fits_uhwi_p (index) && tree_to_uhwi (index) < 2
+		&& gimple_call_lhs (select))
+	      {
+		gimple *concat = SSA_NAME_DEF_STMT (aggregate);
+		auto *concat_data = rvtt_get_insn_data (concat);
+		if (concat_data && concat_data->id == rvtt_insn_data::sfpconcat2)
+		  {
+		    tree value = gimple_call_arg (concat, tree_to_uhwi (index));
+		    rvtt_substitute_value (gimple_call_lhs (select), value);
+		    unlink_stmt_vdef (select);
+		    gsi_remove (&gsi, true);
+		    if (has_zero_uses (aggregate))
+		      {
+			unlink_stmt_vdef (concat);
+			gimple_stmt_iterator concat_gsi = gsi_for_stmt (concat);
+			gsi_remove (&concat_gsi, true);
+		      }
+		    changed = true;
+		    continue;
+		  }
+	      }
+	  }
+	gsi_next (&gsi);
+      }
+  return changed;
+}
 
 class pass_rvtt_check_early : public gimple_opt_pass
 {
@@ -361,7 +489,10 @@ public:
   virtual unsigned execute (function *fn) override
   {
     check_function_type (DECL_SOURCE_LOCATION (fn->decl), TREE_TYPE (fn->decl), false);
-    return check_early (fn);
+    unsigned todo = check_early (fn);
+    if (fold_concat_select (fn))
+      todo |= TODO_update_ssa;
+    return todo;
   }
 };
 
@@ -379,7 +510,7 @@ const pass_data pass_data_rvtt_check_late =
 {
   GIMPLE_PASS, /* type */
   "rvtt_check_late", /* name */
-  OPTGROUP_NONE, /* optinfo_flags */
+  OPTGROUP_OTHER, /* optinfo_flags */
   TV_NONE, /* tv_id */
   PROP_ssa, /* properties_required */
   0, /* properties_provided */
@@ -401,7 +532,11 @@ public:
   }
   virtual unsigned execute (function *fn) override
   {
-    return check_late (fn);
+    unsigned todo = check_late (fn);
+    /* Retain the audited no-user-recorder fact before this body's GIMPLE
+       is expanded; a later caller may only see the bound RTL function.  */
+    rvtt_gimple_direct_issue_p (fn);
+    return todo;
   }
 };
 

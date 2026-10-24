@@ -1,4 +1,21 @@
 # -*- makefile -*- tt makefile fragment
+# Copyright (C) 2022-2026 Tenstorrent Inc.
+#
+# This file is part of GCC.
+#
+# GCC is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3, or (at your option)
+# any later version.
+#
+# GCC is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with GCC; see the file COPYING3.  If not see
+# <http://www.gnu.org/licenses/>.
 
 MULTILIB_OPTIONS := \
 mcpu=tt-wh/mcpu=tt-bh/mcpu=tt-qsr32/mcpu=tt-qsr64 \
@@ -8,6 +25,7 @@ MULTILIB_MATCHES := \
 mcpu?tt-wh=mcpu?tt-wh-tensix \
 mcpu?tt-bh=mcpu?tt-bh-tensix \
 mcpu?tt-qsr32=mcpu?tt-qsr32-tensix \
+mcpu?tt-qsr32=mcpu?tt-qsr32-tensixbh \
 mcpu?tt-qsr64=mcpu?tt-qsr64-rocc \
 
 MULTILIB_REQUIRED := \
@@ -28,6 +46,13 @@ MULTILIB_EXCEPTIONS :=
 MULTILIB_EXTRA_OPTS :=
 
 RVTT_OBJS := rvtt.o \
+	rvtt-refuse.o \
+	rvtt-effects.o \
+	rvtt-rtl-lane-state.o \
+	rvtt-raw-boundary.o \
+	rvtt-macro-ownership.o \
+	rvtt-macro-tables.o \
+	rvtt-mop-derive.o \
 	gimple-rvtt-attrib.o \
 	gimple-rvtt-cc.o \
 	gimple-rvtt-check.o \
@@ -49,6 +74,8 @@ RVTT_OBJS := rvtt.o \
 	rtl-rvtt-schedule.o \
 	rtl-rvtt-synth.o \
 	rtl-rvtt-unspec.o \
+	rvtt-delivery-cost.o \
+	rvtt-timing.o \
 
 OBJS += $(RVTT_OBJS)
 
@@ -66,3 +93,32 @@ build/genrvtt-combine.o: $(srcdir)/config/riscv/tt/genrvtt-combine.cc
 
 rvtt-combine.inc: build/genrvtt-combine$(build_exeext) $(srcdir)/config/riscv/tt/rvtt.gc
 	$(RUN_GEN) $^ $@
+
+# Standalone unit harnesses for the header-inline engine layers.
+# Host-compiled against the tt headers only (no GCC internals; the
+# tables harnesses additionally link the freestanding-by-design
+# rvtt-macro-tables.cc), so they run wherever a host C++ compiler
+# exists.  Opt-in: `make rvtt-unit-tests' in the gcc build directory;
+# each harness exits nonzero on any failed check.
+RVTT_UNIT_TEST_FLAGS = -Wall -Wextra -Werror -I$(srcdir)/config/riscv/tt
+
+RVTT_UNIT_TESTS = \
+	rvtt-unit-delivery-cost \
+	rvtt-unit-macro-tables \
+	rvtt-unit-timing
+
+rvtt-unit-tests: $(RVTT_UNIT_TESTS)
+
+rvtt-unit-delivery-cost: \
+		$(srcdir)/config/riscv/tt/rvtt-delivery-cost-test.cc
+	$(CXX) -std=c++11 $(RVTT_UNIT_TEST_FLAGS) $< -o tmp-$@
+	./tmp-$@ && rm -f tmp-$@
+
+rvtt-unit-timing: $(srcdir)/config/riscv/tt/rvtt-timing-test.cc
+	$(CXX) -std=c++11 $(RVTT_UNIT_TEST_FLAGS) $< -o tmp-$@
+	./tmp-$@ && rm -f tmp-$@
+
+rvtt-unit-macro-tables: $(srcdir)/config/riscv/tt/rvtt-macro-tables-test.cc \
+		$(srcdir)/config/riscv/tt/rvtt-macro-tables.cc
+	$(CXX) -std=c++11 $(RVTT_UNIT_TEST_FLAGS) $^ -o tmp-$@
+	./tmp-$@ && rm -f tmp-$@
