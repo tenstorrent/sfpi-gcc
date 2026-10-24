@@ -54,6 +54,9 @@ a recorded reason (see section 5).
 			     interleave of counted row loops.
   LREG renaming              Renaming of storage-colliding vector register
 			     webs.
+  replay formation           Record/playback formation: hoisting a record out
+			     of a loop, first-trip peel, outward lift across
+			     enclosing loops, window sizing.
 
 Supporting infrastructure that is not a pass: rvtt-cost / rvtt-delivery-cost
 / rvtt-timing / rvtt-trips (pricing engines), rvtt-bnb (an exact

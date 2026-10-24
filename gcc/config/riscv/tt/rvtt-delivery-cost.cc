@@ -65,3 +65,58 @@ rvtt_dcost_loadi_issue_words (uint32_t w)
 {
   return loadi_issue_words (w);
 }
+
+/* Return the minimum benefit in centislots a replay hoist must reach:
+   -mtt-tensix-replay-hoist-min-benefit= when non-negative, else the
+   rvtt-cost.md default.  */
+
+int64_t
+rvtt_dcost_replay_hoist_min_benefit (void)
+{
+  return riscv_tt_replay_hoist_min_benefit >= 0
+    ? (int64_t) riscv_tt_replay_hoist_min_benefit
+    : (int64_t) XTT_REPLAY_HOIST_MIN_BENEFIT;
+}
+
+/* Price one replay window of shape SHAPE: TRIPS trips of WORDS payload
+   words executing in EXEC_SLOTS slots.  LAUNCH_RUN feeds the
+   delivery-bound saturation term and DRAIN_CONTRACT selects the
+   completion guard's full-record charge.  Return every priced term and
+   whether the window clears MIN_BENEFIT.  */
+
+replay_price
+rvtt_dcost_replay_pricing (replay_shape shape, int64_t trips, int64_t words,
+			   int64_t exec_slots, int64_t launch_run,
+			   bool drain_contract, int64_t min_benefit)
+{
+  return replay_pricing (rvtt_dcost_table (), shape, trips, words,
+			 exec_slots, launch_run, drain_contract,
+			 min_benefit);
+}
+
+/* Return true if insns A and B deliver the same Tensix instruction word.
+   Operands that do not reach the delivered word are ignored: GPR scratch
+   (CLOBBER/SCRATCH) and the SImode MEMs of synthesized words.  A non-SImode
+   MEM is most likely an attempt to spill or fill an LReg and never
+   compares equal.  */
+
+bool
+rvtt_dcost_replay_word_equal_p (rtx_insn *a, rtx_insn *b)
+{
+  auto ignore = [] (const_rtx *x, const_rtx *y, rtx *nx, rtx *ny)
+    {
+      if (GET_CODE (*x) != GET_CODE (*y))
+	return false;
+      if (GET_CODE (*x) == MEM)
+	{
+	  if (GET_MODE (*x) != SImode)
+	    return false;
+	}
+      else if (GET_CODE (*x) != CLOBBER && GET_CODE (*x) != SCRATCH)
+	return false;
+      gcc_checking_assert (GET_MODE (*x) == GET_MODE (*y));
+      *nx = *ny = nullptr;
+      return true;
+    };
+  return rtx_equal_p (PATTERN (a), PATTERN (b), ignore);
+}

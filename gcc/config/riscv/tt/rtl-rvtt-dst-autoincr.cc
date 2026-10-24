@@ -317,9 +317,25 @@ noexec_record_composition_p (const function_scan &fn, const group &grp,
 	  return true;
 	}
 
+      /* With record hoisting enabled on Blackhole, a no-exec capture
+	 dominating an explicit-row group is refused: nothing proves that
+	 the previous invocation's mod-write has retired before the capture
+	 runs again.  The scanner does not know which captures were
+	 hoisted, so this applies to all of them.  */
       bool cap_dominates_group
 	= dom_info_available_p (CDI_DOMINATORS)
 	  && dominated_by_p (CDI_DOMINATORS, grp.scan->bb, cap->bb);
+      if (!replay_delivered
+	  && TARGET_XTT_TENSIX_BH
+	  && riscv_tt_opt_replay_record_hoist > 0
+	  && cap_dominates_group)
+	{
+	  *hazard = cap;
+	  *detail
+	    = "record-hoist-enabled no-exec capture dominates explicit mod-write "
+	      "group (cross-invocation retirement unproven)";
+	  return true;
+	}
 
       /* For a replay-delivered group, the only acceptable capture is one
 	 that dominates the group and is not reachable from it: it records
