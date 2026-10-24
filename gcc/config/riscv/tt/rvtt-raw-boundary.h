@@ -115,7 +115,10 @@ extern bool rvtt_raw_cc_opcode_inert_p (unsigned opcode);
      - INCRWC (0x38) is accepted on the ADDR_MOD face only.
      - SFPCAST/SFPSTOCHRND (0x90/0x8E) are CC-inert but unknown to the
        LREG, PRGM and ADDR_MOD faces.
-     - The all-lanes SFPENCC word is a CC-face fact only.  */
+     - The all-lanes SFPENCC word is a CC-face fact only.
+     - The Vector Unit value instructions (RVTT_WF_SFPU_VALUE) are
+       CC-inert only; they write LREGs, and with VD >= 12 they can write
+       LoadMacroConfig, so the other faces refuse them.  */
 
 /* The opcode class a word decodes to.  RVTT_WF_UNAUDITED is the default
    row, for which every face refuses.  */
@@ -134,6 +137,7 @@ enum rvtt_wf_row
   RVTT_WF_SFPLOADI,		/* 0x71				     */
   RVTT_WF_SFPENCC,		/* 0x8A				     */
   RVTT_WF_SFPCAST,		/* 0x90 SFPCAST / 0x8E SFPSTOCHRND   */
+  RVTT_WF_SFPU_VALUE,		/* Vector Unit value instructions    */
   RVTT_WF_SFPCONFIG,		/* 0x91				     */
   RVTT_WF_SYNC,			/* 0xA0..0xA7			     */
   RVTT_WF_THREAD_CFG		/* 0xB0..0xB8 (SETC16 and neighbours)*/

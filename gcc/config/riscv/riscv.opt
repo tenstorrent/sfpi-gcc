@@ -657,6 +657,10 @@ mtt-tensix-optimize-drain-exit
 Target Var(riscv_tt_opt_drain_exit) Init(0)
 Size a loop's exit drain from the decoded pending events left after the loop tail, instead of the full derived drain.
 
+mtt-tensix-optimize-epoch-metadata
+Target Var(riscv_tt_opt_epoch_metadata) Init(0)
+Let the macro configuration epoch walks step over raw-LREG effect markers that declare no LREG access.
+
 mtt-tensix-optimize-window-pairing-stride
 Target Var(riscv_tt_opt_window_pairing_stride) Init(0)
 Extend window-pairing proofs to rows whose addresses advance with any issued word of the row.

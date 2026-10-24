@@ -232,6 +232,7 @@ extern rtl_opt_pass *make_pass_rvtt_fix_ebreak (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_fix_raw (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_fix_rocc (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_hll (gcc::context *ctxt);
+extern rtl_opt_pass *make_pass_rvtt_lreg_livein (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_lp_schedule_prera (gcc::context *ctxt);
 extern bool rvtt_xtt32_allocation_unit_p (unsigned regno);
 extern rtl_opt_pass *make_pass_rvtt_lreg_rename_chains (gcc::context *ctxt);

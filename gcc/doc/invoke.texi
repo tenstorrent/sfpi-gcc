@@ -1391,6 +1391,7 @@ See RS/6000 and PowerPC Options.
 -mtt-tensix-macro-planner-verify
 -mtt-tensix-macro-planner-replay
 -mtt-tensix-macro-planner-residency
+-mtt-tensix-optimize-epoch-metadata
 -mtt-tensix-macro-ims
 -mtt-tensix-macro-ims-carrier
 -mtt-tensix-optimize-reassoc
@@ -32870,6 +32871,11 @@ resident once per kernel entry instead of once per loop iteration, and
 elide the descriptor programming of a later region whose derived words
 are bit-identical to an already-programmed dominating one.  Every proof
 failure declines and keeps the established placement.
+
+@opindex mtt-tensix-optimize-epoch-metadata
+@item -mtt-tensix-optimize-epoch-metadata
+Let the macro planner's configuration-epoch walks step over raw-LREG
+effect markers that declare no LREG access.
 
 @opindex mtt-tensix-macro-ims
 @item -mtt-tensix-macro-ims
