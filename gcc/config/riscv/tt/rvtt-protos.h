@@ -150,6 +150,7 @@ extern gimple_opt_pass *make_pass_rvtt_immload_shorten (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_immvar_expand (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_invariant (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_lut_select (gcc::context *ctxt);
+extern gimple_opt_pass *make_pass_rvtt_crosscall (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_noval_elide (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_live (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_schedule_ssa (gcc::context *ctxt);
@@ -439,6 +440,10 @@ extern const char *rvtt_crosscall_init_hoist (function *callee,
 
 
 
+/* Defined in gimple-rvtt-crosscall.cc: move CALLEE's own-entry programming
+   of the constant registers in REGS (residency allocations) to its proven
+   callers' loop entries.  Returns the mask of registers moved.  */
+extern unsigned rvtt_crosscall_prgm_hoist (function *callee, unsigned regs);
 
 extern int audited_latency (rtx_insn *insn);
 

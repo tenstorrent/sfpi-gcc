@@ -376,6 +376,13 @@ ASM_MISA_SPEC
 /* Internal macros to classify an ISA register's type.  */
 
 #define GP_REG_FIRST 0
+
+/* -mtt-tensix-optimize-ipa-ra: see riscv_ipa_ra_conservative_regs.  */
+#define IPA_RA_CONSERVATIVE_REGS(SET) riscv_ipa_ra_conservative_regs (&(SET))
+/* IPA-RA only trusts functions that bind locally; give each object its own
+   private copy of COMDAT functions whose address is never compared.  */
+#define TARGET_UNSHARE_COMDAT_FUNCTIONS \
+  (TARGET_XTT_TENSIX && riscv_tt_opt_ipa_ra && !flag_pic)
 #define GP_REG_LAST  (TARGET_RVE ? 15 : 31)
 #define GP_REG_NUM   (GP_REG_LAST - GP_REG_FIRST + 1)
 

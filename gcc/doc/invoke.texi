@@ -1311,6 +1311,9 @@ See RS/6000 and PowerPC Options.
 -mtt-tensix-optimize-cc-region-general
 -mtt-tensix-optimize-round-interleave
 -mtt-tensix-optimize-invariant-loadi
+-mtt-tensix-optimize-crosscall-hoist
+-mtt-tensix-optimize-crosscall-config-prefix
+-mtt-tensix-optimize-ipa-ra
 -mtt-tensix-optimize-replay  -mno-tt-tensix-optimize-replay
 -mtt-tensix-replay-buffer-size=@var{words}
 -mtt-tensix-optimize-replay-hoist
@@ -32064,6 +32067,28 @@ are placed.  All are disabled by default.
 @item -mtt-tensix-optimize-invariant-loadi
 Hoist loop-invariant immediate-vector materializations out of loops
 before register allocation.
+
+@opindex mtt-tensix-optimize-crosscall-hoist
+@item -mtt-tensix-optimize-crosscall-hoist
+Hoist a non-inlined callee's call-invariant immediate materializations
+into every proven caller's loop preheader, carrying the values across
+the calls in architecturally pinned vector registers.  Every unproven
+link declines.
+
+@opindex mtt-tensix-optimize-crosscall-config-prefix
+@item -mtt-tensix-optimize-crosscall-config-prefix
+Extend the cross-call hoist to a callee prefix pair consisting of an
+all-constant materialization whose single consumer is an
+@code{SFPCONFIG} write to a programmable constant register: the pair is
+re-materialized once in every proven caller's loop preheader and
+deleted from the callee.  Effective only with
+@option{-mtt-tensix-optimize-crosscall-hoist}.
+
+@opindex mtt-tensix-optimize-ipa-ra
+@item -mtt-tensix-optimize-ipa-ra
+Let interprocedural register allocation (@option{-fipa-ra}) see through
+calls to noinline SFPU functions, so that callers can keep integer values
+in caller-saved registers that the callee leaves alone.
 
 @end table
 @node Tensix Register Allocation Options
