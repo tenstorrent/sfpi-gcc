@@ -1299,8 +1299,15 @@ See RS/6000 and PowerPC Options.
 -mtt-optimize-hll
 -mtt-tensix-optimize-cc  -mno-tt-tensix-optimize-cc
 -mtt-tensix-optimize-dce  -mno-tt-tensix-optimize-dce
+-mtt-tensix-optimize-cc-region-general
+-mtt-tensix-optimize-round-interleave
+-mtt-tensix-optimize-invariant-loadi
 -mtt-tensix-optimize-replay  -mno-tt-tensix-optimize-replay
 -mtt-tensix-replay-buffer-size=@var{words}
+-mtt-tensix-optimize-replay-hoist
+-mtt-tensix-optimize-replay-loop-unroll
+-mtt-tensix-optimize-launch-flatten
+-mtt-tensix-optimize-launch-flatten-bounded
 -mtt-tensix-macro-planner-replay
 -mtt-tensix-dump-effects}
 
@@ -31925,6 +31932,16 @@ saves, restores, and enables.  Enabled by default.
 Remove Tensix instructions whose results are provably unused.  Enabled
 by default.
 
+@opindex mtt-tensix-optimize-cc-region-general
+@item -mtt-tensix-optimize-cc-region-general
+Generalize the recognizers of CC-consuming transformations.  The
+compiler builds a tree of the CC save/restore frames in each function;
+with this option, consumers whose recognizers otherwise demand one
+specific statement layout (the @option{-mtt-tensix-optimize-ccmask}
+fold, the cross-loop placement walk, the loop-invariant containment
+check, and the reassociation window) accept any layout the frame tree
+proves equivalent.  Every unproven layout declines exactly as without
+the option.
 @end table
 @node Tensix Scheduling Options
 @subsubsection Tensix Scheduling Options
@@ -31941,6 +31958,15 @@ metric strictly improves, keeping the original order byte-identically
 otherwise.
 
 @table @gcctabopt
+@opindex mtt-tensix-optimize-round-interleave
+@item -mtt-tensix-optimize-round-interleave
+Interleave two consecutive iterations of a counted SFPU round loop
+whose iterations are provably independent: the body is unrolled by two
+and the doubled body is cyclically list-scheduled, renaming registers
+where the two copies would collide.  Dependent recurrences, register
+pressure beyond the eight LREGs, and loops owned by replay or MOP
+formation decline.
+
 @end table
 
 @node Tensix Constant Placement Options
@@ -31953,6 +31979,11 @@ These options control where loop-invariant and proven-constant values
 are placed.  All are disabled by default.
 
 @table @gcctabopt
+@opindex mtt-tensix-optimize-invariant-loadi
+@item -mtt-tensix-optimize-invariant-loadi
+Hoist loop-invariant immediate-vector materializations out of loops
+before register allocation.
+
 @end table
 @node Tensix Register Allocation Options
 @subsubsection Tensix Register Allocation Options
@@ -31986,6 +32017,35 @@ single launch words.  Enabled by default.
 @item -mtt-tensix-replay-buffer-size=@var{words}
 Set the length, in instruction words (1--32, default 32), of the replay
 buffer available to replay optimization.
+
+@opindex mtt-tensix-optimize-replay-hoist
+@item -mtt-tensix-optimize-replay-hoist
+Hoist replay captures whose recorded words have fixed encodings out of
+loops in which the capture is re-recorded every iteration, when the
+modeled benefit clears the threshold.
+
+@opindex mtt-tensix-optimize-replay-loop-unroll
+@item -mtt-tensix-optimize-replay-loop-unroll
+Request generic loop unrolling for counted single-block SFPU row loops
+whose every statement is a Tensix built-in operation, so the existing
+replay formation can capture the repeated row.
+
+@opindex mtt-tensix-optimize-launch-flatten
+@item -mtt-tensix-optimize-launch-flatten
+Request complete unrolling of counted innermost delivery loops---bodies
+consisting of replay records and launches, fixed single-word inline
+assembly with constant operands, delivery stores, Tensix built-in
+operations, and the loop's own control---so the per-iteration RISC-V
+loop-control instructions leave the timed issue path and the flattened
+word stream reaches replay formation.  The trip count must be proven,
+the flattened size is bounded per loop and per function, and the body
+must contain at least one Tensix vector operation.
+
+@opindex mtt-tensix-optimize-launch-flatten-bounded
+@item -mtt-tensix-optimize-launch-flatten-bounded
+Let @option{-mtt-tensix-optimize-launch-flatten} also request loops whose
+trip count is only bounded, checking the word budget against the bound,
+and nests of requested loops.
 
 @end table
 
