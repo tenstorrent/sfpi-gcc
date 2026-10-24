@@ -139,6 +139,7 @@ extern gimple_opt_pass *make_pass_rvtt_attrib (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_cc (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_ccmask (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_int_abs (gcc::context *ctxt);
+extern gimple_opt_pass *make_pass_rvtt_int_not (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_combine (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_check_early (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_check_late (gcc::context *ctxt);
