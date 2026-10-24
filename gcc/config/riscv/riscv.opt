@@ -677,6 +677,14 @@ mtt-tensix-optimize-invariant-loadi
 Target Var(riscv_tt_opt_invariant_loadi) Init(0)
 Hoist loop-invariant Tensix immediate-vector materializations before register allocation.
 
+mtt-tensix-optimize-dst-autoincr
+Target Var(riscv_tt_opt_dst_autoincr) Init(0)
+Replace constant-stride per-row Dst counter increments with owned address-modifier auto-increment.
+
+mtt-tensix-optimize-dst-autoincr-load-carrier
+Target Var(riscv_tt_opt_dst_autoincr_load_carrier) Init(0)
+Count audited raw single-constant instruction words as replay-slot-occupying so load-carrier rows can form.
+
 mtt-tensix-optimize-dst-ownership
 Target Var(riscv_tt_opt_dst_ownership) Init(1)
 Fold proven-identity Dst reloads into register-resident values using the Dst ownership analysis.
@@ -700,6 +708,10 @@ Hoist a callee's call-invariant pinned-register immediate materializations into 
 mtt-tensix-optimize-crosscall-config-prefix
 Target Var(riscv_tt_opt_crosscall_config_prefix) Init(0)
 Extend the cross-call hoist to a callee's constant SFPCONFIG programming prefix.
+
+mtt-tensix-optimize-crosscall-addrmod
+Target Var(riscv_tt_opt_crosscall_addrmod) Init(0)
+Hoist a callee's owned address-modifier configuration program into proven callers' loop entries.
 
 mtt-tensix-optimize-ipa-ra
 Target Var(riscv_tt_opt_ipa_ra) Init(0)
