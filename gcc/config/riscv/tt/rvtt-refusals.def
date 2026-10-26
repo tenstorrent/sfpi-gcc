@@ -27,3 +27,4 @@ along with GCC; see the file COPYING3.  If not see
    by their mechanism.  */
 
 RVTT_REFUSAL (QSR_UNPROVEN, "qsr-unproven")
+RVTT_REFUSAL (REPR_CONVERSION_UNAUDITED, "repr-conversion-unaudited")

@@ -742,3 +742,7 @@ Specifies whether the fence.tso instruction should be used.
 mautovec-segment
 Target Integer Var(riscv_mautovec_segment) Init(1)
 Enable (default) or disable generation of vector segment load/store instructions.
+
+mtt-tensix-optimize-repr-prop
+Target Var(riscv_tt_opt_repr_prop) Init(0)
+Cancel proven-involution SFPU representation-conversion pairs across value webs.
