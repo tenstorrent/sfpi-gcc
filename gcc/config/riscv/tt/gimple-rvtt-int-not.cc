@@ -43,8 +43,9 @@ along with GCC; see the file COPYING3.  If not see
    forms on Blackhole and Wormhole; other targets are refused
    (int-not-target-unproven).
 
-   The pass runs before the invariant pass, so a loop no longer carries
-   the -1 immediate at all instead of hoisting it.  */
+   Run after early checking but before immediate expansion and synthetic
+   splitting, which shorten the full all-ones literal into an encoded
+   hardware immediate.  Later loop passes then see no all-ones load.  */
 
 #define INCLUDE_ALGORITHM
 #define INCLUDE_VECTOR
