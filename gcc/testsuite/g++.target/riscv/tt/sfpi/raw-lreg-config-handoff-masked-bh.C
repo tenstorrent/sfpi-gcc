@@ -11,8 +11,8 @@ namespace ckernel { volatile unsigned long *instrn_buffer; }
 #include <sfpi.h>
 
 #define RAW(word) asm volatile (".ttinsn %0" : : "n" (word))
-#define RESET() do { __builtin_rvtt_sfpencc_all_lanes (); \
-  __builtin_rvtt_sfpconfig_i (0, 15, 1); } while (0)
+#define RESET() do { __builtin_rvtt_sfpencc (10, 3); \
+  (__builtin_rvtt_sfpwriteconfig_i) (0, 0, 0, 0, 0, 15); } while (0)
 #define SEED_L0() do { RAW (0x71020001); \
   __builtin_rvtt_sfprawlreg_effect (0, 1); } while (0)
 #define CONSUME_L0() do { RAW (0x710a0504); \
@@ -34,7 +34,7 @@ void row_masked_handoff ()
 {
   RESET ();
   SEED_L0 ();
-  __builtin_rvtt_sfpconfig_i (1, 15, 1);
+  (__builtin_rvtt_sfpwriteconfig_i) (0, 1, 0, 0, 0, 15);
   auto value = __builtin_rvtt_sfpreadlreg (1);
   __builtin_rvtt_sfpwriteconfig_v (value, 0, 12);
   CONSUME_L0 ();

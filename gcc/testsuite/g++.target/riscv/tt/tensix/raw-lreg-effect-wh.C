@@ -6,7 +6,13 @@
 // { dg-final { scan-assembler "# RAW WRITE L3.*# RAWLREG_EFFECT 0, 8.*# READ L3.*# RAW RMW L3.*# RAWLREG_EFFECT 8, 8" } }
 // { dg-final { scan-assembler "# WRITE L4.*# READ L4.*SFPLOAD.*# RAW INPUT L4.*# RAWLREG_EFFECT 16, 0" } }
 // { dg-final { scan-assembler "# READ L5.*SFPLOAD.*# RAW ENTRY INPUT L5.*# RAWLREG_EFFECT 32, 0" } }
-// { dg-final { scan-assembler-times "# READ L6" 2 } }
+// Conservative incoming values add three reservations for the dead-write
+// chain and one for the typed-read/raw-clobber gap.  The dynamic-mask and
+// explicit typed-read cases still account for the original two.
+// { dg-final { scan-assembler-times "# READ L6" 6 } }
+// The final dead output must not start a new reservation: the next emitted
+// instruction is the typed load, with no synthetic READ between them.
+// { dg-final { scan-assembler {# RAWLREG_EFFECT 0, 64\n[ \t]+SFPLOAD} } }
 // { dg-final { scan-assembler "# READ L6.*SFPMOV.*L6.*# RAW CLOBBER L6.*# RAWLREG_EFFECT 0, 64.*SFPADD" } }
 // { dg-final { scan-assembler-times "# READ L7" 2 } }
 
