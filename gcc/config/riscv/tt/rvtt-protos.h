@@ -26,6 +26,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "sfpu-ops-qsr.h"
 
 extern void rvtt_mov_error (const rtx_insn *) ATTRIBUTE_COLD;
+extern bool rvtt_spill_diag_reported;
 extern rtx rvtt_gen_rtx_creg (machine_mode, unsigned sfpu_regno);
 extern rtx rvtt_gen_rtx_noval (machine_mode);
 extern bool rvtt_merge_lv_src (rtx *lv, rtx *src, rtx *commute = nullptr);
@@ -142,6 +143,7 @@ extern rtl_opt_pass *make_pass_rvtt_hll (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_replay (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_rmext (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_schedule (gcc::context *ctxt);
+extern rtl_opt_pass *make_pass_rvtt_spill_diag (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_synth_opcode (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_unspec_prop_rtl (gcc::context *ctxt);
 

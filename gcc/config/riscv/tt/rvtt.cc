@@ -253,8 +253,16 @@ rvtt_insn_data::sets_cc (gcall *stmt) const
   return false;
 }
 
+/* Set by rtl-rvtt-spill-diag.cc when it has reported (and deleted)
+   allocated SFPU memory moves in this compilation.  */
+bool rvtt_spill_diag_reported;
+
 void rvtt_mov_error (const rtx_insn *insn)
 {
+  /* Once spill diagnosis has failed this compilation, do not repeat
+     a memory-move diagnostic at the late output backstop.  */
+  if (rvtt_spill_diag_reported && seen_error ())
+    return;
   if (INSN_HAS_LOCATION (insn))
     input_location = INSN_LOCATION (insn);
 

@@ -44,6 +44,9 @@ INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_attrib);
 INSERT_PASS_BEFORE (pass_lower_subreg, 1, pass_rvtt_unspec_prop_rtl);
 INSERT_PASS_AFTER (pass_cse, 1, pass_rvtt_fix_ebreak);
 INSERT_PASS_AFTER (pass_late_combine, 1, pass_rvtt_rmext);
+/* Diagnose allocated SFPU memory moves before later Tensix RTL passes.
+   The SFPU has no memory spill path.  */
+INSERT_PASS_BEFORE (pass_postreload, 1, pass_rvtt_spill_diag);
 INSERT_PASS_BEFORE (pass_postreload, 1, pass_rvtt_synth_opcode);
 INSERT_PASS_BEFORE (pass_postreload, 1, pass_rvtt_schedule);
 INSERT_PASS_AFTER (pass_postreload, 1, pass_rvtt_replay);
