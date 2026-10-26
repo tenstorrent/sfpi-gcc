@@ -17,53 +17,37 @@
    along with GCC; see the file COPYING3.  If not see
    <http://www.gnu.org/licenses/>.  */
 
-/* This pass runs before IRA for every Tensix compilation, including -O0.
-   Its gate is TARGET_XTT_TENSIX alone: exposing raw architectural register
-   ownership is a correctness requirement at every optimization level.
+/* Raw instructions emitted as .ttinsn words (as in library LLK code)
+   have no RTL definitions or uses of the L-registers they access.  A raw
+   SFPLOAD may leave a value in L1 for a later raw instruction, and in
+   between IRA sees nothing live in L1 and may give it to a vFloat
+   temporary, silently clobbering the raw value.  This pass makes those
+   accesses visible to IRA.  It is a correctness requirement, so it runs at
+   every optimization level and has no flag.
 
-   The missing dataflow
+   Callers describe raw accesses with metadata builtins; this pass does not
+   decode arbitrary inline asm.  sfprawlreg_effect gives the read and write
+   masks of the immediately preceding raw instruction; sfprawlreg_access
+   marks explicit ownership boundaries (release and write masks).  A
+   forward problem carries the explicitly owned LREGs across the CFG; a
+   backward problem carries effect reads back to their reaching definition
+   or function entry, treating effect writes as definitions so that dead
+   raw outputs do not hold an LREG.  A typed sfpreadlreg<N> or
+   sfpwritelreg<N> ends the raw reservation of LREG N.
 
-   Hand-written LLK instructions expressed as raw .ttinsn words have no RTL
-   definitions or uses of their architectural L-registers.  For example, a
-   raw SFPLOAD can put a value in L1 that a later raw instruction consumes.
-   Between those instructions, IRA sees no live value in L1 and may assign
-   it to a compiler-generated vFloat temporary.  That temporary silently
-   overwrites the raw value.  Both instruction sequences look locally valid;
-   neither allocation failure nor a diagnostic exposes the wrong code.
+   A raw instruction may preserve inactive destination lanes.  This
+   standalone version therefore treats writes as old-value inputs too;
+   it has no all-lanes assumption, raw-word decoder, MOP analysis or
+   half-load read elimination.  It does not advertise the optional
+   __riscv_xtt_sfprawlreg_merge capability.
 
-   Representing the reservation
-
-   The sfprawlreg_effect metadata builtin names the read and write effects of
-   the immediately preceding opaque instruction.  The sfprawlreg_access
-   builtin names explicit ownership boundaries with release and write masks.
-   Callers must supply these annotations; this pass does not decode arbitrary
-   inline assembly.  A forward dataflow
-   fixed point carries eight-bit ownership masks across CFG edges, taking
-   the union of predecessor masks at joins.  A backward liveness fixed point
-   carries effect reads to their reaching typed/raw definition or function
-   entry, so inputs are protected across the entire producer-to-consumer gap.
-   Effect writes are definitions in that backward problem, so dead raw outputs
-   do not consume scarce LREGs to function exit.  An access marker releases
-   the named reservations and opens explicitly owned/live-out writes.  A typed
-   sfpreadlreg<N> or sfpwritelreg<N> ends the raw reservation for that register.
-
-   Each block materializes its incoming reservations and new raw writes as
-   zero-length reads of the corresponding hard LREG.  A USE keeps that hard
-   register live until the consuming builtin, a release or rewrite marker,
-   or the end of the block.  Successors create their own local intervals.
-   This reserves the register across each affected block without inventing a
-   cross-block pseudo or phi for the raw value.
-
-   A point clobber alone cannot protect the interval between producer and
-   consumer.  Permanently fixing the register would also remove it from
-   allocation where raw code does not own it.  The sentinel intervals make
-   precisely these conservative reservations visible to IRA instead.
-
-   The sentinels and USEs emit no instruction words of their own.  Register
-   assignments, and therefore the emitted instructions, can change when an
-   unsafe allocation is prevented.  Removing this pass while retaining the
-   metadata would silently discard the ownership contract, which is why it
-   has no optimization flag.  */
+   Each block materializes its incoming reservations and demanded raw
+   writes as zero-length reads of the hard LREG (a sentinel), kept live by
+   a USE at the consumer, a release or rewrite marker, or the block end.
+   Each block gets its own local interval, so no cross-block pseudo or phi
+   is needed.  A point clobber alone would not protect the gap between
+   producer and consumer, and fixing the register outright would remove it
+   from allocation everywhere.  The sentinels and USEs emit no code.  */
 
 #include "config.h"
 #include "system.h"
@@ -86,12 +70,8 @@
 
 namespace {
 
-/* Metadata builtins name raw architectural L-register accesses.  Raw .ttinsn
-   otherwise has no RTL def/use, so IRA is free to reuse a future input (for
-   example L1 after a raw SFPLOAD) as a vFloat temporary.  A zero-length,
-   fixed-register read creates a normal IRA interval.  The hard register is
-   used at each local endpoint; joins get a fresh local interval, deliberately
-   avoiding a cross-CFG pseudo/phi while conservatively reserving the LREG.  */
+/* The L-register number read when INSN is one of the rvtt_sfpreadlreg<N>
+   builtins, -1 otherwise.  */
 
 static int
 read_lregno (rtx_insn *insn)
@@ -110,13 +90,20 @@ read_lregno (rtx_insn *insn)
     }
 }
 
-/* The architectural L-register number written when INSN is one of the
-   rvtt_sfpwritelreg<N> metadata builtins, -1 otherwise.  Like a read,
-   a write builtin ends any raw interval open on that LREG.  */
+/* The architectural L-register number written by an explicit hard-register
+   copy or rvtt_sfpwritelreg<N>, -1 otherwise.  Like a typed read,
+   a typed definition ends the preceding raw interval on that LREG.  */
 
 static int
 write_lregno (rtx_insn *insn)
 {
+  rtx set = single_set (insn);
+  if (TARGET_XTT_TENSIX_WH_BH && set
+      && REG_P (SET_DEST (set)) && REG_P (SET_SRC (set))
+      && GET_MODE (SET_DEST (set)) == XTT32SImode
+      && REGNO (SET_DEST (set)) >= SFPU_REG_FIRST
+      && REGNO (SET_DEST (set)) < SFPU_REG_FIRST + 8)
+    return REGNO (SET_DEST (set)) - SFPU_REG_FIRST;
   switch (recog_memoized (insn))
     {
     case CODE_FOR_rvtt_sfpwritelreg0: return 0;
@@ -150,11 +137,9 @@ raw_access_p (rtx_insn *insn, unsigned *release_mask, unsigned *write_mask)
   return true;
 }
 
-/* Return true when INSN is the rvtt_sfprawlreg_effect marker.  *READ_MASK
-   names inputs of the immediately preceding opaque instruction and
-   *WRITE_MASK names its outputs.  Reads are backward uses and writes are
-   backward definitions.  Explicit raw ownership/live-out values use
-   sfprawlreg_access instead.  */
+/* Return true when INSN is the rvtt_sfprawlreg_effect marker, setting
+   *READ_MASK to the inputs and *WRITE_MASK to the outputs of the
+   immediately preceding raw instruction.  */
 
 static bool
 raw_effect_p (rtx_insn *insn, unsigned *read_mask, unsigned *write_mask)
@@ -170,10 +155,9 @@ raw_effect_p (rtx_insn *insn, unsigned *read_mask, unsigned *write_mask)
   *read_mask = CONST_INT_P (read) ? UINTVAL (read) & 0xff : 0xff;
   *write_mask = CONST_INT_P (write) ? UINTVAL (write) & 0xff : 0xff;
 
-  /* Header-side decoders can be fed an instruction word containing a runtime
-     address.  Its exact LREG fields are then not a front-end constant.  Make
-     that case conservatively affect every LREG, and replace the operands now
-     so no runtime mask computation survives this mandatory metadata pass.  */
+  /* A header-side decoder fed an instruction word containing a runtime
+     value produces non-constant masks.  Treat them as every LREG, and
+     replace the operands so no runtime mask computation survives.  */
   if (!CONST_INT_P (read) || !CONST_INT_P (write))
     {
       XVECEXP (pat, 0, 0) = GEN_INT (*read_mask);
@@ -185,6 +169,19 @@ raw_effect_p (rtx_insn *insn, unsigned *read_mask, unsigned *write_mask)
       df_insn_rescan (insn);
     }
   return true;
+}
+
+/* Conservative standalone policy.  Without a proof that every lane is
+   overwritten, a raw write can retain inactive lanes of its old value.
+   Treat every write as an input as well.  This deliberately does not
+   advertise __riscv_xtt_sfprawlreg_merge or remove half-load inputs:
+   header-side fallback masks remain valid and no lane/recorder inference
+   is a prerequisite of the ownership pass.  More pressure than the
+   campaign lane-merge optimization is an explicit tradeoff.  */
+static unsigned
+effect_inputs (rtx_insn *, unsigned reads, unsigned writes)
+{
+  return reads | writes;
 }
 
 /* RTL for a sentinel read of hard LREG REGNO defining VALUE, which is the
@@ -313,7 +310,7 @@ transfer_demand_block (basic_block bb, unsigned live)
 	{
 	  unsigned first, writes;
 	  if (raw_effect_p (insn, &first, &writes))
-	    live = (live & ~writes) | first;
+	    live = (live & ~writes) | effect_inputs (insn, first, writes);
 	  else if (raw_access_p (insn, &first, &writes))
 	    live &= ~(first | writes);
 	  else
@@ -345,7 +342,7 @@ transfer_effect_demand_block (basic_block bb, unsigned live)
 	{
 	  unsigned first, writes;
 	  if (raw_effect_p (insn, &first, &writes))
-	    live = (live & ~writes) | first;
+	    live = (live & ~writes) | effect_inputs (insn, first, writes);
 	  else if (raw_access_p (insn, &first, &writes))
 	    live &= ~(first | writes);
 	  else
@@ -393,17 +390,15 @@ transfer_provenance_block (basic_block bb, unsigned live)
   return live;
 }
 
-/* Pass body over FN.  First solve a forward dataflow fixed point over
-   the per-block raw-liveness masks; then, per block, materialize each
-   raw interval as a sentinel read of its hard LREG -- before the first real
-   insn for values live on entry, after the raw write otherwise -- and end it
-   with a USE at the consuming builtin, the releasing or rewriting raw access,
-   or block end.  Each block gets its own local interval, deliberately avoiding
-   any cross-CFG pseudo or phi.  */
+/* Solve the dataflow problems for FN, then in each block start a sentinel
+   for every reserved LREG (before the first insn for values live on entry,
+   after the raw write otherwise) and end it with a USE at the consumer, a
+   release or rewrite marker, or the block end.  */
 
 static void
 make_raw_lregs_live (function *fn)
 {
+
   const unsigned n_bbs = last_basic_block_for_fn (fn);
   auto_vec<unsigned> in (n_bbs), out (n_bbs);
   in.safe_grow_cleared (n_bbs);
@@ -536,7 +531,7 @@ make_raw_lregs_live (function *fn)
 	      demand_after[INSN_UID (insn)] = live;
 	      unsigned first, writes;
 	      if (raw_effect_p (insn, &first, &writes))
-		live = (live & ~writes) | first;
+		live = (live & ~writes) | effect_inputs (insn, first, writes);
 	      else if (raw_access_p (insn, &first, &writes))
 		live &= ~(first | writes);
 	      else
@@ -564,7 +559,7 @@ make_raw_lregs_live (function *fn)
 	      effect_after[INSN_UID (insn)] = live;
 	      unsigned first, writes;
 	      if (raw_effect_p (insn, &first, &writes))
-		live = (live & ~writes) | first;
+		live = (live & ~writes) | effect_inputs (insn, first, writes);
 	      else if (raw_access_p (insn, &first, &writes))
 		live &= ~(first | writes);
 	      else
@@ -646,6 +641,7 @@ make_raw_lregs_live (function *fn)
 	  unsigned releases, writes;
 	  if (raw_effect_p (insn, &releases, &writes))
 	    {
+	      releases = effect_inputs (insn, releases, writes);
 	      /* Backward demand normally made each input live from its reaching
 		 definition.  Keep a local fallback for malformed or newly split RTL:
 		 the marker must at minimum reserve the preceding raw instruction.  */
@@ -743,15 +739,24 @@ make_raw_lregs_live (function *fn)
 		{
 		  rtx value = gen_rtx_REG (XTT32SImode,
 					   SFPU_REG_FIRST + regno);
-		  producer[regno] = emit_sentinel_after (regno, value, insn);
+	  /* A real hard-register definition already supplies the value.
+	     A fresh zero-word sentinel SET would redefine it in RTL and
+	     let DCE delete the required hardware copy.  Its later USE
+	     must instead keep this actual definition live.  Opaque typed
+	     markers still need a synthetic definition for their output.  */
+	  rtx set = single_set (insn);
+	  if (set && rtx_equal_p (SET_DEST (set), value)
+	      && REG_P (SET_SRC (set)))
+	    producer[regno] = insn;
+	  else
+	    producer[regno] = emit_sentinel_after (regno, value, insn);
 		  live[regno] = value;
 		}
 	    }
 	}
 
-      /* A successor gets its own entry interval.  This endpoint keeps the local
-	 interval alive through all instructions in the current block without
-	 inventing a cross-CFG pseudo or phi.  */
+      /* Keep the local interval live to the end of the block; each
+	 successor starts its own.  */
       for (unsigned regno = 0; regno != 8; ++regno)
 	if (live[regno])
 	  end_sentinel_at_block_end (live[regno], bb);
@@ -774,6 +779,32 @@ public:
 
   unsigned execute (function *fn) final override
   {
+    /* Value-form SFPCONFIG reads L0.  Its fixed input constraint would
+       otherwise hide the architectural assignment until LRA inserts a
+       copy, after raw ownership has already been solved.  Expose exactly
+       that transfer now so a later raw read observes the newly assigned
+       L0 rather than reserving its overwritten incoming value.  */
+    basic_block bb;
+    FOR_EACH_BB_FN (bb, fn)
+      {
+	rtx_insn *insn;
+	FOR_BB_INSNS (bb, insn)
+	  if (NONDEBUG_INSN_P (insn)
+	      && recog_memoized (insn) == CODE_FOR_rvtt_sfpwriteconfig_v)
+	    {
+	      rtx &input = XVECEXP (PATTERN (insn), 0, 0);
+	      rtx l0 = gen_rtx_REG (XTT32SImode, SFPU_REG_FIRST);
+	      if (!rtx_equal_p (input, l0))
+		{
+		  rtx_insn *copy = emit_insn_before (gen_rtx_SET (l0, input), insn);
+		  INSN_LOCATION (copy) = INSN_LOCATION (insn);
+		  input = l0;
+		  INSN_CODE (insn) = -1;
+		  df_insn_rescan (copy);
+		  df_insn_rescan (insn);
+		}
+	    }
+      }
     make_raw_lregs_live (fn);
     return 0;
   }
@@ -781,9 +812,7 @@ public:
 
 } /* anonymous namespace */
 
-/* Instantiate the raw-LREG reservation pass for CTXT.  The pass runs
-   immediately before IRA and is a correctness requirement rather than an
-   optional optimization.  */
+/* Create the raw-LREG reservation pass.  */
 
 rtl_opt_pass *
 make_pass_rvtt_lreg_livein (gcc::context *ctxt)
