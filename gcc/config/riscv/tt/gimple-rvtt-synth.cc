@@ -20,7 +20,6 @@ You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
-#define INCLUDE_VECTOR
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
@@ -35,6 +34,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree-into-ssa.h"
 #include "rvtt.h"
 #include <unordered_set>
+#include <unordered_map>
 
 // This pass finds builtins with non-constant args and:
 //  - emit a prologue to synthesize the instruction (shift, mask,
@@ -376,292 +376,294 @@ cse (function *fn)
 
 // After duplicative optimizations like loop unrolling and
 // loop unswitching we can have
-// 0 uses with a now-constant argument
-// 1 multiple synth_opcodes with the same ID
-// 2 multiple opcode adds using the same synth_opcode
-// #0 we should delete
-// #1 is when CSE decides not to eliminate. We may as well renumber
-// these to give the backend more flexibility (we presume it's
-// unlikely to do CSE we didn't).
-// #2 is when there are different non-immediate input values to the
-// dupliated use. We want to insert new synth_opcodes so there's a 1:1
-// mapping to the adds.
-// Applying the renumbering and insertion requires following SSA
-// DEF/USE lists. If we encounter something odd (like a PHI), we
-// abandon renumbering that ID.
+//
+// a) Uses with a now-constant argument. Delete the synth
+//
+// b) Multiple synth_opcodes with the same ID. This is when CSE decides not to
+// eliminate. We should renumber these to give the backend more flexibility
+//   a = opcode_synth
+//   b = add (a, val)
+//   USE b
+//   c = add (a, val)
+//   USE c
+//
+// c) Multiple opcode adds using the same synth_opcode.  This happens is when
+// there are different non-immediate input values to the duplicated use. We want
+// to insert new synth_opcodes so there's a 1:1 mapping to the adds.
+//
+// Complicating things is induction variable deduction.  We can get a sequences
+// of:
+//   a = opcode_synth
+//   b = add (a, CONST)
+//   c = add (b, val)
+//   USE c
+//   d = add (c, CONST)
+//   USE d
+//   ...
+//
+// we should renumber the separate final uses, which involves duplicatiing the
+// IV add.
+//
+// Finally we could get chains that endup in a PHI.  At that point we need to
+// preserve that particular path -- but can renumber uses before the PHI.
+
+namespace {
+struct synth;
+
+// Root nodes (all synth_opcodes)
+using roots_t = std::unordered_map<unsigned, synth *>;
+#if ENABLE_ASSERT_CHECKING
+// All nodes (to detect merges -- completely unexpected)
+using nodes_t = std::unordered_map<gimple *, synth *>;
+#else
+struct nodes_t {};
+#endif
+
+struct synth
+{
+  synth *sib = nullptr; // sibling use of the same parent (or of same synth ID)
+  synth *child = nullptr; // use(s) of this insn
+  gimple *stmt = nullptr; // the stmt, NULL if cannot continue
+  bool other_is_rhs2 = false; // which arg of stmt is the other value
+  unsigned short use_flags = 0;
+
+  enum USE {
+    USE_IsFinal = 0x01,
+    USE_IsUnfollowable = 0x02,
+    USE_IsAdd = 0x04,
+
+    USE_ChildFinal = 0x10,
+    USE_ChildAdd = 0x20,
+    USE_ChildMask = 0xf0,
+
+    USE_HasFinal = 0x100,
+    USE_HasUnfollowable = 0x200,
+    USE_HasAdds = 0x400,
+    USE_HasManyAdds = 0x800,
+  };
+
+  synth (gimple *stmt)
+    : stmt (stmt) {}
+
+  unsigned build (nodes_t &nodes, unsigned id, unsigned depth = 0, bool seen_var_add = false) {
+#define SPACES "               "
+    imm_use_iterator iter;
+    use_operand_p use_p;
+    auto ssa_var = gimple_get_lhs (stmt);
+    FOR_EACH_IMM_USE_FAST (use_p, iter, ssa_var)
+      {
+	gimple *use_stmt = USE_STMT (use_p);
+
+	if (is_gimple_debug (use_stmt))
+	  continue;
+
+	// Allocate and chain a child node
+	auto *use_node = new (ggc_alloc<synth> ()) synth (use_stmt);
+	use_node->sib = child;
+	child = use_node;
+
+	{
+#if ENABLE_ASSERT_CHECKING
+	  auto [seen, not_seen] = nodes.emplace (use_stmt, use_node);
+	  gcc_assert (not_seen);
+#endif
+	}
+
+	if (rvtt_get_insn_data (use_stmt))
+	  {
+	    // A final use
+	    if (dump_file)
+	      {
+		fprintf (dump_file, "%u:%.*sFinal use ", id, depth * 2, SPACES);
+		print_gimple_stmt (dump_file, use_stmt, 0);
+	      }
+	    use_node->use_flags |= USE_IsFinal;
+	    use_flags |= USE_ChildFinal | USE_HasFinal;
+	    continue;
+	  }
+
+	auto *add_stmt = dyn_cast <gassign *> (use_stmt);
+	if (!add_stmt || gimple_assign_rhs_code (add_stmt) != PLUS_EXPR)
+	  {
+	  unfollowable:
+	    if (dump_file)
+	      {
+		fprintf (dump_file, "%u:%.*sUnfollowable ", id, depth * 2, SPACES);
+		print_gimple_stmt (dump_file, use_stmt, 0);
+	      }
+	    use_node->use_flags = USE_IsUnfollowable;
+	    use_flags |= USE_HasUnfollowable;
+	    continue;
+	  }
+
+	tree other_arg = gimple_assign_rhs1 (add_stmt);
+	if (other_arg == ssa_var)
+	  {
+	    other_arg = gimple_assign_rhs2 (add_stmt);
+	    use_node->other_is_rhs2 = true;
+	  }
+	else
+	  gcc_assert (gimple_assign_rhs2 (add_stmt) == ssa_var);
+
+	bool now_seen_var_add = seen_var_add;
+	if (TREE_CODE (other_arg) != INTEGER_CST)
+	  {
+	    if (seen_var_add)
+	      goto unfollowable;
+	    now_seen_var_add = true;
+	  }
+
+	if (dump_file)
+	  {
+	    fprintf (dump_file, "%u:%.*sFollowing ", id, depth * 2, SPACES);
+	    print_gimple_stmt (dump_file, use_stmt, 0);
+	  }
+
+	use_flags |= use_node->build (nodes, id, depth + 1, now_seen_var_add);
+
+	use_node->use_flags |= USE_IsAdd;
+	if (use_flags & USE_ChildAdd)
+	  use_flags |= USE_HasManyAdds;
+	if (use_node->use_flags & USE_HasManyAdds)
+	  use_flags |= USE_HasManyAdds;
+	use_flags |= USE_ChildAdd;
+      }
+
+    return use_flags & ~USE_ChildMask;
+  }
+
+  void renumber (unsigned id, unsigned &id_hwm, uint32_t addend = 0, synth const *val_node = nullptr) const
+  {
+    if (sib)
+      sib->renumber (id, id_hwm, addend, val_node);
+
+    if (use_flags & (USE_IsFinal | USE_IsUnfollowable))
+      return;
+
+    // Figure addend and val_node
+    if (use_flags & USE_IsAdd)
+      {
+	auto *add_stmt = dyn_cast <gassign *> (stmt);
+	tree other = other_is_rhs2 ? gimple_assign_rhs2 (add_stmt) : gimple_assign_rhs1 (add_stmt);
+	if (TREE_CODE (other) == INTEGER_CST)
+	  addend += TREE_INT_CST_LOW (other);
+	else
+	  val_node = this;
+      }
+    else
+      {
+	gcc_assert (rvtt_get_insn_data (stmt)->id == rvtt_insn_data::synth_opcode);
+	addend = TREE_INT_CST_LOW (gimple_call_arg (stmt, 1));
+      }
+
+    if (use_flags & USE_ChildFinal)
+      {
+	// new synth and (probably) val_node
+	tree ssa_var = make_temp_ssa_name (unsigned_type_node, NULL, "li");
+	tree new_id = build_int_cst (unsigned_type_node, id_hwm++);
+	tree synth_opcode_decl = rvtt_get_insn_data (rvtt_insn_data::synth_opcode)->decl;
+	gcall *new_call = gimple_build_call (synth_opcode_decl, 2);
+	gimple_call_set_arg (new_call, 0, new_id);
+	gimple_call_set_arg (new_call, 1, build_int_cst (unsigned_type_node, addend));
+	gimple_call_set_lhs (new_call, ssa_var);
+	gimple_set_location (new_call, gimple_location (stmt));
+	auto gsi = gsi_for_stmt (stmt);
+	gsi_insert_after (&gsi, new_call, GSI_NEW_STMT);
+	if (dump_file)
+	  {
+	    fprintf (dump_file, "Creating new ");
+	    print_gimple_stmt (dump_file, new_call, 0);
+	  }
+
+	if (val_node)
+	  {
+	    // Duplicate val addition
+	    tree add_res = make_temp_ssa_name (unsigned_type_node, NULL, "val");
+	    tree val_arg = val_node->other_is_rhs2
+	      ? gimple_assign_rhs2 (val_node->stmt) : gimple_assign_rhs1 (val_node->stmt);
+	    gassign *new_add = gimple_build_assign (add_res, PLUS_EXPR, ssa_var, val_arg);
+	    gimple_set_location (new_add, gimple_location (stmt));
+	    gsi_insert_after (&gsi, new_add, GSI_NEW_STMT);
+	    if (dump_file)
+	      {
+		fprintf (dump_file, "Cloning val add ");
+		print_gimple_stmt (dump_file, new_add, 0);
+	      }
+	    ssa_var = add_res;
+	  }
+
+	for (auto *final = child; final; final = final->sib)
+	  if (final->use_flags & USE_IsFinal)
+	    {
+	      auto *insnd = rvtt_get_insn_data (final->stmt);
+	      gimple_call_set_arg (final->stmt, insnd->var_arg (), ssa_var);
+	      gimple_call_set_arg (final->stmt, insnd->id_arg (), new_id);
+	      update_stmt (final->stmt);
+	      if (dump_file)
+		{
+		  fprintf (dump_file, "Updating use ");
+		  print_gimple_stmt (dump_file, final->stmt, 0);
+		}
+	    }
+      }
+
+    if (use_flags & USE_HasFinal)
+      child->renumber (id, id_hwm, addend, val_node);
+  }
+};
+}
+
+// Renumber synth_opcode ids.  Gather all the synth_opcodes and the subsequent
+// use chain.  Then renumber those that would benefit.
 
 static unsigned
 renumber (function *fn)
 {
-  // FIXME: bailout until we can get this better.
-  static bool too_complex = false;
-  too_complex = false;
+  roots_t roots;
+  nodes_t nodes;
+  unsigned id_hwm = 0;
 
-  struct node_t
-  {
-    gimple *stmt;
-    unsigned opcode_ix;
-    unsigned add_ix;
-    bool rhs2 : 1; // add: incoming edge is rhs2
-    bool used : 1;
-    bool phi_use : 1;
-    unsigned id : 30;
-    unsigned addend; // opcode: count of uses
-		     // use stmt: nonimm pos
-
-    static node_t opcode (gimple *stmt, unsigned ix, unsigned id)
-    {
-      return {stmt, ix, 0, false, false, false, id, 0};
-    }
-    static node_t add (gimple *stmt, unsigned op_ix, unsigned ix, bool rhs2, unsigned addend)
-    {
-      return {stmt, op_ix, ix, rhs2, false, false, 0, addend};
-    }
-    static node_t use (gimple *stmt, unsigned op_ix, unsigned add_ix, unsigned nonimm)
-    {
-      return {stmt, op_ix, add_ix, false, false, false, 0, nonimm};
-    }
-  };
-
-  auto build_graph = [] (auto &self, std::vector<node_t> &graph, unsigned opcode_ix, tree ssa_var,
-			  unsigned first_add_ix = 0, unsigned last_add_ix = 0, unsigned addend = 0)
-    -> unsigned
-  {
-    bool any_nonimm = false;
-    unsigned add_count = 0;
-
-    imm_use_iterator iter;
-    use_operand_p use_p;
-    FOR_EACH_IMM_USE_FAST (use_p, iter, ssa_var)
-      {
-	gimple *use_stmt = USE_STMT (use_p);
-	if (is_gimple_call (use_stmt))
-	  {
-	    // a final use
-	    auto *insnd = rvtt_get_insn_data (use_stmt);
-	    if (dump_file)
-	      {
-		fprintf (dump_file, "%u:Final use of %u via %u ",
-			 unsigned (graph.size ()), opcode_ix, last_add_ix);
-		print_gimple_stmt (dump_file, use_stmt, 0);
-	      }
-	    graph.emplace_back (node_t::use (use_stmt, opcode_ix,
-					     last_add_ix, insnd->imm_arg ()));
-	    any_nonimm = true;
-	  }
-	else if (auto *add_stmt = dyn_cast <gassign *> (use_stmt))
-	  {
-	    // an add (or subtract)
-	    auto code = gimple_assign_rhs_code (add_stmt);
-	    gcc_assert (code == PLUS_EXPR || code == MINUS_EXPR);
-	    tree opcode_arg = gimple_assign_rhs1 (add_stmt);
-	    bool is_op2 = opcode_arg != ssa_var;
-	    gcc_assert (!is_op2
-			|| (code == PLUS_EXPR
-			    && gimple_assign_rhs2 (add_stmt) == ssa_var));
-
-	    unsigned this_add_ix = graph.size ();
-	    unsigned this_first_add_ix = this_add_ix;
-	    unsigned self_add_ix = first_add_ix;
-	    unsigned this_addend = addend;
-	    tree other = is_op2 ? opcode_arg : gimple_assign_rhs2 (add_stmt);
-	    if (TREE_CODE (other) == INTEGER_CST)
-	      {
-		gcc_assert (first_add_ix || !this_addend);
-		auto val = TREE_INT_CST_LOW (other);
-		if (code == MINUS_EXPR)
-		  val = -val;
-		this_addend += val;
-		this_first_add_ix = first_add_ix;
-	      }
-	    else
-	      {
-		if (first_add_ix)
-		  too_complex = true;
-		else if (this_addend)
-		  self_add_ix = this_add_ix;
-	      }
-
-	    if (dump_file)
-	      {
-		fprintf (dump_file, "%u:%s of %u, via %u ",
-			 unsigned (graph.size ()),
-			 code == PLUS_EXPR ? "Add" : "Sub",
-			 opcode_ix, self_add_ix);
-		print_gimple_stmt (dump_file, add_stmt, 0);
-	      }
-	    graph.emplace_back (node_t::add (add_stmt, opcode_ix, self_add_ix,
-					     is_op2, this_addend));
-
-	    bool is_used = self (self, graph, opcode_ix, gimple_get_lhs (add_stmt),
-				 this_first_add_ix, this_add_ix, this_addend);
-	    gcc_assert (is_used);
-	    if (this_first_add_ix)
-	      graph[this_add_ix].used = 1;
-	    add_count += 1;
-	  }
-	else if (auto *phi_stmt = dyn_cast <gphi *> (use_stmt))
-	  {
-	    // We can encounter this when code duplication has cloned
-	    // synth_opcode insns in various blocks. We should be able
-	    // to CSE these cases into a dominator. Unfortunately
-	    // there doesn't appear to be a (reusable) gimple CSE
-	    // pass. For now mark this id as not to be touched :(
-	    if (first_add_ix)
-	      {
-		// The PHI is merging adds of synth_opcode values
-		gcc_assert (first_add_ix == last_add_ix);
-		graph[first_add_ix].phi_use = true;
-		add_count++;
-	      }
-	    else
-	      {
-		// The PHI is merging synth_opcode values themselves. Stop
-		// following, and then we'll not touch qnything here.
-	      }
-
-	    if (dump_file)
-	      {
-		fprintf (dump_file, "Phi use of %s %u ", first_add_ix ? "add" : "opcode",
-			 first_add_ix ? first_add_ix : opcode_ix);
-		print_gimple_stmt (dump_file, phi_stmt, 0);
-	      }
-	  }
-	else
-	  gcc_assert (gimple_code (use_stmt) == GIMPLE_DEBUG);
-      }
-    return add_count + unsigned (any_nonimm);
-  };
-
-  // Build the opcode-use graph
-  std::vector<node_t> graph;
-  std::vector<unsigned> opcode_counts;
-
-  if (dump_file)
-    fprintf (dump_file, "Building graph\n");
   basic_block bb;
   FOR_EACH_BB_FN (bb, fn)
     for (auto gsi = gsi_start_bb (bb); !gsi_end_p (gsi); gsi_next (&gsi))
       if (auto *call_stmt = dyn_cast <gcall *> (gsi_stmt (gsi)))
-	{
-	  auto *insnd = rvtt_get_insn_data (call_stmt);
-	  if (!insnd)
-	    continue;
+	if (auto *insnd = rvtt_get_insn_data (call_stmt))
 	  if (insnd->id == rvtt_insn_data::synth_opcode)
 	    {
-	      unsigned id = TREE_INT_CST_LOW (gimple_call_arg (call_stmt, 0));;
-	      if (opcode_counts.size() < id + 1)
-		opcode_counts.resize (id + 1);
-	      opcode_counts[id]++;
-	      unsigned opcode_ix = graph.size ();
-	      graph.emplace_back (node_t::opcode (call_stmt, opcode_ix, id));
-	      unsigned count = build_graph (build_graph, graph, opcode_ix, gimple_call_lhs (call_stmt));
-	      graph[opcode_ix].addend = count;
-	    }
-	}
+	      unsigned id = TREE_INT_CST_LOW (gimple_call_arg (call_stmt, 0));
 
-  if (too_complex)
-    {
-      if (dump_file)
-	fprintf (dump_file, "\nGraph is too complex\n");
-      return 0;
-    }
-  if (dump_file)
-    fprintf (dump_file, "\nProcessing graph\n");
+	      if (id >= id_hwm)
+		id_hwm = id + 1;
+	      synth *node = new (ggc_alloc<synth> ()) synth (call_stmt);
+	      auto [IX, inserted] = roots.emplace (id, node);
+	      if (!inserted)
+		{
+		  // Chain on
+		  if (dump_file)
+		    fprintf (dump_file, "%u: Multiple synth_opcodes\n", id);
+		  node->sib = IX->second;
+		  IX->second = node;
+		}
+	      node->build (nodes, id);
+	    }
 
   bool renumbered = false;
-  unsigned synth_id = opcode_counts.size ();
-  for (auto &node : graph)
+  for (auto [id, root] : roots)
     {
-      if (!is_gimple_assign (node.stmt))
-	continue;
-
-      gcc_assert (node.used);
-      if (!node.add_ix && !node.addend)
+      if (!root->sib
+	  && ((root->use_flags & ~synth::USE_ChildMask) == synth::USE_HasFinal
+	      || (root->use_flags & ~synth::USE_ChildMask) == synth::USE_HasUnfollowable))
 	{
-	  auto &opcode_slot = graph[node.opcode_ix];
-	  if (!--opcode_slot.addend)
-	    {
-	      auto &count_slot = opcode_counts[opcode_slot.id];
-	      if (!--count_slot)
-		continue;
-	    }
+	  if (dump_file)
+	    fprintf (dump_file, "%u: Not renumbering\n", id);
+	  continue;
 	}
 
-      // A synth opcode used by more than one add. Insert a renumbered
-      // synth opcode.
-      node.id = synth_id++;
-
-      tree addend = integer_zero_node;
-      if (node.addend)
-	{
-	  // Propagate the iv_var
-	  gcc_assert (node.add_ix);
-	  auto &add_slot = graph[node.add_ix];
-	  auto iv_var = add_slot.rhs2
-	    ? gimple_assign_rhs1 (add_slot.stmt)
-	    : gimple_assign_rhs2 (add_slot.stmt);
-	  if (node.rhs2)
-	    gimple_assign_set_rhs1 (node.stmt, iv_var);
-	  else
-	    gimple_assign_set_rhs2 (node.stmt, iv_var);
-	  addend = build_int_cst (unsigned_type_node, node.addend);
-	}
-
-      // Create a new synth opcode
-      tree ssa_var = make_temp_ssa_name (unsigned_type_node, NULL, "li");
-      tree synth_opcode_decl = rvtt_get_insn_data (rvtt_insn_data::synth_opcode)->decl;
-      gcall *new_call = gimple_build_call (synth_opcode_decl, 2);
-      gimple_call_set_arg (new_call, 0, build_int_cst (unsigned_type_node, node.id));
-      gimple_call_set_arg (new_call, 1, addend);
-      gimple_call_set_lhs (new_call, ssa_var);
-
-      // Insert it just before the add, and update the add's operand
-      gimple_set_location (new_call, gimple_location (graph[node.opcode_ix].stmt));
-      auto gsi = gsi_for_stmt (node.stmt);
-      gsi_insert_before (&gsi, new_call, GSI_NEW_STMT);
-      if (node.rhs2)
-	gimple_assign_set_rhs2 (node.stmt, ssa_var);
-      else
-	gimple_assign_set_rhs1 (node.stmt, ssa_var);
-      update_stmt (node.stmt);
-
-      if (dump_file)
-	{
-	  fprintf (dump_file, "Creating new synth ");
-	  print_gimple_stmt (dump_file, new_call, 0);
-	  fprintf (dump_file, "Updating add ");
-	  print_gimple_stmt (dump_file, node.stmt, 0);
-	}
-
+      root->renumber (id, id_hwm);
       renumbered = true;
     }
 
-  if (renumbered)
-    {
-      // Update all the uses of the renumbered adds
-      if (dump_file)
-	fprintf (dump_file, "\nRenumbering\n");
-      for (auto &slot : graph)
-	{
-	  if (!is_gimple_call (slot.stmt))
-	    continue;
-	  if (!slot.add_ix)
-	    continue;
-
-	  // A use, see if it needs renumbering
-	  if (unsigned id = graph[slot.add_ix].id)
-	    {
-	      gimple_call_set_arg (slot.stmt, slot.addend + 2,
-				   build_int_cst (unsigned_type_node, id));
-	      update_stmt (slot.stmt);
-	      if (dump_file)
-		print_gimple_stmt (dump_file, slot.stmt, 2);
-	    }
-	}
-    }
-
-    return renumbered ? TODO_update_ssa : 0;
+  return renumbered ? TODO_update_ssa : 0;
 }
 
 namespace {

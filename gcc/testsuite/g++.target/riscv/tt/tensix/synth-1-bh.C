@@ -57,14 +57,14 @@ void one ()
 **	call	_Z4frobv
 **	mv	s0,a0
 **	call	_Z4frobv
-**	li	a5, 1879048192	# 1:70000000
-**	add	a4,s0,a5
+**	li	a4, 1879048192	# 3:70000000
 **	lui	a5,%hi\(iptr\)
+**	add	a4,a4,s0
 **	addi	a5,a5,%lo\(iptr\)
-**	sw	a4, 0\(a5\)	# 1:SFPLOAD	L0, a4, 0, 0
+**	sw	a4, 0\(a5\)	# 3:SFPLOAD	L0, a4, 0, 0
 **	li	a4, 1880096768	# 2:70100000
-**	add	a0,a0,a4
-**	sw	a0, 0\(a5\)	# 2:SFPLOAD	L1, a0, 0, 0
+**	add	a4,a4,a0
+**	sw	a4, 0\(a5\)	# 2:SFPLOAD	L1, a4, 0, 0
 **	# WRITE L0
 **	# WRITE L1
 **	lw	ra,12\(sp\)
@@ -94,14 +94,14 @@ void two ()
 **	call	_Z4frobv
 **	mv	s0,a0
 **	call	_Z4frobv
-**	li	a5, 1879048192	# 2:70000000
-**	add	a4,s0,a5
+**	li	a4, 1879048192	# 2:70000000
 **	lui	a5,%hi\(iptr\)
+**	add	a4,a4,s0
 **	addi	a5,a5,%lo\(iptr\)
 **	sw	a4, 0\(a5\)	# 2:SFPLOAD	L0, a4, 0, 0
-**	li	a4, 1880096769	# 1:70100001
-**	add	a0,a0,a4
-**	sw	a0, 0\(a5\)	# 1:SFPLOAD	L1, a0, 0, 0
+**	li	a4, 1880096769	# 3:70100001
+**	add	a4,a4,a0
+**	sw	a4, 0\(a5\)	# 3:SFPLOAD	L1, a4, 0, 0
 **	# WRITE L0
 **	# WRITE L1
 **	lw	ra,12\(sp\)
