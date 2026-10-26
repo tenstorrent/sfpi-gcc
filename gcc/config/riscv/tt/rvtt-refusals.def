@@ -27,3 +27,7 @@ along with GCC; see the file COPYING3.  If not see
    by their mechanism.  */
 
 RVTT_REFUSAL (QSR_UNPROVEN, "qsr-unproven")
+
+RVTT_REFUSAL (INT_NOT_CC_MODE_UNSUPPORTED, "int-not-cc-mode-unsupported")
+RVTT_REFUSAL (INT_NOT_OPERAND_FORM, "int-not-operand-form")
+RVTT_REFUSAL (INT_NOT_TARGET_UNPROVEN, "int-not-target-unproven")

@@ -22,6 +22,8 @@
 INSERT_PASS_BEFORE (pass_all_optimizations, 1, pass_rvtt_check_early);
 INSERT_PASS_BEFORE (pass_all_optimizations, 1, pass_rvtt_immvar_expand);
 INSERT_PASS_BEFORE (pass_all_optimizations, 1, pass_rvtt_synth_split);
+/* Fold all-ones subtracts while the calls still have SSA operands.  */
+INSERT_PASS_BEFORE (pass_all_optimizations, 1, pass_rvtt_int_not);
 
 // Insert the bulk of these just before rtl expansion
 INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_check_late);

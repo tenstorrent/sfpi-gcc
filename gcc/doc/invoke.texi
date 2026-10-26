@@ -1288,6 +1288,7 @@ See RS/6000 and PowerPC Options.
 -minline-strlen  -mno-inline-strlen
 -minline-strcmp  -mno-inline-strcmp
 -minline-strncmp  -mno-inline-strncmp
+-mtt-tensix-optimize-int-not
 -mtls-dialect=desc  -mtls-dialect=trad}
 
 @emph{RL78 Options} (@ref{RL78 Options})
@@ -30914,6 +30915,12 @@ LDI32 pseudo instructions.
 These command-line options are defined for RISC-V targets:
 
 @table @gcctabopt
+@opindex mtt-tensix-optimize-int-not
+@item -mtt-tensix-optimize-int-not
+Select @code{SFPNOT} for a wrapping all-ones-minus-@var{x} integer
+subtract on Wormhole and Blackhole.  The option is disabled by default.
+Subtraction forms that also update condition codes are preserved.
+
 @opindex mbranch-cost
 @item -mbranch-cost=@var{n}
 Set the cost of branches to roughly @var{n} instructions.
