@@ -91,6 +91,35 @@ emit_load (rtx_insn *insn, bool before, rtx mem)
     emit_insn_after (new_insn, insn);
 }
 
+static bool
+clobbers_p (int regno, rtx pat)
+{
+  switch (GET_CODE (pat))
+    {
+    default:
+      return false;
+
+    case PARALLEL:
+      {
+	auto &vec = XVEC (pat, 0);
+	for (unsigned ix = GET_NUM_ELEM (vec); ix--;)
+	  if (clobbers_p (regno, RTVEC_ELT (vec, ix)))
+	    return true;
+      }
+      return false;
+
+    case CLOBBER:
+      pat = XEXP (pat, 0);
+      break;
+
+    case SET:
+      pat = SET_DEST (pat);
+      break;
+    }
+
+  return refers_to_regno_p (regno, pat);
+}
+
 // WH has a read after write hazard bug where loading a word after a byte or
 // half store issues the load before the store.  The bug is in the address
 // comparator logic and it’s 32bits wide. if addresses match, RAW hazard will
@@ -139,8 +168,7 @@ workaround_raw (function *cfn)
 	  else if (new_store
 		   || GET_CODE (insn) == CALL_INSN
 		   || load_mem_p (insn_pat)
-		   || (GET_CODE (insn_pat) == SET
-		       && refers_to_regno_p (store_ptr_regno, SET_DEST (insn_pat))))
+		   || clobbers_p (store_ptr_regno, insn_pat))
 	    {
 	      // Emit the war when we hit a load or if the base reg gets modified
 	      DUMP("emitting raw war before load\n");
