@@ -850,10 +850,10 @@ expand_cmp (gimple_stmt_iterator *left, gimple_stmt_iterator *right,
   We can apply De Morgan's here quite simply, which we do to avoid negations.
 
   Type   WH    BH   QSR   TRI
-  Float fsub  >,<=  >,<=  >,<=
-  SMag   -    >,<=  >,<=  >,<=
-  Int   isub  isub  >,<=  >,<=
   UInt  isub  isub  isub  >,<=
+  Int   isub  isub  >,<=  >,<=
+  SMag   -    >,<=  >,<=  >,<=
+  Float fsub  >,<=  >,<=  >,<=
   */
 
   // uint<int<smag<float
@@ -863,8 +863,17 @@ expand_cmp (gimple_stmt_iterator *left, gimple_stmt_iterator *right,
 	  && ((op | (SFPXCMP_MOD1_CC_NE ^ SFPXCMP_MOD1_CC_EQ)) == SFPXCMP_MOD1_CC_NE
 	      || !(flags & EF_nearby))))
     negated = expand_cmp_using_gtle (right, cmp, args, op, type);
-  else
+  else if (type != SFPXCMP_MOD1_TYPE_SMAG
+	   || ((op | (SFPXCMP_MOD1_CC_NE ^ SFPXCMP_MOD1_CC_EQ)) == SFPXCMP_MOD1_CC_NE))
     negated = expand_cmp_using_sub (right, cmp, args, op, type);
+  else
+    {
+      // Users just love peeking under the covers.
+      static const char *const types[] = {"vUInt", "vInt", "vSMag", "vFloat"};
+      static const char *const ops[] = {"<", ">=", "==", "!=", ">", "<="};
+      error_at (gimple_location (cmp), "comparison %<%s %s %s%> is not supported",
+		types[type], ops[op], types[type]);
+    }
 
   return negated;
 }
