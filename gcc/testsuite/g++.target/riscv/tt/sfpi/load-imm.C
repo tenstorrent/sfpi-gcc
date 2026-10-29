@@ -123,7 +123,7 @@ void four ()
 **	# READ L0
 **	SFPLOADI	L1, 65535, 2
 **	SFPLOADI	L1, 32767, 8	# LV:L1
-**	TTREPLAY	4 >> 10, 4 & 0x3ff, 1, 1
+**	TTREPLAY	0, 4, 1, 1
 **	SFPIADD	L1, L0, 0, 2
 **	SFPMOV	L0, L9, 0	# LV:L0
 **	SFPMOV	L1, L0, 2
@@ -131,7 +131,7 @@ void four ()
 **	# WRITE L1
 **	# READ L0
 **	SFPLOADI	L1, 32768, 0
-**	TTREPLAY	4 >> 10, 4 & 0x3ff, 0, 0
+**	TTREPLAY	0, 4, 0, 0
 **	# WRITE L1
 **	ret
 */
