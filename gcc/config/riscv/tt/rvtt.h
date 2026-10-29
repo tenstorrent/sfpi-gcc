@@ -96,10 +96,12 @@ public:
       MOD_shift = 0,
       MOD_bits = 16,
       BITS_shift = 0,
-      BITS_bits = 8,
+      BITS_bits = 5,
       ENCODE_shift = BITS_shift + BITS_bits,
-      ENCODE_bits = 8,
-      ENC_shift = ENCODE_shift + ENCODE_bits,
+      ENCODE_bits = 5,
+      BIAS_shift = ENCODE_shift + ENCODE_bits,
+      BIAS_bits = 5,
+      ENC_shift = BIAS_shift + BIAS_bits,
 
       KIND_shift = MOD_shift + MOD_bits,
       KIND_bits = 8,
@@ -112,8 +114,8 @@ public:
     static_assert (HWM_shift <= 32);
 
   public:
-    constexpr op_t (kind_t kind_and_check = NONE, unsigned bits_or_mask = 0, unsigned encode = 0)
-      : enc (bits_or_mask | encode << ENCODE_shift | kind_and_check << KIND_shift)
+    constexpr op_t (kind_t kind_and_check = NONE, unsigned bits_or_mask = 0, unsigned encode = 0, unsigned bias = 0)
+      : enc (bits_or_mask | encode << ENCODE_shift | bias << BIAS_shift | kind_and_check << KIND_shift)
     {}
 
     static kind_t early (kind_t kind) { return kind_t (kind | EARLY | CHECKED); }
@@ -129,6 +131,7 @@ public:
     unsigned mod () const { return (enc >> MOD_shift) & ((1u << MOD_bits) - 1u); }
     unsigned bits () const { return (enc >> BITS_shift) & ((1u << BITS_bits) - 1u); }
     unsigned encode () const { return (enc >> ENCODE_shift) & ((1u << ENCODE_bits) - 1u); }
+    unsigned bias () const { return (enc >> BIAS_shift) & ((1u << BIAS_bits) - 1u); }
 
     int argno () const { return (enc >> ARGNO_shift) & ((1u << ARGNO_bits) - 1u); }
 
@@ -141,7 +144,7 @@ public:
   // defining macros, and then use that as an argument to a ctor.
   class ops_t
   {
-    op_t ops[6];
+    op_t ops[8];
 
   public:
     // This is so we can use parens in the builtin definitions We deliberately
@@ -152,7 +155,8 @@ public:
 		     op_t c = op_t (),
 		     op_t d = op_t (),
 		     op_t e = op_t (),
-		     op_t f = op_t ())
+		     op_t f = op_t (),
+		     op_t g = op_t ())
     {
       ops[0] = a;
       ops[1] = b;
@@ -160,6 +164,7 @@ public:
       ops[3] = d;
       ops[4] = e;
       ops[5] = f;
+      ops[6] = g;
     }
     ops_t (const ops_t &) = default;
 
@@ -264,7 +269,7 @@ public:
   int src_arg () const { return src_pos; }
 
   unsigned imm_bits () const {
-    return ops[0].bits ();
+    return ops[0].bits () + bool (ops[0].bias ());
   }
   unsigned imm_encode () const { return ops[0].encode (); }
 

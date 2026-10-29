@@ -59,6 +59,8 @@ along with GCC; see the file COPYING3.  If not see
   RISCV_##A##_FTYPE_##B##_##C##_##D##_##E##_##F##_##G##_##H
 #define RISCV_FTYPE_NAME8(A, B, C, D, E, F, G, H, I) \
   RISCV_##A##_FTYPE_##B##_##C##_##D##_##E##_##F##_##G##_##H##_##I
+#define RISCV_FTYPE_NAME9(A, B, C, D, E, F, G, H, I, J)			\
+  RISCV_##A##_FTYPE_##B##_##C##_##D##_##E##_##F##_##G##_##H##_##I##_##J
 
 /* Classifies the prototype of a built-in function.  */
 enum riscv_function_type {
@@ -218,6 +220,10 @@ AVAIL (roccqsr, TARGET_XTT_ROCC_QSR)
   RISCV_ATYPE_##A, RISCV_ATYPE_##B, RISCV_ATYPE_##C, RISCV_ATYPE_##D, \
   RISCV_ATYPE_##E, RISCV_ATYPE_##F, RISCV_ATYPE_##G, RISCV_ATYPE_##H, \
   RISCV_ATYPE_##I
+#define RISCV_FTYPE_ATYPES9(A, B, C, D, E, F, G, H, I, J)		      \
+  RISCV_ATYPE_##A, RISCV_ATYPE_##B, RISCV_ATYPE_##C, RISCV_ATYPE_##D, \
+  RISCV_ATYPE_##E, RISCV_ATYPE_##F, RISCV_ATYPE_##G, RISCV_ATYPE_##H, \
+  RISCV_ATYPE_##I, RISCV_ATYPE_##J
 
 static struct riscv_builtin_description riscv_builtins[] = {
   #include "riscv-cmo.def"

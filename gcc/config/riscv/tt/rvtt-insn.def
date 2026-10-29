@@ -57,15 +57,15 @@ along with GCC; see the file COPYING3.  If not see
 // Args are (NAME, ISA, _SFX, TYPE, FLAGS, OPS, ECF)
 
 // This is first
-RVTT_FN (synth_opcode,       ,,USI_FTYPE_USI_USI,                                            0, ({U,32},{U,32}), ECF | ECF_CONST)
+RVTT_FN (synth_opcode,       ,,USI_FTYPE_USI_USI,                                            0, ({U,0},{U,0}), ECF | ECF_CONST)
 RVTT_FN (lreg_pressure,      ,,VOID_FTYPE_USI,                                               VOL|EMP, ({U,1}), ECF)
 
 // These builtins are expanded to something else during compilation
 RVTT_FN (sfpxlogic,          ,,USI_FTYPE_USI_USI_USI,                                        VOL, ({XM,0xf},{R},{R}), ECF)
 RVTT_FN (sfpxpred,           ,,USI_FTYPE_USI_USI,                                            VOL|EMP, ({XM,0xb7},{R}), ECF)
 RVTT_FN (sfpxcond,           ,,USI_FTYPE_USI_USI_USI,                                        VOL, ({XM,0x1},{R},{R}), ECF)
-RVTT_FN (sfpxcmp,            ,,USI_FTYPE_XTT_VEC_XTT_VEC_USI,                                CC(), ({XM,0x3f}), ECF)
-RVTT_FN (sfpxloadi,          ,,XTT_VEC_FTYPE_XTT_IPTR_USI_USI_USI_SI,                        0, ({E,32},{ES,6,0}), ECF)
+RVTT_FN (sfpxcmp,            ,,USI_FTYPE_XTT_VEC_XTT_VEC_USI,                                CC(), ({XM,0x3f},{}), ECF)
+RVTT_FN (sfpxloadi,          ,,XTT_VEC_FTYPE_XTT_IPTR_USI_USI_USI_SI,                        0, ({E,0},{ES,6,0}), ECF)
 
 // If you're putting in nops, you want them preserved, so say it's volatile
 RVTT_FN (sfpnop,             ,,VOID_FTYPE,                                                   VOL, (), ECF)
@@ -159,8 +159,8 @@ RVTT_OVR(sfpstore,          qsr,,VOID_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI_USI
 RVTT_FN (sfpstoresrcs,      qsr,,VOID_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI_USI_USI,        VOL, ({CE,10},{M,0xcfff},{CU,3},{CU,1}), ECF)
 
 // Not all mod values are commutative -- might be a subtract
-RVTT_FN (sfpiadd_v,            ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,                          EXP|CC(0x505), ({M,0x555}), ECF)
-RVTT_FN (sfpiadd_v_lv,         ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_USI,                  EXP|LV|CC(0x505), ({M,0x555}), ECF)
+RVTT_FN (sfpiadd_v,            ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,                          EXP|CC(0x505), ({M,0x555},{}), ECF)
+RVTT_FN (sfpiadd_v_lv,         ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_USI,                  EXP|LV|CC(0x505), ({M,0x555},{}), ECF)
 RVTT_FN (sfpiadd_i,            ,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI,             EXP|CC(0x101), ({S,12,12},{M,0x111}), ECF)
 RVTT_FN (sfpiadd_i_lv,         ,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_XTT_VEC_USI_USI_USI_USI,     EXP|LV|CC(0x101), ({S,12,12},{M,0x111}), ECF)
 
@@ -178,16 +178,16 @@ RVTT_OVR(sfpadd_lv,      bh_qsr,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_USI,     
 RVTT_FN (sfpaddi,              ,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI,             0, ({U,16,8},{M,0x1}), ECF)
 RVTT_FN (sfpaddi_lv,           ,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_XTT_VEC_USI_USI_USI_USI,     LV, ({U,16,8},{M,0x1}), ECF)
 
-RVTT_FN (sfpsetexp_v,          ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,                          0, ({M,0x5}), ECF)
-RVTT_FN (sfpsetexp_v_lv,       ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_USI,                  LV, ({M,0x5}), ECF)
+RVTT_FN (sfpsetexp_v,          ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,                          0, ({M,0x5},{}), ECF)
+RVTT_FN (sfpsetexp_v_lv,       ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_USI,                  LV, ({M,0x5},{}), ECF)
 RVTT_FN (sfpsetexp_i,          ,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI,             0, ({U,8,12},{M,0x1}), ECF)
 RVTT_FN (sfpsetexp_i_lv,       ,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_XTT_VEC_USI_USI_USI_USI,     LV, ({U,8,12},{M,0x1}), ECF)
-RVTT_FN (sfpsetman_v,          ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,                          EXP, ({M,0x1}), ECF)
-RVTT_FN (sfpsetman_v_lv,       ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_USI,                  EXP|LV, ({M,0x1}), ECF)
+RVTT_FN (sfpsetman_v,          ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,                          EXP, ({M,0x1},{}), ECF)
+RVTT_FN (sfpsetman_v_lv,       ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_USI,                  EXP|LV, ({M,0x1},{}), ECF)
 RVTT_FN (sfpsetman_i,          ,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI,             EXP, ({U,12,12},{M,0x1}), ECF)
 RVTT_FN (sfpsetman_i_lv,       ,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_XTT_VEC_USI_USI_USI_USI,     EXP|LV, ({U,12,12},{M,0x1}), ECF)
-RVTT_FN (sfpsetsgn_v,          ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,                          0, ({M,0x1}), ECF)
-RVTT_FN (sfpsetsgn_v_lv,       ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_USI,                  LV, ({M,0x1}), ECF)
+RVTT_FN (sfpsetsgn_v,          ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,                          0, ({M,0x1},{}), ECF)
+RVTT_FN (sfpsetsgn_v_lv,       ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_USI,                  LV, ({M,0x1},{}), ECF)
 RVTT_FN (sfpsetsgn_i,          ,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI,             0, ({U,1,12},{M,0x1}), ECF)
 RVTT_FN (sfpsetsgn_i_lv,       ,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_XTT_VEC_USI_USI_USI_USI,     LV, ({U,1,12},{M,0x1}), ECF)
 
@@ -241,11 +241,10 @@ RVTT_FN (sfpnonlinear,      qsr,,XTT_VEC_FTYPE_XTT_VEC_USI,                     
 RVTT_FN (sfpnonlinear_lv,   qsr,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,                          LV, ({M,0x3f}), ECF)
 
 // Last 3 parms are CC-behavior, dstlregmask, srclregmask, for future use
-RVTT_FN (ttinsn,               ,,VOID_FTYPE_XTT_IPTR_USI_USI_USI_USI,                        VOL, ({R},{M,0xf},{CU,16},{CU,16}), ECF)
+RVTT_FN (ttinsn,               ,,VOID_FTYPE_XTT_IPTR_USI_USI_USI_USI,                        VOL, ({R}, {M, 0xf}, {CU, 16}, {CU, 16}), ECF)
 
-// start & length are merged as one or both may be dynamic.  Range checking is specially handled
-RVTT_FN (ttreplay,             ,,VOID_FTYPE_XTT_IPTR_USI_USI_USI_USI_USI,                    VOL, ({CU,20,4},{CU,1},{CU,1}), ECF)
-RVTT_OVR(ttreplay,      qsr,_qsr,VOID_FTYPE_XTT_IPTR_USI_USI_USI_USI_USI_USI_USI,            VOL, ({CU,20,4},{CU,1},{CU,1},{CU,1},{CU,1}), ECF)
+RVTT_FN (ttreplay,             ,,VOID_FTYPE_XTT_IPTR_USI_USI_USI_USI_USI_USI,                VOL, ({CU,5,4,1},{CU,5},{CU,1},{CU,1}), ECF)
+RVTT_OVR(ttreplay,      qsr,_qsr,VOID_FTYPE_XTT_IPTR_USI_USI_USI_USI_USI_USI_USI_USI,        VOL, ({CU,5,4,1},{CU,5},{CU,1},{CU,1},{CU,1},{CU,1}), ECF)
 
 RVTT_FN (ttincrwc,             ,,VOID_FTYPE_SI_SI_SI_SI,                                     VOL, ({CS,6},{CS,4},{CS,4},{CS,4}), ECF)
 
