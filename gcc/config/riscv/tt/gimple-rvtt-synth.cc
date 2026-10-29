@@ -442,11 +442,13 @@ struct synth
     USE_HasManyAdds = 0x800,
   };
 
+  static constexpr auto SPACES = "               ";
+
   synth (gimple *stmt)
     : stmt (stmt) {}
 
-  unsigned build (nodes_t &nodes, unsigned id, unsigned depth = 0, bool seen_var_add = false) {
-#define SPACES "               "
+  unsigned build (nodes_t &nodes, unsigned id, unsigned depth = 0, bool seen_var_add = false)
+  {
     imm_use_iterator iter;
     use_operand_p use_p;
     auto ssa_var = gimple_get_lhs (stmt);
@@ -532,10 +534,12 @@ struct synth
     return use_flags & ~USE_ChildMask;
   }
 
-  void renumber (unsigned id, unsigned &id_hwm, uint32_t addend = 0, synth const *val_node = nullptr) const
+  // Renumber the chain beginning here.
+  void renumber (unsigned id, unsigned &id_hwm, unsigned depth = 0,
+		 uint32_t addend = 0, synth const *val_node = nullptr) const
   {
     if (sib)
-      sib->renumber (id, id_hwm, addend, val_node);
+      sib->renumber (id, id_hwm, depth, addend, val_node);
 
     if (use_flags & (USE_IsFinal | USE_IsUnfollowable))
       return;
@@ -571,7 +575,7 @@ struct synth
 	gsi_insert_after (&gsi, new_call, GSI_NEW_STMT);
 	if (dump_file)
 	  {
-	    fprintf (dump_file, "Creating new ");
+	    fprintf (dump_file, "%u:%.*sCreating new ", id, depth * 2, SPACES);
 	    print_gimple_stmt (dump_file, new_call, 0);
 	  }
 
@@ -586,7 +590,7 @@ struct synth
 	    gsi_insert_after (&gsi, new_add, GSI_NEW_STMT);
 	    if (dump_file)
 	      {
-		fprintf (dump_file, "Cloning val add ");
+		fprintf (dump_file, "%u:%.*sCloning add ", id, depth * 2, SPACES);
 		print_gimple_stmt (dump_file, new_add, 0);
 	      }
 	    ssa_var = add_res;
@@ -601,14 +605,39 @@ struct synth
 	      update_stmt (final->stmt);
 	      if (dump_file)
 		{
-		  fprintf (dump_file, "Updating use ");
+		  fprintf (dump_file, "%u:%.*sUpdating use ", id, depth * 2, SPACES);
 		  print_gimple_stmt (dump_file, final->stmt, 0);
 		}
 	    }
       }
 
     if (use_flags & USE_HasFinal)
-      child->renumber (id, id_hwm, addend, val_node);
+      child->renumber (id, id_hwm, depth + 1, addend, val_node);
+  }
+
+  // Delete insns that are no longer needed
+  void cleanup (unsigned id, unsigned depth = 0) const
+  {
+    if (sib)
+      sib->cleanup (id, depth);
+
+    if (child)
+      child->cleanup (id, depth + 1);
+
+    if (use_flags & (USE_IsFinal | USE_IsUnfollowable))
+      return;
+
+    if (has_zero_uses (gimple_get_lhs (stmt)))
+      {
+	if (dump_file)
+	  {
+	    fprintf (dump_file, "%u:%.*sDeleting ", id, depth * 2, SPACES);
+	    print_gimple_stmt (dump_file, stmt, 0);
+	  }
+	auto gsi = gsi_for_stmt (stmt);
+	unlink_stmt_vdef (stmt);
+	gsi_remove (&gsi, true);
+      }
   }
 };
 }
@@ -660,6 +689,7 @@ renumber (function *fn)
 	}
 
       root->renumber (id, id_hwm);
+      root->cleanup (id);
       renumbered = true;
     }
 
