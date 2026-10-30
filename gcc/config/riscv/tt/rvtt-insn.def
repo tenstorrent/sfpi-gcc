@@ -73,6 +73,9 @@ RVTT_FN (sfpbankdone,     qsr,,VOID_FTYPE_USI_USI_USI,                          
 
 RVTT_FN (sfpreadlreg,        ,,XTT_VEC_FTYPE_USI,                                            EMP, ({CU,4}), ECF)
 RVTT_FN (sfpwritelreg,       ,,VOID_FTYPE_XTT_VEC_USI,                                       VOL|EMP, ({CU,3}), ECF)
+// Metadata only; retain the volatile, non-const hardware-state boundary.
+RVTT_FN (sfprawlreg_access,  ,,VOID_FTYPE_USI_USI,                                           VOL, ({CU,8},{CU,8}), ECF)
+RVTT_FN (sfprawlreg_effect,  ,,VOID_FTYPE_USI_USI,                                           VOL, ({R},{R}), ECF)
 
 RVTT_FN (sfpnovalue,         ,,XTT_VEC_FTYPE,                                                0, (), ECF)
 RVTT_FN (sfpselect2,         ,,XTT_VEC_FTYPE_XTT_VEC2_USI,                                   0, ({CU,1}), ECF)
