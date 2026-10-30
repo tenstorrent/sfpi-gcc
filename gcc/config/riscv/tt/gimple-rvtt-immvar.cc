@@ -223,7 +223,7 @@ immvar_expand (gimple_stmt_iterator &gsi, const rvtt_insn_data *insnd, gcall *ca
 
 static bool
 immvar_gather (const rvtt_insn_data *insnd,
-	       gcall *call, std::vector<gcall *> &loads)
+	       gcall *call, std::vector<gcall *> *loads)
 {
   if (!insnd->has_iptr ())
     return false;
@@ -231,7 +231,7 @@ immvar_gather (const rvtt_insn_data *insnd,
   tree imm = gimple_call_arg (call, insnd->imm_arg ());
   if (SSA_VAR_P (imm))
     {
-      if (integer_zerop (gimple_call_arg (call, 0)))
+      if (loads && integer_zerop (gimple_call_arg (call, 0)))
 	error_at (gimple_location (call), "%qE immediate operand is not known at compile time",
 		  gimple_call_fndecl (call));
 
@@ -256,9 +256,9 @@ immvar_gather (const rvtt_insn_data *insnd,
       changed = true;
     }
 
-  if (insnd->id == rvtt_insn_data::sfploadi)
+  if (loads && insnd->id == rvtt_insn_data::sfploadi)
     // We've not done LV optimizing yet, so we don't have to capture sfploadi_lv
-    loads.push_back (call);
+    loads->push_back (call);
 
   return changed;
 }
@@ -801,12 +801,52 @@ public:
       for (gimple_stmt_iterator gsi = gsi_start_bb (bb);
 	   !gsi_end_p (gsi); gsi_next (&gsi))
 	if (auto *insnd = rvtt_get_insn_data (*gsi))
-	  if (immvar_gather (insnd, as_a <gcall *> (*gsi), loads))
+	  if (immvar_gather (insnd, as_a <gcall *> (*gsi), &loads))
 	    changed = true;
 
     for (auto *call : loads)
       if (immvar_simplify (call, uppers))
 	changed = true;
+
+    return changed ? TODO_update_ssa : 0;
+  }
+};
+
+const pass_data pass_data_rvtt_iptr_anull =
+{
+  GIMPLE_PASS, /* type */
+  "rvtt_iptr_anull", /* name */
+  OPTGROUP_NONE, /* optinfo_flags */
+  TV_NONE, /* tv_id */
+  PROP_ssa, /* properties_required */
+  0, /* properties_provided */
+  0, /* properties_destroyed */
+  0, /* todo_flags_start */
+  0, /* todo_flags_finish */
+};
+
+class pass_rvtt_iptr_anull : public gimple_opt_pass
+{
+public:
+  pass_rvtt_iptr_anull (gcc::context *ctxt)
+    : gimple_opt_pass (pass_data_rvtt_iptr_anull, ctxt)
+  {}
+
+  virtual bool gate (function *) override
+  {
+    return TARGET_XTT_TENSIX;
+  }
+  virtual unsigned execute (function *fn) override
+  {
+    bool changed = false;
+    basic_block bb;
+
+    FOR_EACH_BB_FN (bb, fn)
+      for (gimple_stmt_iterator gsi = gsi_start_bb (bb);
+	   !gsi_end_p (gsi); gsi_next (&gsi))
+	if (auto *insnd = rvtt_get_insn_data (*gsi))
+	  if (immvar_gather (insnd, as_a <gcall *> (*gsi), nullptr))
+	    changed = true;
 
     return changed ? TODO_update_ssa : 0;
   }
@@ -818,6 +858,12 @@ gimple_opt_pass *
 make_pass_rvtt_immload_shorten (gcc::context *ctxt)
 {
   return new pass_rvtt_immload_shorten (ctxt);
+}
+
+gimple_opt_pass *
+make_pass_rvtt_iptr_anull (gcc::context *ctxt)
+{
+  return new pass_rvtt_iptr_anull (ctxt);
 }
 
 namespace {

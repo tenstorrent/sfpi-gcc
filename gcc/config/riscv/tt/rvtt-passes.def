@@ -23,6 +23,8 @@ INSERT_PASS_BEFORE (pass_all_optimizations, 1, pass_rvtt_check_early);
 INSERT_PASS_BEFORE (pass_all_optimizations, 1, pass_rvtt_immvar_expand);
 INSERT_PASS_BEFORE (pass_all_optimizations, 1, pass_rvtt_synth_split);
 
+INSERT_PASS_BEFORE (pass_dse, 2, pass_rvtt_iptr_anull);
+
 // Insert the bulk of these just before rtl expansion
 INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_check_late);
 INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_immload_shorten);
