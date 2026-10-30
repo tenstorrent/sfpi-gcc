@@ -31,6 +31,8 @@ INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_synth_cse);
 INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_dce);
 INSERT_PASS_BEFORE (pass_expand, 1, pass_dce);
 INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_synth_renumber);
+/* Cancel representation webs after canonicalization, before structured CC lowering. */
+INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_reprprop);
 INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_vif);
 INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_immload_combine);
 INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_live);
