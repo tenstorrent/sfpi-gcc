@@ -39,7 +39,7 @@ void f3(int s) {
 **	lw	a4,%lo\(_ZN7ckernel13instrn_bufferE\)\(a4\)
 **	li	a5, 2046820369	# 1:7a000011
 **	add	a0,a0,a5
-**	sw	a0, 0\(a4\)	# 1:SFPSHFT	L1, L0, a0, 1
+**	sw	a0, 0\(a4\)	# 1:SFPSHFT	L1, L0, -, 1
 **	SFPMOV	L3, L1, 2
 **	# WRITE L3
 **	ret

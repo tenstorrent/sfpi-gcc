@@ -271,7 +271,7 @@ void loadimul1 (unsigned v) {
 **	srli	a0,a0,8
 **	add	a0,a0,a5
 **	lui	a5,%hi\(iptr\)
-**	sw	a0, %lo\(iptr\)\(a5\)	# 1:SFPMULI	L0, a0, 0
+**	sw	a0, %lo\(iptr\)\(a5\)	# 1:SFPMULI	L0, -, 0
 **	SFPMOV	L1, L0, 2
 **	# WRITE L1
 **	ret
@@ -291,7 +291,7 @@ void loadimul1a (unsigned v) {
 **	li	a5, 1897922560	# 1:71200000
 **	add	a0,a0,a5
 **	lui	a5,%hi\(iptr\)
-**	sw	a0, %lo\(iptr\)\(a5\)	# 1:SFPLOADI	L2, a0, 0
+**	sw	a0, %lo\(iptr\)\(a5\)	# 1:SFPLOADI	L2, -, 0
 **	SFPMUL	L1, L0, L2, 0
 **	# WRITE L1
 **	# WRITE L2
@@ -317,10 +317,10 @@ void loadimul1b (unsigned v) {
 **	lui	a5,%hi\(iptr\)
 **	add	a0,a0,a4
 **	addi	a5,a5,%lo\(iptr\)
-**	sw	a0, 0\(a5\)	# 1:SFPMULI	L0, a0, 0
+**	sw	a0, 0\(a5\)	# 1:SFPMULI	L0, -, 0
 **	li	a4,16
 **	xor	a4,a4,a0
-**	sw	a4, 0\(a5\)	# 1:SFPMULI	L1, a4, 0
+**	sw	a4, 0\(a5\)	# 1:SFPMULI	L1, -, 0
 **	# WRITE L0
 **	# WRITE L1
 **	ret
@@ -345,12 +345,12 @@ void loadimul2 (unsigned v) {
 **	add	a0,a0,a5
 **	lui	a5,%hi\(iptr\)
 **	addi	a5,a5,%lo\(iptr\)
-**	sw	a0, 0\(a5\)	# 1:SFPLOADI	L1, a0, 0
+**	sw	a0, 0\(a5\)	# 1:SFPLOADI	L1, -, 0
 **	SFPMUL	L1, L0, L1, 0
 **	# WRITE L1
 **	li	a4,3145728
 **	xor	a4,a4,a0
-**	sw	a4, 0\(a5\)	# 1:SFPLOADI	L2, a4, 0
+**	sw	a4, 0\(a5\)	# 1:SFPLOADI	L2, -, 0
 **	# WRITE L2
 **	ret
 */

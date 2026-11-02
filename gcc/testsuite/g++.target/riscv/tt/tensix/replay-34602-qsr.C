@@ -221,7 +221,7 @@ void six (unsigned bits)
 **	TTREPLAY	0, 5, 0, 0, 0, 1
 **	SFPLOAD	L0, 0, 0, 0, 0, 0
 **	SFPMUL	L0, L0, L0, 0
-**	sw	a3, 0\(a4\)	# 1:SFPSHFT	L0, L0, a3, 5
+**	sw	a3, 0\(a4\)	# 1:SFPSHFT	L0, L0, -, 5
 **	SFPADD	L0, L0, L0, 0
 **	SFPSTORE	L0, 0, 0, 0, 0, 0
 **	TTREPLAY	0, 5, 0, 0, 0, 0

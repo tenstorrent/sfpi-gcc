@@ -30,6 +30,6 @@ void frob (int i) {
 **	andi	a0,a0,1023
 **	add	a0,a0,a5
 **	lui	a5,%hi\(_ZN7ckernel13instrn_bufferE\)
-**	sw	a0, %lo\(_ZN7ckernel13instrn_bufferE\)\(a5\)	# 1:SFPSTORE	L0, a0, 0, 7, 0, 0
+**	sw	a0, %lo\(_ZN7ckernel13instrn_bufferE\)\(a5\)	# 1:SFPSTORE	L0, -, 0, 7, 0, 0
 **	ret
 */

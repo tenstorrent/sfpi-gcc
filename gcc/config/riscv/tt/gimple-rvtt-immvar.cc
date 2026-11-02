@@ -807,7 +807,6 @@ public:
   {
     // (a) remove var and id from now-constant immvals
     // (b) optimize sfploadi{,_lv} sequences
-    basic_block bb;
     std::vector<gcall *> loads;
     std::vector<gcall *> uppers;
 

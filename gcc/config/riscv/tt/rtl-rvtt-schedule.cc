@@ -229,12 +229,13 @@ handle_qsr_load_latency (std::vector<basic_block> &visited, basic_block bb, rtx_
 	  // in non-ssa form.
 	  auto store = XVECEXP (PATTERN (probe), 0, 0);
 	  if (const0_rtx != XVECEXP (store, 0, rvtt_synth::IX_mem))
+	    // Dynamic
 	    return;
-	  if (INTVAL (XVECEXP (store, 0, rvtt_synth::IX_insn))
-	      != INTVAL (addr))
+
+	  if (INTVAL (XVECEXP (store, 0, rvtt_synth::IX_src + 1)) != INTVAL (addr))
 	    // Addresses are different -- do we need to worry about halves?
 	    return;
-	  if (INTVAL (XVECEXP (store, 0, rvtt_synth::IX_src + 2)) != SFPLOADSTORE_ADDR_MODE_NOINC)
+	  if (INTVAL (XVECEXP (store, 0, rvtt_synth::IX_src + 3)) != SFPLOADSTORE_ADDR_MODE_NOINC)
 	    // Store addr_mod is side-effecting
 	    return;
 
@@ -309,7 +310,7 @@ transform (function *fn)
 		  auto src = SET_SRC (XVECEXP (PATTERN (insn), 0, 0));
 		  if (const0_rtx == XVECEXP (src, 0, rvtt_synth::IX_mem))
 		    {
-		      auto addr = XVECEXP (src, 0, rvtt_synth::IX_insn);
+		      auto addr = XVECEXP (src, 0, rvtt_synth::IX_src + 2);
 		      handle_qsr_load_latency (visited, bb, insn, addr);
 		      for (auto *bb : visited)
 			bb->flags &= ~BB_VISITED;

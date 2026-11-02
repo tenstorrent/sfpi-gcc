@@ -129,15 +129,14 @@ is_replay_insn (replay_span &span, rtx_insn *insn)
     return REPLAY_none;
 
   auto pattern = PATTERN (insn);
-  span.begin = INTVAL (XVECEXP (pattern, 0, 5));
+  span.begin = INTVAL (XVECEXP (pattern, 0, rvtt_synth::IX_src + 2));
   span.end = 0;
-  auto len = XVECEXP (pattern, 0, 3);
   auto type = REPLAY_fixed_capture;
-  if (CONST_INT_P (len))
-    span.end = INTVAL (len);
+  if (const0_rtx == XVECEXP (pattern, 0, rvtt_synth::IX_mem))
+    span.end = INTVAL (XVECEXP (pattern, 0, rvtt_synth::IX_src + 1));
   else
     type = REPLAY_variable_capture;
-  if (!INTVAL (XVECEXP (pattern, 0, 7)))
+  if (!INTVAL (XVECEXP (pattern, 0, rvtt_synth::IX_src + 4)))
     type = REPLAY_playback;
   return type;
 }
@@ -516,9 +515,8 @@ replace_sequence (replay_sequence &seq, replay_block &block, unsigned replay_sta
 
   // Cannot exec while capturing on quasar
   rtx capture = gen_rvtt_ttreplay_int
-    (const0_rtx, const0_rtx, const0_rtx, GEN_INT (length),
-     rvtt_gen_rtx_noval (XTT32SImode),
-     GEN_INT (replay_start), GEN_INT (not_quasar_fix), GEN_INT (1),
+    (const0_rtx, const0_rtx, const0_rtx, const0_rtx, rvtt_gen_rtx_noval (XTT32SImode),
+     GEN_INT (length), GEN_INT (replay_start), GEN_INT (not_quasar_fix), GEN_INT (1),
      const0_rtx, const0_rtx);
   emit_insn_before (capture, block[seq.clones.front ().begin].insn);
 
@@ -531,9 +529,8 @@ replace_sequence (replay_sequence &seq, replay_block &block, unsigned replay_sta
   for (auto clone = seq.clones.begin () + not_quasar_fix; clone != seq.clones.end (); ++clone)
     {
       rtx replay = gen_rvtt_ttreplay_int
-	(const0_rtx, const0_rtx, const0_rtx, GEN_INT (length),
-	 rvtt_gen_rtx_noval (XTT32SImode),
-	 GEN_INT (replay_start), const0_rtx, const0_rtx, const0_rtx, const0_rtx);
+	(const0_rtx, const0_rtx, const0_rtx, const0_rtx, rvtt_gen_rtx_noval (XTT32SImode),
+	 GEN_INT (length), GEN_INT (replay_start), const0_rtx, const0_rtx, const0_rtx, const0_rtx);
       auto *insn = emit_insn_after (replay, block[clone->end - 1].insn);
       if (dump_file)
 	{

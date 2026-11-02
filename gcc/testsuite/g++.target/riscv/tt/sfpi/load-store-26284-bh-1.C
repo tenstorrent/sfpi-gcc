@@ -41,7 +41,7 @@ void load_var (unsigned addr) {
 **	lw	a4,%lo\(_ZN7ckernel13instrn_bufferE\)\(a4\)
 **	srli	a0,a0,19
 **	add	a0,a0,a5
-**	sw	a0, 0\(a4\)	# 1:SFPLOAD	L3, a0, 3, 7
+**	sw	a0, 0\(a4\)	# 1:SFPLOAD	L3, -, 3, 7
 **	# WRITE L3
 **	ret
 */
@@ -80,6 +80,6 @@ void store_var (unsigned addr) {
 **	lw	a4,%lo\(_ZN7ckernel13instrn_bufferE\)\(a4\)
 **	srli	a0,a0,19
 **	add	a0,a0,a5
-**	sw	a0, 0\(a4\)	# 1:SFPSTORE	L3, a0, 3, 7
+**	sw	a0, 0\(a4\)	# 1:SFPSTORE	L3, -, 3, 7
 **	ret
 */

@@ -25,11 +25,11 @@ void one (float f) {
 **	lw	a3,%lo\(_ZN7ckernel13instrn_bufferE\)\(a3\)
 **	srli	a5,a5,16
 **	add	a5,a5,a4
-**	sw	a5, 0\(a3\)	# 1:SFPLOADI	L0, a5, 2
+**	sw	a5, 0\(a3\)	# 1:SFPLOADI	L0, -, 2
 **	srli	a0,a0,16
 **	li	a5, 1896349696	# 2:71080000
 **	add	a0,a0,a5
-**	sw	a0, 0\(a3\)	# 2:SFPLOADI	L0, a0, 8	# LV:L0
+**	sw	a0, 0\(a3\)	# 2:SFPLOADI	L0, -, 8	# LV:L0
 **	# WRITE L0
 **	SFPMOV	L1, L10, 2
 **	# WRITE L1
@@ -62,7 +62,7 @@ void two (unsigned b) {
 **	lw	a4,%lo\(_ZN7ckernel13instrn_bufferE\)\(a4\)
 **	srli	a0,a0,16
 **	add	a0,a0,a5
-**	sw	a0, 0\(a4\)	# 1:SFPLOADI	L0, a0, 0
+**	sw	a0, 0\(a4\)	# 1:SFPLOADI	L0, -, 0
 **	# WRITE L0
 **	SFPMOV	L1, L10, 2
 **	# WRITE L1

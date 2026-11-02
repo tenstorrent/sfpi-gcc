@@ -59,3 +59,7 @@
 (define_predicate "nonimmediate_or_cstlreg_operand"
   (ior (match_operand 0 "nonimmediate_operand")
        (match_operand 0 "cstlreg_operand")))
+
+(define_predicate "const_int_or_noval_operand"
+  (ior (match_operand 0 "const_int_operand")
+       (match_operand 0 "noval_operand")))

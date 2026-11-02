@@ -7307,11 +7307,20 @@ riscv_print_operand (FILE *file, rtx op, int letter)
       break;
 
     case 'x':
-      if (code == UNSPEC && XINT (op, 1) == UNSPEC_SFPCSTLREG)
+      if (code == UNSPEC)
 	{
-	  rtx cst = XVECEXP (op, 0, 0);
-	  fprintf(file, "L%d", int(INTVAL (cst)));
-	  break;
+	  auto subcode = XINT (op, 1);
+	  if (subcode == UNSPEC_SFPCSTLREG)
+	    {
+	      rtx cst = XVECEXP (op, 0, 0);
+	      fprintf(file, "L%d", int (INTVAL (cst)));
+	      break;
+	    }
+	  if (subcode == UNSPEC_SFPNOVAL)
+	    {
+	      fprintf(file, "-");
+	      break;
+	    }
 	}
       letter = 0;
       //FALLTHROUGH

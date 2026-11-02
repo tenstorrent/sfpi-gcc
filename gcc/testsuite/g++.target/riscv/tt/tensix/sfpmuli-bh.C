@@ -66,7 +66,7 @@ void toto (unsigned j)
 **	lw	a4,%lo\(ptr\)\(a4\)
 **	srli	a0,a0,8
 **	add	a0,a0,a5
-**	sw	a0, 0\(a4\)	# 1:SFPMULI	L0, a0, 0
+**	sw	a0, 0\(a4\)	# 1:SFPMULI	L0, -, 0
 **	SFPSTORE	L0, 0, 0, 0
 **	ret
 */

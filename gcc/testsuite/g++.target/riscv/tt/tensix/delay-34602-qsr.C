@@ -46,7 +46,7 @@ void one (unsigned i) {
 **	li	a5, 1946157056	# 1:74000000
 **	add	a0,a0,a5
 **	lui	a5,%hi\(iptr\)
-**	sw	a0, %lo\(iptr\)\(a5\)	# 1:SFPMULI	L0, a0, 0
+**	sw	a0, %lo\(iptr\)\(a5\)	# 1:SFPMULI	L0, -, 0
 **	SFPSTORE	L0, 0, 0, 0, 0, 0
 **	ret
 */
@@ -67,7 +67,7 @@ void two (unsigned i) {
 **	li	a5, 1946157072	# 1:74000010
 **	add	a0,a0,a5
 **	lui	a5,%hi\(iptr\)
-**	sw	a0, %lo\(iptr\)\(a5\)	# 1:SFPMULI	L1, a0, 0
+**	sw	a0, %lo\(iptr\)\(a5\)	# 1:SFPMULI	L1, -, 0
 **	SFPSTORE	L0, 0, 0, 0, 0, 0
 **	ret
 */

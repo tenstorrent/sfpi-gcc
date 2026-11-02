@@ -46,7 +46,7 @@ class rvtt_synth
     IX_mem,     // Memory operand (or zero)
     IX_opcode,  // Opcode (or zero)
     IX_encode,  // Encoded ID & src/dst shifts (or zero)
-    IX_insn,    // Instruction or immediate
+    IX_insn,    // Instruction (or zero)
     IX_src,     // Src value (or noval)
     IX_lv,      // Live value (if inside SET)
   };

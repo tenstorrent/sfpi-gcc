@@ -72,11 +72,11 @@ void addi (unsigned val) {
 **	add	a4,a4,a5
 **	lui	a5,%hi\(iptr\)
 **	addi	a5,a5,%lo\(iptr\)
-**	sw	a4, 0\(a5\)	# 1:SFPLOADI	L1, a4, 2
+**	sw	a4, 0\(a5\)	# 1:SFPLOADI	L1, -, 2
 **	srli	a0,a0,16
 **	li	a4, 1897398272	# 2:71180000
 **	add	a0,a0,a4
-**	sw	a0, 0\(a5\)	# 2:SFPLOADI	L1, a0, 8	# LV:L1
+**	sw	a0, 0\(a5\)	# 2:SFPLOADI	L1, -, 8	# LV:L1
 **	SFPMOV	L2, L0, 2
 **	SFPIADD	L2, L1, 0, 0
 **	SFPMOV	L0, L9, 0	# LV:L0

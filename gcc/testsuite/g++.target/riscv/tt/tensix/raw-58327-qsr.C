@@ -97,7 +97,6 @@ void baz2 () {
 **	ret
 */
 
-
 void toto () {
   auto a =  __builtin_rvtt_sfpreadlreg (0);
   __builtin_rvtt_sfpstore (nullptr, a, 4, 0, 0, 3, 7);

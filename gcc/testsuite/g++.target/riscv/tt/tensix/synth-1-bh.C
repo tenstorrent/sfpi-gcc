@@ -25,10 +25,10 @@ void zero ()
 **	add	a0,a0,a5
 **	lui	a5,%hi\(iptr\)
 **	addi	a5,a5,%lo\(iptr\)
-**	sw	a0, 0\(a5\)	# 1:SFPLOAD	L0, a0, 0, 0
+**	sw	a0, 0\(a5\)	# 1:SFPLOAD	L0, -, 0, 0
 **	li	a4,1048576
 **	xor	a4,a4,a0
-**	sw	a4, 0\(a5\)	# 1:SFPLOAD	L1, a4, 0, 0
+**	sw	a4, 0\(a5\)	# 1:SFPLOAD	L1, -, 0, 0
 **	# WRITE L0
 **	# WRITE L1
 **	lw	ra,12\(sp\)
@@ -61,10 +61,10 @@ void one ()
 **	lui	a5,%hi\(iptr\)
 **	add	a4,a4,s0
 **	addi	a5,a5,%lo\(iptr\)
-**	sw	a4, 0\(a5\)	# 3:SFPLOAD	L0, a4, 0, 0
+**	sw	a4, 0\(a5\)	# 3:SFPLOAD	L0, -, 0, 0
 **	li	a4, 1880096768	# 2:70100000
 **	add	a4,a4,a0
-**	sw	a4, 0\(a5\)	# 2:SFPLOAD	L1, a4, 0, 0
+**	sw	a4, 0\(a5\)	# 2:SFPLOAD	L1, -, 0, 0
 **	# WRITE L0
 **	# WRITE L1
 **	lw	ra,12\(sp\)
@@ -98,10 +98,10 @@ void two ()
 **	lui	a5,%hi\(iptr\)
 **	add	a4,a4,s0
 **	addi	a5,a5,%lo\(iptr\)
-**	sw	a4, 0\(a5\)	# 2:SFPLOAD	L0, a4, 0, 0
+**	sw	a4, 0\(a5\)	# 2:SFPLOAD	L0, -, 0, 0
 **	li	a4, 1880096769	# 3:70100001
 **	add	a4,a4,a0
-**	sw	a4, 0\(a5\)	# 3:SFPLOAD	L1, a4, 0, 0
+**	sw	a4, 0\(a5\)	# 3:SFPLOAD	L1, -, 0, 0
 **	# WRITE L0
 **	# WRITE L1
 **	lw	ra,12\(sp\)
@@ -136,7 +136,7 @@ void three ()
 **	li	a5, 1879048192	# 1:70000000
 **	add	a5,a5,a0
 **	lui	a4,%hi\(iptr\)
-**	sw	a5, %lo\(iptr\)\(a4\)	# 1:SFPLOAD	L0, a5, 0, 0
+**	sw	a5, %lo\(iptr\)\(a4\)	# 1:SFPLOAD	L0, -, 0, 0
 **	# WRITE L0
 **	lw	ra,12\(sp\)
 **	addi	sp,sp,16
@@ -163,7 +163,7 @@ void four ()
 **	li	a5, 1879048192	# 1:70000000
 **	add	a5,a5,a0
 **	lui	a4,%hi\(iptr\)
-**	sw	a5, %lo\(iptr\)\(a4\)	# 1:SFPLOAD	L0, a5, 0, 0
+**	sw	a5, %lo\(iptr\)\(a4\)	# 1:SFPLOAD	L0, -, 0, 0
 **	# WRITE L0
 **	lw	ra,12\(sp\)
 **	addi	sp,sp,16

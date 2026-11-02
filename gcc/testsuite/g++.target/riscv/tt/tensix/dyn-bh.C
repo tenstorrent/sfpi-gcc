@@ -56,7 +56,7 @@ void setexp (unsigned i) {
 **	slli	a0,a0,12
 **	add	a0,a0,a5
 **	lui	a5,%hi\(iptr\)
-**	sw	a0, %lo\(iptr\)\(a5\)	# 1:SFPSETEXP	L1, L2, a0, 1
+**	sw	a0, %lo\(iptr\)\(a5\)	# 1:SFPSETEXP	L1, L2, -, 1
 **	# WRITE L1
 **	ret
 */
@@ -80,7 +80,7 @@ void setsgn (unsigned i) {
 **	slli	a0,a0,12
 **	add	a0,a0,a5
 **	lui	a5,%hi\(iptr\)
-**	sw	a0, %lo\(iptr\)\(a5\)	# 1:SFPSETSGN	L6, L2, a0, 1
+**	sw	a0, %lo\(iptr\)\(a5\)	# 1:SFPSETSGN	L6, L2, -, 1
 **	# WRITE L6
 **	ret
 */
@@ -105,7 +105,7 @@ void divp2 (unsigned i) {
 **	li	a5, 1979712096	# 1:76000260
 **	add	a0,a0,a5
 **	lui	a5,%hi\(iptr\)
-**	sw	a0, %lo\(iptr\)\(a5\)	# 1:SFPDIVP2	L6, L2, a0, 0
+**	sw	a0, %lo\(iptr\)\(a5\)	# 1:SFPDIVP2	L6, L2, -, 0
 **	# WRITE L6
 **	ret
 */
@@ -129,7 +129,7 @@ void stochrnd (unsigned i) {
 **	slli	a0,a0,16
 **	add	a0,a0,a5
 **	lui	a5,%hi\(iptr\)
-**	sw	a0, %lo\(iptr\)\(a5\)	# 1:SFPSTOCHRND	L6, L9, L2, a0, 12, 0
+**	sw	a0, %lo\(iptr\)\(a5\)	# 1:SFPSTOCHRND	L6, L9, L2, -, 12, 0
 **	# WRITE L6
 **	ret
 */

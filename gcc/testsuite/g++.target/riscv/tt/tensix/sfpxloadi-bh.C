@@ -28,11 +28,11 @@ void var (int x)
 **	li	a4, 1895956480	# 1:71020000
 **	lw	a3,%lo\(buf\)\(a3\)
 **	add	a5,a5,a4
-**	sw	a5, 0\(a3\)	# 1:SFPLOADI	L0, a5, 2
+**	sw	a5, 0\(a3\)	# 1:SFPLOADI	L0, -, 2
 **	srli	a0,a0,16
 **	li	a5, 1896349696	# 2:71080000
 **	add	a0,a0,a5
-**	sw	a0, 0\(a3\)	# 2:SFPLOADI	L0, a0, 8	# LV:L0
+**	sw	a0, 0\(a3\)	# 2:SFPLOADI	L0, -, 8	# LV:L0
 **	SFPSTORE	L0, 0, 0, 0
 **	ret
 */

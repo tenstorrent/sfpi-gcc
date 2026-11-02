@@ -28,25 +28,25 @@ void loop_diff (int i) {
 **	add	a5,a5,a4
 **	lui	a4,%hi\(_ZN7ckernel13instrn_bufferE\)
 **	addi	a4,a4,%lo\(_ZN7ckernel13instrn_bufferE\)
-**	sw	a5, 0\(a4\)	# 2:SFPSHFT	L3, L0, a5, 5
+**	sw	a5, 0\(a4\)	# 2:SFPSHFT	L3, L0, -, 5
 **	addi	a5,a0,1
 **	slli	a5,a5,12
 **	and	a5,a5,a3
 **	li	a2, 2046821173	# 5:7a000335
 **	add	a5,a5,a2
-**	sw	a5, 0\(a4\)	# 5:SFPSHFT	L3, L3, a5, 5
+**	sw	a5, 0\(a4\)	# 5:SFPSHFT	L3, L3, -, 5
 **	addi	a5,a0,2
 **	slli	a5,a5,12
 **	and	a5,a5,a3
 **	li	a2, 2046821173	# 4:7a000335
 **	add	a5,a5,a2
-**	sw	a5, 0\(a4\)	# 4:SFPSHFT	L3, L3, a5, 5
+**	sw	a5, 0\(a4\)	# 4:SFPSHFT	L3, L3, -, 5
 **	addi	a5,a0,3
 **	slli	a5,a5,12
 **	and	a5,a5,a3
 **	li	a3, 2046821173	# 3:7a000335
 **	add	a5,a5,a3
-**	sw	a5, 0\(a4\)	# 3:SFPSHFT	L3, L3, a5, 5
+**	sw	a5, 0\(a4\)	# 3:SFPSHFT	L3, L3, -, 5
 **	# WRITE L3
 **	ret
 */
@@ -73,10 +73,10 @@ void loop_common (int i) {
 **	addi	a4,a4,%lo\(_ZN7ckernel13instrn_bufferE\)
 **	li	a3,768
 **	xor	a3,a3,a5
-**	sw	a3, 0\(a4\)	# 1:SFPSHFT	L3, L0, a3, 5
-**	sw	a5, 0\(a4\)	# 1:SFPSHFT	L3, L3, a5, 5
-**	sw	a5, 0\(a4\)	# 1:SFPSHFT	L3, L3, a5, 5
-**	sw	a5, 0\(a4\)	# 1:SFPSHFT	L3, L3, a5, 5
+**	sw	a3, 0\(a4\)	# 1:SFPSHFT	L3, L0, -, 5
+**	sw	a5, 0\(a4\)	# 1:SFPSHFT	L3, L3, -, 5
+**	sw	a5, 0\(a4\)	# 1:SFPSHFT	L3, L3, -, 5
+**	sw	a5, 0\(a4\)	# 1:SFPSHFT	L3, L3, -, 5
 **	# WRITE L3
 **	ret
 */

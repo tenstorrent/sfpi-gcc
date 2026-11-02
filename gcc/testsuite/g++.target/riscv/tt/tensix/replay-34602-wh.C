@@ -205,7 +205,7 @@ void six (unsigned bits)
 **	SFPLOAD	L0, 0, 0, 0
 **	SFPMUL	L0, L0, L0, 0
 **	SFPNOP
-**	sw	a3, 0\(a4\)	# 1:SFPSHFT	L0, L0, a3, 1
+**	sw	a3, 0\(a4\)	# 1:SFPSHFT	L0, L0, -, 1
 **	SFPADD	L0, L0, L0, 0
 **	SFPNOP
 **	SFPSTORE	L0, 0, 0, 0

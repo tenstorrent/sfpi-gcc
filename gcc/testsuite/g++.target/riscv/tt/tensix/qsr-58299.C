@@ -17,7 +17,7 @@ void foo (unsigned ix) {
 **	li	a5, 1879280640	# 1:70038c00
 **	add	a0,a0,a5
 **	lui	a5,%hi\(iptr\)
-**	sw	a0, %lo\(iptr\)\(a5\)	# 1:SFPLOAD	L0, a0, 3, 4, 1, 1
+**	sw	a0, %lo\(iptr\)\(a5\)	# 1:SFPLOAD	L0, -, 3, 4, 1, 1
 **	# WRITE L0
 **	ret
 */
@@ -37,6 +37,6 @@ void bar (unsigned ix) {
 **	li	a5, 1912835072	# 1:72038c00
 **	add	a0,a0,a5
 **	lui	a5,%hi\(iptr\)
-**	sw	a0, %lo\(iptr\)\(a5\)	# 1:SFPSTORE	L0, a0, 3, 4, 1, 1
+**	sw	a0, %lo\(iptr\)\(a5\)	# 1:SFPSTORE	L0, -, 3, 4, 1, 1
 **	ret
 */
