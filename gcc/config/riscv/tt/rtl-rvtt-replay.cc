@@ -129,15 +129,14 @@ is_replay_insn (replay_span &span, rtx_insn *insn)
     return REPLAY_none;
 
   auto pattern = PATTERN (insn);
-  span.begin = INTVAL (XVECEXP (pattern, 0, 5));
+  span.begin = INTVAL (XVECEXP (pattern, 0, rvtt_synth::IX_src + 1));
   span.end = 0;
-  auto len = XVECEXP (pattern, 0, 3);
   auto type = REPLAY_fixed_capture;
-  if (CONST_INT_P (len))
-    span.end = INTVAL (len);
+  if (CONST_INT_P (XVECEXP (pattern, 0, rvtt_synth::IX_insn)))
+    span.end = INTVAL (XVECEXP (pattern, 0, rvtt_synth::IX_imm));
   else
     type = REPLAY_variable_capture;
-  if (!INTVAL (XVECEXP (pattern, 0, 7)))
+  if (!INTVAL (XVECEXP (pattern, 0, rvtt_synth::IX_src + 3)))
     type = REPLAY_playback;
   return type;
 }
