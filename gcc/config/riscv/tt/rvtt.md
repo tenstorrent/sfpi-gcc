@@ -200,7 +200,7 @@
      (const_int rvtt_lregs)
      ] UNSPECV_SFPVARLREG)]
   "TARGET_XTT_TENSIX"
-  "# WRITE %x0"
+  "# WRITE %0"
   [(set_attr "type" "tensix")
    (set_attr "length" "0")])
 
@@ -210,7 +210,7 @@
 	  (const_int rvtt_lregs)
 	  ] UNSPECV_SFPVARLREG))]
   "TARGET_XTT_TENSIX"
-  "# READ %x0"
+  "# READ %0"
 ;; not a xtt_dynamic_bug consumer, it is for the user to get this right.
   [(set_attr "type" "tensix")
    (set_attr "length" "0")])
@@ -221,7 +221,7 @@
 	  (const_int 0)
 	  ] UNSPEC_SFPNOVAL))]
   "TARGET_XTT_TENSIX"
-  "# NOVALUE %x0"
+  "# NOVALUE %0"
   [(set_attr "type" "tensix")
    (set_attr "length" "0")])
 
@@ -404,9 +404,9 @@
        || reg_or_cstlreg_operand (operands[1], XTT32SImode))"
   {
     static const char *const assembly[] = {
-      "SFPMOV\t%0, %x1, 2",
-      "SFPBAD.LOAD\t%x0, %1",
-      "SFPBAD.STORE\t%x1, %0",
+      "SFPMOV\t%0, %1, 2",
+      "SFPBAD.LOAD\t%0, %1",
+      "SFPBAD.STORE\t%1, %0",
     };
     if (which_alternative)
       rvtt_mov_error (insn);
@@ -433,7 +433,7 @@
   "TARGET_XTT_TENSIX"
   "@
    #
-   SFPMOV\t%x0, %x2, 0\t# LV:%x1"
+   SFPMOV\t%0, %2, 0\t# LV:%1"
   "&& (noval_operand (operands[1], GET_MODE (operands[1]))
        || rtx_equal_p (operands[1], operands[2])
        || find_reg_note (insn, REG_UNUSED, operands[0]))"
@@ -516,8 +516,8 @@
   {
     return rvtt_synth::pattern (which_alternative >> 1,
        which_alternative & 1
-       ? "SFPLOADI\t%x0, %x7, %8\t# LV:%x6"
-       : "SFPLOADI\t%x0, %x7, %8",
+       ? "SFPLOADI\t%0, %7, %8\t# LV:%6"
+       : "SFPLOADI\t%0, %7, %8",
       operands, true, 9);
   }
   [(set_attr "type" "tensix")])
@@ -652,10 +652,10 @@
   {
     return rvtt_synth::pattern (which_alternative >> 1,
       which_alternative & 1
-      ? (TARGET_XTT_TENSIX_QSR ? "SFPLOAD\t%x0, %x7, %8, %9, 0, 0\t# LV:%x6"
-         : "SFPLOAD\t%x0, %x7, %8, %9\t# LV:%x6")
-      : (TARGET_XTT_TENSIX_QSR ? "SFPLOAD\t%x0, %x7, %8, %9, 0, 0"
-         : "SFPLOAD\t%x0, %x7, %8, %9"),
+      ? (TARGET_XTT_TENSIX_QSR ? "SFPLOAD\t%0, %7, %8, %9, 0, 0\t# LV:%6"
+         : "SFPLOAD\t%0, %7, %8, %9\t# LV:%6")
+      : (TARGET_XTT_TENSIX_QSR ? "SFPLOAD\t%0, %7, %8, %9, 0, 0"
+         : "SFPLOAD\t%0, %7, %8, %9"),
       operands, true, 10);
   }
   [(set_attr "type" "tensix")])
@@ -679,8 +679,8 @@
   {
     return rvtt_synth::pattern (which_alternative >> 1,
       which_alternative & 1
-      ? "SFPLOAD\t%x0, %x7, %8, %9, 1, %10\t# LV:%x6"
-      : "SFPLOAD\t%x0, %x7, %8, %9, 1, %10",
+      ? "SFPLOAD\t%0, %7, %8, %9, 1, %10\t# LV:%6"
+      : "SFPLOAD\t%0, %7, %8, %9, 1, %10",
       operands, true, 11);
   }
   [(set_attr "type" "tensix")])
@@ -738,8 +738,8 @@
   "TARGET_XTT_TENSIX"
   {
     return rvtt_synth::pattern (which_alternative,
-      TARGET_XTT_TENSIX_QSR ? "SFPSTORE\t%x4, %x5, %6, %7, 0, 0"
-      : "SFPSTORE\t%x4, %x5, %6, %7",
+      TARGET_XTT_TENSIX_QSR ? "SFPSTORE\t%4, %5, %6, %7, 0, 0"
+      : "SFPSTORE\t%4, %5, %6, %7",
       operands, false, 8);
   }
   [(set_attr "type" "tensix")])
@@ -795,7 +795,7 @@
   "TARGET_XTT_TENSIX_QSR"
   {
     return rvtt_synth::pattern (which_alternative,
-      "SFPSTORE\t%x4, %x5, %6, %7, 1, %8",
+      "SFPSTORE\t%4, %5, %6, %7, 1, %8",
       operands, false, 9);
   }
   [(set_attr "type" "tensix")])
@@ -830,7 +830,7 @@
      (match_operand:SI   2 "const_int_operand" "n")
      ] UNSPECV_SFPSETCC)]
   "TARGET_XTT_TENSIX"
-  "SFPSETCC\t%x0, %2, %1"
+  "SFPSETCC\t%0, %2, %1"
   [(set_attr "type" "tensix")])
 
 (define_insn "rvtt_sfpencc"
@@ -903,8 +903,8 @@
 	  ] rvtt_muladd_op))]
   "TARGET_XTT_TENSIX"
   "@
-   SFP<rvtt_muladd_insn>\t%x0, %x2, %x3, %4
-   SFP<rvtt_muladd_insn>\t%x0, %x2, %x3, %4\t# LV:%x1"
+   SFP<rvtt_muladd_insn>\t%0, %2, %3, %4
+   SFP<rvtt_muladd_insn>\t%0, %2, %3, %4\t# LV:%1"
   [(set_attr "type" "tensix")
    (set_attr "xtt_delay" "dynamic")])
 
@@ -935,8 +935,8 @@
 	  ] UNSPECV_SFPMAD))]
   "TARGET_XTT_TENSIX"
   "@
-   SFPMAD\t%x0, %x2, %x3, %x4, %5
-   SFPMAD\t%x0, %x2, %x3, %x4, %5\t# LV:%x1"
+   SFPMAD\t%0, %2, %3, %4, %5
+   SFPMAD\t%0, %2, %3, %4, %5\t# LV:%1"
   [(set_attr "type" "tensix")
    (set_attr "xtt_delay" "dynamic")])
 
@@ -1029,8 +1029,8 @@
     if (dyn)
       which -= 3;
     return rvtt_synth::pattern (dyn,
-        which == 0 ? "SFP<rvtt_muliaddi_insn>\t%x0, %x7, %8" :
-        which == 1 ? "SFP<rvtt_muliaddi_insn>\t%x0, %x7, %8\t# LV:%x5" :
+        which == 0 ? "SFP<rvtt_muliaddi_insn>\t%0, %7, %8" :
+        which == 1 ? "SFP<rvtt_muliaddi_insn>\t%0, %7, %8\t# LV:%5" :
         "#",
         operands, true, 9);
   }
@@ -1066,8 +1066,8 @@
 	  ] UNSPECV_SFPIADD))]
   "TARGET_XTT_TENSIX"
   "@
-   SFPIADD\t%x0, %x3, 0, %4
-   SFPIADD\t%x0, %x3, 0, %4\t# LV:%x2
+   SFPIADD\t%0, %3, 0, %4
+   SFPIADD\t%0, %3, 0, %4\t# LV:%2
    #"
   "&& true"
   {
@@ -1097,7 +1097,7 @@
      (match_operand:SI      2 "const_int_operand" "n")
      ] UNSPECV_SFPIADD)]
   "TARGET_XTT_TENSIX_QSR"
-  "SFPIADD\t%x0, %x1, 0, %2"
+  "SFPIADD\t%0, %1, 0, %2"
   [(set_attr "type" "tensix")
    (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_BH | XTT_DYNAMIC_BUG_QSR)"))])
 
@@ -1175,8 +1175,8 @@
   {
     return rvtt_synth::pattern (which_alternative >> 1,
       which_alternative & 1
-      ? "SFPIADD\t%x0, %x5, %x7, %8\t# LV:%x6"
-      : "SFPIADD\t%x0, %x5, %x7, %8",
+      ? "SFPIADD\t%0, %5, %7, %8\t# LV:%6"
+      : "SFPIADD\t%0, %5, %7, %8",
       operands, true, 9);
   }
   "&& TARGET_XTT_TENSIX_QSR
@@ -1211,7 +1211,7 @@
   "TARGET_XTT_TENSIX_QSR"
   {
     return rvtt_synth::pattern (which_alternative,
-      "SFPIADD\tL8, %x4, %x5, %6",
+      "SFPIADD\tL8, %4, %5, %6",
       operands, false, 7);
   }
   [(set_attr "type" "tensix")])
@@ -1260,8 +1260,8 @@
 	  ] rvtt_unary_op))]
   "TARGET_XTT_TENSIX"
   "@
-   SFP<rvtt_unary_insn>\t%x0, %x2, %3
-   SFP<rvtt_unary_insn>\t%x0, %x2, %3\t# LV:%x1"
+   SFP<rvtt_unary_insn>\t%0, %2, %3
+   SFP<rvtt_unary_insn>\t%0, %2, %3\t# LV:%1"
   "&& TARGET_XTT_TENSIX_QSR
    && <rvtt_unary_op> == UNSPECV_SFPLZ
    && find_reg_note (insn, REG_UNUSED, operands[0])"
@@ -1279,7 +1279,7 @@
      (match_operand:SI    1 "const_int_operand" "n")
      ] rvtt_unary_op)]
   "TARGET_XTT_TENSIX_QSR && <rvtt_unary_op> == UNSPECV_SFPLZ"
-  "SFP<rvtt_unary_insn>\tL8, %x0, %1"
+  "SFP<rvtt_unary_insn>\tL8, %0, %1"
   [(set_attr "type" "tensix")])
 
 (define_int_iterator rvtt_set_op [
@@ -1323,8 +1323,8 @@
 	  ] rvtt_set_op))]
   "TARGET_XTT_TENSIX"
   "@
-   SFPSET<rvtt_set_insn>\t%x0, %x2, 0, %4
-   SFPSET<rvtt_set_insn>\t%x0, %x2, 0, %4\t# LV:%x3
+   SFPSET<rvtt_set_insn>\t%0, %2, 0, %4
+   SFPSET<rvtt_set_insn>\t%0, %2, 0, %4\t# LV:%3
    #"
   "&& !noval_or_omit_operand (operands[1], GET_MODE (operands[1]))"
   {
@@ -1409,8 +1409,8 @@
   {
     return rvtt_synth::pattern (which_alternative >> 1,
       which_alternative & 1
-      ? "SFPSET<rvtt_set_insn>\t%x0, %x5, %x7, %8\t# LV:%x6"
-      : "SFPSET<rvtt_set_insn>\t%x0, %x5, %x7, %8",
+      ? "SFPSET<rvtt_set_insn>\t%0, %5, %7, %8\t# LV:%6"
+      : "SFPSET<rvtt_set_insn>\t%0, %5, %7, %8",
       operands, true, 9);
   }
   [(set_attr "type" "tensix")])
@@ -1481,8 +1481,8 @@
   "<rvtt_logical_op> == UNSPECV_SFPXOR
    || TARGET_XTT_TENSIX_WH || TARGET_XTT_TENSIX_QSR"
   "@
-   SFP<rvtt_logical_insn>\t%x0, %x3
-   SFP<rvtt_logical_insn>\t%x0, %x3\t# LV:%x2
+   SFP<rvtt_logical_insn>\t%0, %3
+   SFP<rvtt_logical_insn>\t%0, %3\t# LV:%2
    #"
   "&& !noval_or_omit_operand (operands[1], GET_MODE (operands[1]))"
   {
@@ -1500,8 +1500,8 @@
 	  ] rvtt_logical_op))]
   "<rvtt_logical_op> != UNSPECV_SFPXOR && TARGET_XTT_TENSIX_BH"
   "@
-   SFP<rvtt_logical_insn>\t%x0, %x2, %x3, %4
-   SFP<rvtt_logical_insn>\t%x0, %x2, %x3, %4\t# LV:%1"
+   SFP<rvtt_logical_insn>\t%0, %2, %3, %4
+   SFP<rvtt_logical_insn>\t%0, %2, %3, %4\t# LV:%1"
   [(set_attr "type" "tensix")
    (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_BH)"))])
 
@@ -1524,8 +1524,8 @@
 	  ] UNSPECV_SFPNOT))]
   "TARGET_XTT_TENSIX"
   "@
-   SFPNOT\t%x0, %x2
-   SFPNOT\t%x0, %x2\t# LV:%x1"
+   SFPNOT\t%0, %2
+   SFPNOT\t%0, %2\t# LV:%1"
   [(set_attr "type" "tensix")])
 
 (define_expand "rvtt_sfpshft_v"
@@ -1568,8 +1568,8 @@
 	  ] UNSPECV_SFPSHFT))]
   "TARGET_XTT_TENSIX"
   "@
-   SFPSHFT\t%x0, %x3, 0, %4
-   SFPSHFT\t%x0, %x3, 0, %4\t# LV:%x2
+   SFPSHFT\t%0, %3, 0, %4
+   SFPSHFT\t%0, %3, 0, %4\t# LV:%2
    #"
   "&& !noval_or_omit_operand (operands[1], GET_MODE (operands[1]))"
   {
@@ -1674,8 +1674,8 @@
   {
     return rvtt_synth::pattern (which_alternative >> 1,
       which_alternative & 1
-      ? "SFPSHFT\t%x0, %x5, %x7, %8\t# LV:%x6"
-      : "SFPSHFT\t%x0, %x5, %x7, %8",
+      ? "SFPSHFT\t%0, %5, %7, %8\t# LV:%6"
+      : "SFPSHFT\t%0, %5, %7, %8",
       operands, true, 9);
   }
   [(set_attr "type" "tensix")])
@@ -1700,8 +1700,8 @@
     if (dyn)
       which -= 3;
     return rvtt_synth::pattern (dyn,
-      which == 0 ? "SFPSHFT\t%x0, L0, %x7, %8" :
-      which == 1 ? "SFPSHFT\t%x0, L0, %x7, %8\t# LV:%x5" :
+      which == 0 ? "SFPSHFT\t%0, L0, %7, %8" :
+      which == 1 ? "SFPSHFT\t%0, L0, %7, %8\t# LV:%5" :
       "#",
       operands, true, 9);
   }
@@ -1733,8 +1733,8 @@
 	  ] UNSPECV_SFPCAST))]
   "TARGET_XTT_TENSIX"
   "@
-   SFPCAST\t%x0, %x2, %3
-   SFPCAST\t%x0, %x2, %3\t# LV:%x1"
+   SFPCAST\t%0, %2, %3
+   SFPCAST\t%0, %2, %3\t# LV:%1"
   [(set_attr "type" "tensix")])
 
 (define_expand "rvtt_sfpdivp2"
@@ -1810,8 +1810,8 @@
   {
     return rvtt_synth::pattern (which_alternative >> 1,
       which_alternative & 1
-      ? "SFPDIVP2\t%x0, %x5, %x7, %8\t# LV:%x6"
-      : "SFPDIVP2\t%x0, %x5, %x7, %8",
+      ? "SFPDIVP2\t%0, %5, %7, %8\t# LV:%6"
+      : "SFPDIVP2\t%0, %5, %7, %8",
       operands, true, 9);
   }
   [(set_attr "type" "tensix")])
@@ -1841,8 +1841,8 @@
 	  ] UNSPECV_SFPSTOCHRND))]
   "TARGET_XTT_TENSIX"
   "@
-   SFPSTOCHRND\t%x0, L9, %x2, 0, %3, %4
-   SFPSTOCHRND\t%x0, L9, %x2, 0, %3, %4\t# LV:%x1"
+   SFPSTOCHRND\t%0, L9, %2, 0, %3, %4
+   SFPSTOCHRND\t%0, L9, %2, 0, %3, %4\t# LV:%1"
   [(set_attr "type" "tensix")])
 
 (define_expand "rvtt_sfpstochrnd_descale_v"
@@ -1872,8 +1872,8 @@
 	  ] UNSPECV_SFPSTOCHRND))]
   "TARGET_XTT_TENSIX"
   "@
-   SFPSTOCHRND\t%x0, %x3, %x2, 0, %4, %5
-   SFPSTOCHRND\t%x0, %x3, %x2, 0, %4, %5\t# LV:%x1"
+   SFPSTOCHRND\t%0, %3, %2, 0, %4, %5
+   SFPSTOCHRND\t%0, %3, %2, 0, %4, %5\t# LV:%1"
   [(set_attr "type" "tensix")])
 
 (define_expand "rvtt_sfpstochrnd_descale_i"
@@ -1958,8 +1958,8 @@
   {
     return rvtt_synth::pattern (which_alternative >> 1,
       which_alternative & 1
-      ? "SFPSTOCHRND\t%x0, L9, %x5, %x7, %8, %9\t# LV:%x6"
-      : "SFPSTOCHRND\t%x0, L9, %x5, %x7, %8, %9",
+      ? "SFPSTOCHRND\t%0, L9, %5, %7, %8, %9\t# LV:%6"
+      : "SFPSTOCHRND\t%0, L9, %5, %7, %8, %9",
       operands, true, 10);
   }
   [(set_attr "type" "tensix")])
@@ -1984,8 +1984,8 @@
 	  ] UNSPECV_SFPCONFIG))]
   "TARGET_XTT_TENSIX_BH_QSR"
   "@
-   SFPMOV\t%x0, L%2, 8\t# CFG:%2
-   SFPMOV\t%x0, L%2, 8\t# LV:%x1 CFG:%2"
+   SFPMOV\t%0, L%2, 8\t# CFG:%2
+   SFPMOV\t%0, L%2, 8\t# LV:%1 CFG:%2"
   [(set_attr "type" "tensix")])
 
 (define_insn "rvtt_sfpwriteconfig_v"
@@ -1995,7 +1995,7 @@
      (match_operand:SI   2 "const_int_operand" "n")
      ] UNSPECV_SFPCONFIG)]
   "TARGET_XTT_TENSIX"
-  "SFPCONFIG\t%2, 0, %1\t# R:%x0 CFG:%2"
+  "SFPCONFIG\t%2, 0, %1\t# R:%0 CFG:%2"
   [(set_attr "type" "tensix")
    (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_BH | XTT_DYNAMIC_BUG_QSR)"))])
 
@@ -2050,7 +2050,7 @@
   "TARGET_XTT_TENSIX"
   {
     return rvtt_synth::pattern (which_alternative,
-      "SFPCONFIG\t%7, %x5, %6\t# CFG:%7", operands, false, -1);
+      "SFPCONFIG\t%7, %5, %6\t# CFG:%7", operands, false, -1);
   }
   [(set_attr "type" "tensix")
    (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_BH | XTT_DYNAMIC_BUG_QSR)"))])
@@ -2065,7 +2065,7 @@
           (match_operand:SI    5 "const_int_operand" "n")
 	  ] UNSPECV_SFPLUT))]
   "TARGET_XTT_TENSIX_WH_BH"
-  "SFPLUT\t%x0, %5\t# R:%x1,%x2,%x3,%x4"
+  "SFPLUT\t%0, %5\t# R:%1,%2,%3,%4"
   [(set_attr "type" "tensix")
    (set_attr "xtt_delay" "dynamic")])
 
@@ -2076,7 +2076,7 @@
           (match_operand:SI    2 "const_int_operand" "n")
 	  ] UNSPECV_SFPLUT))]
   "TARGET_XTT_TENSIX_QSR"
-  "SFPLUT\t%x0, %2\t# R:%x1"
+  "SFPLUT\t%0, %2\t# R:%1"
   [(set_attr "type" "tensix")
    (set_attr "xtt_delay" "dynamic")])
 
@@ -2087,7 +2087,7 @@
           (match_operand:SI    2 "const_int_operand" "n")
 	  ] UNSPECV_SFPLUTFP32))]
   "TARGET_XTT_TENSIX_QSR"
-  "SFPLUTFP32\t%x0, %2\t# R:%x1"
+  "SFPLUTFP32\t%0, %2\t# R:%1"
   [(set_attr "type" "tensix")
    (set_attr "xtt_delay" "dynamic")])
 
@@ -2133,7 +2133,7 @@
           (match_operand:XTT32SI 6 "register_operand"  "x7")
 	  ] UNSPECV_SFPLUTFP32))]
   "TARGET_XTT_TENSIX_WH_BH && reload_completed"
-  "SFPLUTFP32\t%x0, %5\t# R:%x1,%x2,%x3,%x4,%x6"
+  "SFPLUTFP32\t%0, %5\t# R:%1,%2,%3,%4,%6"
   [(set_attr "type" "tensix")
    (set_attr "xtt_delay" "dynamic")])
 
@@ -2150,7 +2150,7 @@
           (match_operand:SI    8 "const_int_operand" "n")
 	  ] UNSPECV_SFPLUTFP32))]
   "TARGET_XTT_TENSIX_WH_BH"
-  "SFPLUTFP32\t%x0, %8\t# R:%x1,%x2,%x3,%x4,%x5,%x6,%x7"
+  "SFPLUTFP32\t%0, %8\t# R:%1,%2,%3,%4,%5,%6,%7"
   [(set_attr "type" "tensix")
    (set_attr "xtt_delay" "dynamic")])
 
@@ -2172,8 +2172,8 @@
   "TARGET_XTT_TENSIX"
   {
     return TARGET_XTT_TENSIX_WH_BH
-      ? "SFPSWAP\t%x2, %x3, %4"
-      : "SFPSWAP\t%x2, %x3, %5, %4";
+      ? "SFPSWAP\t%2, %3, %4"
+      : "SFPSWAP\t%2, %3, %5, %4";
   }
   [(set_attr "type" "tensix")
    (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_BH | XTT_DYNAMIC_BUG_QSR)"))])
@@ -2190,8 +2190,8 @@
   "TARGET_XTT_TENSIX"
   {
     return TARGET_XTT_TENSIX_WH_BH
-      ? "SFPSWAP\t%x1, %x2, %3"
-      : "SFPSWAP\t%x1, %x2, %4, %3";
+      ? "SFPSWAP\t%1, %2, %3"
+      : "SFPSWAP\t%1, %2, %4, %3";
   }
   [(set_attr "type" "tensix")
    (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_BH | XTT_DYNAMIC_BUG_QSR)"))])
@@ -2235,8 +2235,8 @@
   "TARGET_XTT_TENSIX"
   {
     return TARGET_XTT_TENSIX_WH_BH
-      ? "SFPSWAP\t%x1, %x2, %3"
-      : "SFPSWAP\t%x1, %x2, %4, %3";
+      ? "SFPSWAP\t%1, %2, %3"
+      : "SFPSWAP\t%1, %2, %4, %3";
   }
   [(set_attr "type" "tensix")
    (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_BH | XTT_DYNAMIC_BUG_QSR)"))])
@@ -2279,8 +2279,8 @@
   "TARGET_XTT_TENSIX"
   {
     return TARGET_XTT_TENSIX_WH_BH
-      ? "SFPSWAP\t%x0, %x1, %2"
-      : "SFPSWAP\t%x0, %x1, %3, %2";
+      ? "SFPSWAP\t%0, %1, %2"
+      : "SFPSWAP\t%0, %1, %3, %2";
   }
   [(set_attr "type" "tensix")
    (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_BH | XTT_DYNAMIC_BUG_QSR)"))])
@@ -2456,7 +2456,7 @@
 	  (match_dup 7)
 	  ] UNSPECV_SFPSHFT2_COPY4))]
   "TARGET_XTT_TENSIX"
-  "SFPSHFT2\t%x0, %x0, 0, %7"
+  "SFPSHFT2\t%0, %0, 0, %7"
   [(set_attr "type" "tensix")
    (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_BH | XTT_DYNAMIC_BUG_QSR)"))])
 
@@ -2505,7 +2505,7 @@
 	  (match_dup 8)
 	  ] UNSPECV_SFPSHFT2_SUBVEC_COPY4))]
   "TARGET_XTT_TENSIX"
-  "SFPSHFT2\t%x0, %x0, 0, %8"
+  "SFPSHFT2\t%0, %0, 0, %8"
   [(set_attr "type" "tensix")
    (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_BH | XTT_DYNAMIC_BUG_QSR)"))])
 
@@ -2555,7 +2555,7 @@
 	  (match_dup 8)
 	  ] UNSPECV_SFPSHFT2_SUBVEC_SHFL1_COPY4))]
   "TARGET_XTT_TENSIX"
-  "SFPSHFT2\t%x0, %x7, 0, %8"
+  "SFPSHFT2\t%0, %7, 0, %8"
   [(set_attr "type" "tensix")
    (set_attr "xtt_delay" "static")
    (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_BH | XTT_DYNAMIC_BUG_QSR)"))])
@@ -2592,7 +2592,7 @@
 	  (match_operand:SI    3 "const_int_operand" "n,n")
 	  ] UNSPECV_SFPSHFT2_SUBVEC_SHFL1))]
   "TARGET_XTT_TENSIX"
-  "SFPSHFT2\t%x0, %x2, 0, %3"
+  "SFPSHFT2\t%0, %2, 0, %3"
   [(set_attr "type" "tensix")
    (set_attr "xtt_delay" "static")
    (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_BH | XTT_DYNAMIC_BUG_QSR)"))])
@@ -2605,8 +2605,8 @@
      ] UNSPECV_SFPSHFT2_SUBVEC_SHFL1)]
   "TARGET_XTT_TENSIX"
   "@
-   SFPSHFT2\tL8, %x1, 0, %2
-   SFPSHFT2\tL8, %x1, 0, %2\t# LV:%x1"
+   SFPSHFT2\tL8, %1, 0, %2
+   SFPSHFT2\tL8, %1, 0, %2\t# LV:%1"
   [(set_attr "type" "tensix")
    (set_attr "xtt_delay" "static")
    (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_BH | XTT_DYNAMIC_BUG_QSR)"))])
@@ -2751,8 +2751,8 @@
           ] rvtt_gtle_op))]
   "TARGET_XTT_TENSIX_BH_QSR"
   "@
-   SFP<rvtt_gtle_insn>\t%x0, %x3, %5, %4
-   SFP<rvtt_gtle_insn>\t%x0, %x3, %5, %4\t# LV:%x2
+   SFP<rvtt_gtle_insn>\t%0, %3, %5, %4
+   SFP<rvtt_gtle_insn>\t%0, %3, %5, %4\t# LV:%2
    #"
   "&& true"
   {
@@ -2780,7 +2780,7 @@
      (match_operand:SI    3 "const_int_operand" "n")
      ] rvtt_gtle_op)]
   "TARGET_XTT_TENSIX_BH_QSR"
-  "SFP<rvtt_gtle_insn>\t%x0, %x1, %3, %2"
+  "SFP<rvtt_gtle_insn>\t%0, %1, %3, %2"
   [(set_attr "type" "tensix")])
 
 (define_expand "rvtt_sfpmul24"
@@ -2808,8 +2808,8 @@
 	  ] UNSPECV_SFPMUL24))]
   "TARGET_XTT_TENSIX_BH_QSR"
   "@
-   SFPMUL24\t%x0, %x2, %x3, %4
-   SFPMUL24\t%x0, %x2, %x3, %4\t# LV:%x1"
+   SFPMUL24\t%0, %2, %3, %4
+   SFPMUL24\t%0, %2, %3, %4\t# LV:%1"
   [(set_attr "type" "tensix")
    (set_attr "xtt_delay" "dynamic")])
 
@@ -2836,8 +2836,8 @@
 	  ] UNSPECV_SFPARECIP))]
   "TARGET_XTT_TENSIX_BH"
   "@
-   SFPARECIP\t%x0, %x2, %3
-   SFPARECIP\t%x0, %x2, %3\t# LV:%x1"
+   SFPARECIP\t%0, %2, %3
+   SFPARECIP\t%0, %2, %3\t# LV:%1"
   [(set_attr "type" "tensix")])
 
 (define_expand "rvtt_sfpnonlinear"
@@ -2863,8 +2863,8 @@
 	  ] UNSPECV_SFPNONLINEAR))]
   "TARGET_XTT_TENSIX_QSR"
   "@
-   SFPNONLINEAR\t%x0, %x2, %3
-   SFPNONLINEAR\t%x0, %x2, %3\t# LV:%x1"
+   SFPNONLINEAR\t%0, %2, %3
+   SFPNONLINEAR\t%0, %2, %3\t# LV:%1"
   [(set_attr "type" "tensix")
    (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_QSR)"))])
 
@@ -2992,8 +2992,8 @@
   "TARGET_XTT_TENSIX"
   {
     return rvtt_synth::pattern (which_alternative,
-      TARGET_XTT_TENSIX_QSR ? "TTREPLAY\t%6, %x5, %9, %10, %7, %8"
-      : "TTREPLAY\t%6, %x5, %7, %8",
+      TARGET_XTT_TENSIX_QSR ? "TTREPLAY\t%6, %5, %9, %10, %7, %8"
+      : "TTREPLAY\t%6, %5, %7, %8",
       operands, false, -1);
   }
   [(set_attr "type" "tensix")])

@@ -7306,25 +7306,6 @@ riscv_print_operand (FILE *file, rtx op, int letter)
 	gcc_unreachable();
       break;
 
-    case 'x':
-      if (code == UNSPEC)
-	{
-	  auto subcode = XINT (op, 1);
-	  if (subcode == UNSPEC_SFPCSTLREG)
-	    {
-	      rtx cst = XVECEXP (op, 0, 0);
-	      fprintf(file, "L%d", int (INTVAL (cst)));
-	      break;
-	    }
-	  if (subcode == UNSPEC_SFPNOVAL)
-	    {
-	      fprintf(file, "-");
-	      break;
-	    }
-	}
-      letter = 0;
-      //FALLTHROUGH
-
     default:
       switch (code)
 	{
@@ -7358,6 +7339,24 @@ riscv_print_operand (FILE *file, rtx op, int letter)
 	    asm_fprintf (file, "%s", fli_value_print[fli_index]);
 	    break;
 	  }
+
+	case UNSPEC:
+	  // Tenstorrent
+	  {
+	    auto subcode = XINT (op, 1);
+	    if (subcode == UNSPEC_SFPCSTLREG)
+	      {
+		rtx cst = XVECEXP (op, 0, 0);
+		fprintf(file, "L%d", int (INTVAL (cst)));
+		break;
+	      }
+	    if (subcode == UNSPEC_SFPNOVAL)
+	      {
+		fprintf(file, "-");
+		break;
+	      }
+	  }
+	  //FALLTHROUGH
 
 	default:
 	  if (letter == 'z' && op == CONST0_RTX (GET_MODE (op)))
