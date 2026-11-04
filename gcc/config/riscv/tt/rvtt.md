@@ -287,7 +287,7 @@
 (define_expand "rvtt_sfpxloadi"
   [(set (match_operand:XTT32SI 0 "register_operand")
         (unspec:XTT32SI [
-	  (match_operand:SI 1 "address_operand")
+	  (match_operand:SI 1 "reg_or_0_operand")
           (match_operand:SI 2 "reg_or_const_int_operand")
           (match_operand:SI 3 "reg_or_0_operand")
           (match_operand:SI 4 "const_int_operand")
@@ -447,7 +447,7 @@
 (define_expand "rvtt_sfploadi"
   [(set (match_operand:XTT32SI 0 "register_operand")
         (unspec:XTT32SI [
-	  (match_operand:SI 1 "address_operand")
+	  (match_operand:SI 1 "reg_or_0_operand")
           (match_operand:SI 2 "reg_or_const_int_operand")
           (match_operand:SI 3 "reg_or_0_operand")
           (match_operand:SI 4 "const_int_operand")
@@ -464,7 +464,7 @@
 (define_expand "rvtt_sfploadi_lv"
   [(set (match_operand:XTT32SI 0 "register_operand")
         (unspec:XTT32SI [
-	  (match_operand:SI    1 "address_operand")
+	  (match_operand:SI    1 "reg_or_0_operand")
           (match_operand:XTT32SI 2 "register_operand")
           (match_operand:SI    3 "reg_or_const_int_operand")
           (match_operand:SI    4 "reg_or_0_operand")
@@ -473,10 +473,10 @@
 	  ] UNSPECV_SFPLOADI))]
   "TARGET_XTT_TENSIX"
 {
-  auto mem = const0_rtx;
-  auto opc = const0_rtx;
-  auto enc = const0_rtx;
-  auto insn = const0_rtx;
+  auto mem = CONST0_RTX (SImode);
+  auto opc = CONST0_RTX (SImode);
+  auto enc = CONST0_RTX (SImode);
+  auto insn = CONST0_RTX (SImode);
   auto imm = operands[3];
   if (!CONST_INT_P (imm))
     {
@@ -572,10 +572,10 @@
 	  ] UNSPECV_SFPLOAD))]
   "TARGET_XTT_TENSIX"
 {
-  auto mem = const0_rtx;
-  auto opc = const0_rtx;
-  auto enc = const0_rtx;
-  auto insn = const0_rtx;
+  auto mem = CONST0_RTX (SImode);
+  auto opc = CONST0_RTX (SImode);
+  auto enc = CONST0_RTX (SImode);
+  auto insn = CONST0_RTX (SImode);
   auto imm = operands[3];
   if (!CONST_INT_P (imm))
     {
@@ -612,10 +612,10 @@
 	  ] UNSPECV_SFPLOADSRCS))]
   "TARGET_XTT_TENSIX_QSR"
 {
-  auto mem = const0_rtx;
-  auto opc = const0_rtx;
-  auto enc = const0_rtx;
-  auto insn = const0_rtx;
+  auto mem = CONST0_RTX (SImode);
+  auto opc = CONST0_RTX (SImode);
+  auto enc = CONST0_RTX (SImode);
+  auto insn = CONST0_RTX (SImode);
   auto imm = operands[3];
   if (!CONST_INT_P (imm))
     {
@@ -697,10 +697,10 @@
      ] UNSPECV_SFPSTORE)]
   "TARGET_XTT_TENSIX"
 {
-  auto mem = const0_rtx;
-  auto opc = const0_rtx;
-  auto enc = const0_rtx;
-  auto insn = const0_rtx;
+  auto mem = CONST0_RTX (SImode);
+  auto opc = CONST0_RTX (SImode);
+  auto enc = CONST0_RTX (SImode);
+  auto insn = CONST0_RTX (SImode);
   auto imm = operands[2];
   if (!CONST_INT_P (imm))
     {
@@ -757,10 +757,10 @@
      ] UNSPECV_SFPSTORESRCS)]
   "TARGET_XTT_TENSIX_QSR"
 {
-  auto mem = const0_rtx;
-  auto opc = const0_rtx;
-  auto enc = const0_rtx;
-  auto insn = const0_rtx;
+  auto mem = CONST0_RTX (SImode);
+  auto opc = CONST0_RTX (SImode);
+  auto enc = CONST0_RTX (SImode);
+  auto insn = CONST0_RTX (SImode);
   auto imm = operands[2];
   if (!CONST_INT_P (imm))
     {
@@ -808,7 +808,7 @@
   "TARGET_XTT_TENSIX_WH_BH"
   {
     emit_insn (gen_rvtt_sfpsetcc
-      (operands[0], operands[1], const0_rtx));
+      (operands[0], operands[1], CONST0_RTX (SImode)));
     DONE;
   })
 
@@ -984,10 +984,10 @@
 	  ] rvtt_muliaddi_op))]
   "TARGET_XTT_TENSIX"
 {
-  auto mem = const0_rtx;
-  auto opc = const0_rtx;
-  auto enc = const0_rtx;
-  auto insn = const0_rtx;
+  auto mem = CONST0_RTX (SImode);
+  auto opc = CONST0_RTX (SImode);
+  auto enc = CONST0_RTX (SImode);
+  auto insn = CONST0_RTX (SImode);
   auto imm = operands[4];
   if (!CONST_INT_P (imm))
     {
@@ -1133,10 +1133,10 @@
   "TARGET_XTT_TENSIX"
 {
   operands[7] = GEN_INT (INTVAL (operands[7]) | SFPIADD_MOD1_ARG_IMM);
-  auto mem = const0_rtx;
-  auto opc = const0_rtx;
-  auto enc = const0_rtx;
-  auto insn = const0_rtx;
+  auto mem = CONST0_RTX (SImode);
+  auto opc = CONST0_RTX (SImode);
+  auto enc = CONST0_RTX (SImode);
+  auto insn = CONST0_RTX (SImode);
   auto imm = operands[4];
   if (!CONST_INT_P (imm))
     {
@@ -1184,7 +1184,7 @@
   [(const_int 0)]
   {
     rtx opcode = operands[2];
-    if (operands[1] != const0_rtx)
+    if (operands[1] != CONST0_RTX (SImode))
       {
         // Bake L8 as the dst reg here
         auto enc = rvtt_synth (INTVAL (operands[3]));
@@ -1364,10 +1364,10 @@
   "TARGET_XTT_TENSIX"
 {
   operands[7] = GEN_INT (INTVAL (operands[7]) | SFPSET<rvtt_set_insn>_MOD1_IMM);
-  auto mem = const0_rtx;
-  auto opc = const0_rtx;
-  auto enc = const0_rtx;
-  auto insn = const0_rtx;
+  auto mem = CONST0_RTX (SImode);
+  auto opc = CONST0_RTX (SImode);
+  auto enc = CONST0_RTX (SImode);
+  auto insn = CONST0_RTX (SImode);
   auto imm = operands[4];
   if (!CONST_INT_P (imm))
     {
@@ -1613,10 +1613,10 @@
       | (TARGET_XTT_TENSIX_BH_QSR ? SFPSHFT_MOD1_SRC_LREG_C : 0);
   operands[7] = GEN_INT (INTVAL (operands[7]) | mod);
 
-  auto mem = const0_rtx;
-  auto opc = const0_rtx;
-  auto enc = const0_rtx;
-  auto insn = const0_rtx;
+  auto mem = CONST0_RTX (SImode);
+  auto opc = CONST0_RTX (SImode);
+  auto enc = CONST0_RTX (SImode);
+  auto insn = CONST0_RTX (SImode);
   auto imm = operands[4];
   if (!CONST_INT_P (imm))
     {
@@ -1768,10 +1768,10 @@
 	  ] UNSPECV_SFPDIVP2))]
   "TARGET_XTT_TENSIX"
 {
-  auto mem = const0_rtx;
-  auto opc = const0_rtx;
-  auto enc = const0_rtx;
-  auto insn = const0_rtx;
+  auto mem = CONST0_RTX (SImode);
+  auto opc = CONST0_RTX (SImode);
+  auto enc = CONST0_RTX (SImode);
+  auto insn = CONST0_RTX (SImode);
   auto imm = operands[4];
   if (!CONST_INT_P (imm))
     {
@@ -1912,10 +1912,10 @@
 {
   operands[7] = GEN_INT (INTVAL (operands[7]) | SFPSTOCHRND_MOD1_IMM8);
 
-  auto mem = const0_rtx;
-  auto opc = const0_rtx;
-  auto enc = const0_rtx;
-  auto insn = const0_rtx;
+  auto mem = CONST0_RTX (SImode);
+  auto opc = CONST0_RTX (SImode);
+  auto enc = CONST0_RTX (SImode);
+  auto insn = CONST0_RTX (SImode);
   auto imm = operands[4];
   if (!CONST_INT_P (imm))
     {
@@ -2011,10 +2011,10 @@
   "TARGET_XTT_TENSIX"
 {
   operands[4] = GEN_INT (INTVAL (operands[4]) | SFPCONFIG_MOD1_ARG_IMM);
-  auto mem = const0_rtx;
-  auto opc = const0_rtx;
-  auto enc = const0_rtx;
-  auto insn = const0_rtx;
+  auto mem = CONST0_RTX (SImode);
+  auto opc = CONST0_RTX (SImode);
+  auto enc = CONST0_RTX (SImode);
+  auto insn = CONST0_RTX (SImode);
   auto imm = operands[1];
   if (!CONST_INT_P (imm))
     {
@@ -2109,7 +2109,7 @@
   // The dst register is determined by the value in L7,
   // so we need to emit a loadi to L7 first. How pleasant.
   emit_insn (gen_rvtt_sfploadi_lv_int
-    (operands[6], const0_rtx, const0_rtx, const0_rtx, const0_rtx,
+    (operands[6], CONST0_RTX (SImode), CONST0_RTX (SImode), CONST0_RTX (SImode), CONST0_RTX (SImode),
     rvtt_gen_rtx_noval (XTT32SImode),
     rvtt_gen_rtx_noval (XTT32SImode),
     GEN_INT (REGNO (operands[0]) - SFPU_REG_FIRST),
@@ -2320,7 +2320,7 @@
   "TARGET_XTT_TENSIX_WH_BH"
 {
   emit_insn (gen_rvtt_sfpswap
-    (operands[0], operands[1], operands[2], operands[3], const0_rtx));
+    (operands[0], operands[1], operands[2], operands[3], CONST0_RTX (SImode)));
   DONE;
 })
 
@@ -2689,7 +2689,7 @@
   {
     emit_insn (gen_rvtt_sfp<rvtt_gtle_name>_lv
       (operands[0], rvtt_gen_rtx_noval (XTT32SImode),
-       operands[1], operands[2], operands[3], const0_rtx));
+       operands[1], operands[2], operands[3], CONST0_RTX (SImode)));
     DONE;
   })
 
@@ -2705,7 +2705,7 @@
   {
     emit_insn (gen_rvtt_sfp<rvtt_gtle_name>_lv
       (operands[0], operands[1],
-       operands[2], operands[3], operands[4], const0_rtx));
+       operands[2], operands[3], operands[4], CONST0_RTX (SImode)));
     DONE;
   })
 
@@ -2878,7 +2878,7 @@
      ] UNSPECV_TTINSN)]
   "TARGET_XTT_TENSIX"
 {
-  auto mem = const0_rtx;
+  auto mem = CONST0_RTX (SImode);
   auto val = operands[1];
 
   if (!CONST_INT_P (val))
@@ -2910,10 +2910,10 @@
      ] UNSPECV_TTREPLAY)]
   "TARGET_XTT_TENSIX_WH_BH"
 {
-  auto mem = const0_rtx;
-  auto opc = const0_rtx;
-  auto enc = const0_rtx;
-  auto insn = const0_rtx;
+  auto mem = CONST0_RTX (SImode);
+  auto opc = CONST0_RTX (SImode);
+  auto enc = CONST0_RTX (SImode);
+  auto insn = CONST0_RTX (SImode);
   auto imm = operands[1];
   if (!CONST_INT_P (imm))
     {
@@ -2932,7 +2932,7 @@
 
   emit_insn (gen_rvtt_ttreplay_int
     (mem, opc, enc, insn, rvtt_gen_rtx_noval (XTT32SImode), imm,
-     operands[4], operands[5], operands[6], const0_rtx, const0_rtx));
+     operands[4], operands[5], operands[6], CONST0_RTX (SImode), CONST0_RTX (SImode)));
   DONE;
 })
 
@@ -2950,10 +2950,10 @@
      ] UNSPECV_TTREPLAY)]
   "TARGET_XTT_TENSIX_QSR"
 {
-  auto mem = const0_rtx;
-  auto opc = const0_rtx;
-  auto enc = const0_rtx;
-  auto insn = const0_rtx;
+  auto mem = CONST0_RTX (SImode);
+  auto opc = CONST0_RTX (SImode);
+  auto enc = CONST0_RTX (SImode);
+  auto insn = CONST0_RTX (SImode);
   auto imm = operands[1];
   if (!CONST_INT_P (imm))
     {

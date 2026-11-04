@@ -228,7 +228,7 @@ handle_qsr_load_latency (std::vector<basic_block> &visited, basic_block bb, rtx_
 	  // We ignore the problem of checking dynamic addresses, that's hard
 	  // in non-ssa form.
 	  auto store = XVECEXP (PATTERN (probe), 0, 0);
-	  if (const0_rtx != XVECEXP (store, 0, rvtt_synth::IX_mem))
+	  if (CONST0_RTX (SImode) != XVECEXP (store, 0, rvtt_synth::IX_mem))
 	    // Dynamic
 	    return;
 
@@ -308,7 +308,7 @@ transform (function *fn)
 		  // Do we need a nop before this load?  Gimple schedule pass
 		  // will have handled when we can propagate the stored value.
 		  auto src = SET_SRC (XVECEXP (PATTERN (insn), 0, 0));
-		  if (const0_rtx == XVECEXP (src, 0, rvtt_synth::IX_mem))
+		  if (CONST0_RTX (SImode) == XVECEXP (src, 0, rvtt_synth::IX_mem))
 		    {
 		      auto addr = XVECEXP (src, 0, rvtt_synth::IX_src + 2);
 		      handle_qsr_load_latency (visited, bb, insn, addr);
