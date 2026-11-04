@@ -48,11 +48,13 @@ along with GCC; see the file COPYING3.  If not see
 
 extern const char *riscv_expand_arch (int argc, const char **argv);
 extern const char *riscv_expand_arch_from_cpu (int argc, const char **argv);
+extern const char *riscv_expand_abi_from_cpu (int argc, const char **argv);
 extern const char *riscv_default_mtune (int argc, const char **argv);
 extern const char *riscv_multi_lib_check (int argc, const char **argv);
 extern const char *riscv_arch_help (int argc, const char **argv);
 
 # define EXTRA_SPEC_FUNCTIONS						\
+  { "riscv_expand_abi_from_cpu", riscv_expand_abi_from_cpu },		\
   { "riscv_expand_arch", riscv_expand_arch },				\
   { "riscv_expand_arch_from_cpu", riscv_expand_arch_from_cpu },		\
   { "riscv_default_mtune", riscv_default_mtune },			\
@@ -75,7 +77,9 @@ extern const char *riscv_arch_help (int argc, const char **argv);
   {"arch", "%{!march=*|march=unset:"					\
 	   "  %{!mcpu=*:-march=%(VALUE)}"				\
 	   "  %{mcpu=*:%:riscv_expand_arch_from_cpu(%* %(VALUE))}}" },	\
-  {"abi", "%{!mabi=*:-mabi=%(VALUE)}" },				\
+  {"abi", "%{!mabi=*:"							\
+	   "  %{!mcpu=*:-mabi=%(VALUE)}"				\
+	   "  %{mcpu=*:%:riscv_expand_abi_from_cpu(%* %(VALUE))}}" },	\
   {"isa_spec", "%{!misa-spec=*:-misa-spec=%(VALUE)}" },			\
   {"tls", "%{!mtls-dialect=*:-mtls-dialect=%(VALUE)}"},         	\
 
@@ -317,8 +321,13 @@ ARCH_UNSET_CLEANUP_SPECS \
 	- FRAME_POINTER_REGNUM
    - 1 vl register
    - 1 vtype register
-   - 28 unused registers for future expansion
-   - 32 vector registers  */
+   - 1 vxrm register
+   - 1 frm register
+   - 1 vxsat register
+   - 9 unused registers for future expansion
+   - 8 SFPU registers
+   - 8 unused registers for future expansion
+   - 32 vector registers */
 
 #define FIRST_PSEUDO_REGISTER 128
 
@@ -333,10 +342,13 @@ ARCH_UNSET_CLEANUP_SPECS \
   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,			\
   /* Others.  */							\
   1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,			\
-  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,			\
+  /* SFPU registers.  */						\
+  0, 0, 0, 0, 0, 0, 0, 0,						\
+  /* Others.  */							\
+  1, 1, 1, 1, 1, 1, 1, 1,						\
   /* Vector registers.  */						\
   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,			\
-  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0			\
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,			\
 }
 
 /* a0-a7, t0-t6, fa0-fa7, and ft0-ft11 are volatile across calls.
@@ -351,7 +363,10 @@ ARCH_UNSET_CLEANUP_SPECS \
   1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1,			\
   /* Others.  */							\
   1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,			\
-  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,			\
+  /* SFPU registers.  */						\
+  0, 0, 0, 0, 0, 0, 0, 0,						\
+  /* Others.  */							\
+  1, 1, 1, 1, 1, 1, 1, 1,						\
   /* Vector registers.  */						\
   1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,			\
   1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1			\
@@ -378,6 +393,11 @@ ARCH_UNSET_CLEANUP_SPECS \
 #define V_REG_LAST  127
 #define V_REG_NUM   (V_REG_LAST - V_REG_FIRST + 1)
 
+#define SFPU_REG_FIRST 80
+#define SFPU_REG_LAST  87
+#define SFPU_REG_NUM   (SFPU_REG_LAST - SFPU_REG_FIRST + 1)
+#define SFPU_CREG_IDX_LWM 8
+
 /* The DWARF 2 CFA column which tracks the return address from a
    signal handler context.  This means that to maintain backwards
    compatibility, no hard register can be assigned this column if it
@@ -396,6 +416,8 @@ ARCH_UNSET_CLEANUP_SPECS \
 #define VTYPE_REG_P(REGNO) ((REGNO) == VTYPE_REGNUM)
 #define VXRM_REG_P(REGNO) ((REGNO) == VXRM_REGNUM)
 #define FRM_REG_P(REGNO) ((REGNO) == FRM_REGNUM)
+#define SFPU_REG_P(REGNO)  \
+  ((unsigned (REGNO) - SFPU_REG_FIRST) < SFPU_REG_NUM)
 
 /* True when REGNO is in SIBCALL_REGS set.  */
 #define SIBCALL_REG_P(REGNO)	\
@@ -527,6 +549,17 @@ enum reg_class
   VM_REGS,			/* v0.t registers */
   VD_REGS,			/* vector registers except v0.t */
   V_REGS,			/* vector registers */
+  /* Tenstorrent begin */
+  SFPU_REGS_L0,                 /* SFPU register L0 */
+  SFPU_REGS_L1,                 /* SFPU register L1 */
+  SFPU_REGS_L2,                 /* SFPU register L2 */
+  SFPU_REGS_L3,                 /* SFPU register L3 */
+  SFPU_REGS_L4,                 /* SFPU register L4 */
+  SFPU_REGS_L5,                 /* SFPU register L5 */
+  SFPU_REGS_L6,                 /* SFPU register L6 */
+  SFPU_REGS_L7,                 /* SFPU register L7 */
+  SFPU_VAR_REGS,                /* SFPU variable registers */
+  /* Tenstorrent end */
   ALL_REGS,			/* all registers */
   LIM_REG_CLASSES		/* max value + 1 */
 };
@@ -552,6 +585,17 @@ enum reg_class
   "VM_REGS",								\
   "VD_REGS",								\
   "V_REGS",								\
+  /* Tenstorrent begin */ \
+  "SFPU_REGS_L0",							\
+  "SFPU_REGS_L1",							\
+  "SFPU_REGS_L2",							\
+  "SFPU_REGS_L3",							\
+  "SFPU_REGS_L4",							\
+  "SFPU_REGS_L5",							\
+  "SFPU_REGS_L6",							\
+  "SFPU_REGS_L7",							\
+  "SFPU_VAR_REGS",							\
+  /* Tenstorrent end */ \
   "ALL_REGS"								\
 }
 
@@ -579,7 +623,18 @@ enum reg_class
   { 0x00000000, 0x00000000, 0x00000000, 0x00000001 },	/* V0_REGS */		\
   { 0x00000000, 0x00000000, 0x00000000, 0xfffffffe },	/* VNoV0_REGS */	\
   { 0x00000000, 0x00000000, 0x00000000, 0xffffffff },	/* V_REGS */		\
-  { 0xffffffff, 0xffffffff, 0x00000003, 0xffffffff }	/* ALL_REGS */		\
+    /* Tenstorrent begin */ \
+  { 0x00000000, 0x00000000, 0x00010000, 0x00000000 },	/* SFPU_REGS_L0 */ 	\
+  { 0x00000000, 0x00000000, 0x00020000, 0x00000000 },	/* SFPU_REGS_L1 */ 	\
+  { 0x00000000, 0x00000000, 0x00040000, 0x00000000 },	/* SFPU_REGS_L2 */ 	\
+  { 0x00000000, 0x00000000, 0x00080000, 0x00000000 },	/* SFPU_REGS_L3 */ 	\
+  { 0x00000000, 0x00000000, 0x00100000, 0x00000000 },	/* SFPU_REGS_L4 */ 	\
+  { 0x00000000, 0x00000000, 0x00200000, 0x00000000 },	/* SFPU_REGS_L5 */ 	\
+  { 0x00000000, 0x00000000, 0x00400000, 0x00000000 },	/* SFPU_REGS_L6 */ 	\
+  { 0x00000000, 0x00000000, 0x00800000, 0x00000000 },	/* SFPU_REGS_L7 */ 	\
+  { 0x00000000, 0x00000000, 0x00ff0000, 0x00000000 },	/* SFPU_VAR_REGS */ 	\
+    /* Tenstorrent end */ \
+  { 0xffffffff, 0xffffffff, 0xffff0003, 0xffffffff }	/* ALL_REGS */	\
 }
 
 /* A C expression whose value is a register class containing hard
@@ -625,6 +680,8 @@ enum reg_class
   124, 125, 126, 127,							\
   /* The vector mask register.  */					\
   96,									\
+  /* SFPU Registers.  */						\
+  80, 81, 82, 83, 84, 85, 86, 87,					\
   /* None of the remaining classes have defined call-saved		\
      registers.  */							\
   64, 65, 66, 67							\
@@ -905,7 +962,10 @@ extern enum riscv_cc get_riscv_cc (const rtx use);
 
 #define JUMP_TABLES_IN_TEXT_SECTION (riscv_cmodel == CM_LARGE)
 #define CASE_VECTOR_MODE SImode
-#define CASE_VECTOR_PC_RELATIVE (riscv_cmodel != CM_MEDLOW)
+  // -1 means the table address and the table contents are
+  // -pc-relative, but to specitic code labels. This is needed for our
+  // -XIP code generation. The table can be placed in text or data.
+#define CASE_VECTOR_PC_RELATIVE (riscv_cmodel != CM_MEDLOW ? 1 : -1)
 
 #define LOCAL_SYM_P(sym)						\
      ((SYMBOL_REF_P (sym) && SYMBOL_REF_LOCAL_P (sym))			\
@@ -1004,7 +1064,7 @@ extern enum riscv_cc get_riscv_cc (const rtx use);
   "fs8", "fs9", "fs10","fs11","ft8", "ft9", "ft10","ft11",	\
   "arg", "frame", "vl", "vtype", "vxrm", "frm", "vxsat", "N/A", \
   "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A",	\
-  "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A",	\
+  "L0",  "L1",  "L2",  "L3",  "L4",  "L5",  "L6",  "L7",	\
   "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A",	\
   "v0",  "v1",  "v2",  "v3",  "v4",  "v5",  "v6",  "v7",	\
   "v8",  "v9",  "v10", "v11", "v12", "v13", "v14", "v15",	\
@@ -1200,7 +1260,7 @@ while (0)
 #define SET_RATIO(speed) (CLEAR_RATIO (speed) - ((speed) ? 0 : 2))
 
 #ifndef USED_FOR_TARGET
-extern const enum reg_class riscv_regno_to_class[];
+extern /*const*/ enum reg_class riscv_regno_to_class[];
 extern bool riscv_slow_unaligned_access_p;
 extern bool riscv_vector_unaligned_access_p;
 extern bool riscv_user_wants_strict_align;

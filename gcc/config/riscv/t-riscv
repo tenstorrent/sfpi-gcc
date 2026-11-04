@@ -14,7 +14,8 @@ riscv-builtins.o: $(srcdir)/config/riscv/riscv-builtins.cc $(CONFIG_H) \
   $(srcdir)/config/riscv/sifive-vector-builtins-functions.def \
   $(srcdir)/config/riscv/riscv-modes.def \
   $(srcdir)/config/riscv/riscv-cmo.def \
-  $(srcdir)/config/riscv/riscv-scalar-crypto.def
+  $(srcdir)/config/riscv/riscv-scalar-crypto.def \
+  $(srcdir)/config/riscv/tt/rvtt.h $(srcdir)/config/riscv/tt/rvtt-insn.def
 	$(COMPILER) -c $(ALL_COMPILERFLAGS) $(ALL_CPPFLAGS) $(INCLUDES) \
 		$(srcdir)/config/riscv/riscv-builtins.cc
 
@@ -195,10 +196,6 @@ $(common_out_file): $(srcdir)/config/riscv/riscv-cores.def \
 
 build/genrvv-type-indexer.o: $(srcdir)/config/riscv/genrvv-type-indexer.cc $(BCONFIG_H) $(SYSTEM_H)	\
   $(CORETYPES_H) $(GTM_H) errors.h $(GENSUPPORT_H)
-
-build/genrvv-type-indexer$(build_exeext): build/genrvv-type-indexer.o
-	+$(LINKER_FOR_BUILD) $(BUILD_LINKERFLAGS) $(BUILD_LDFLAGS) -o $@ \
-	    $(filter-out $(BUILD_LIBDEPS), $^) $(BUILD_LIBS)
 
 $(srcdir)/config/riscv/riscv-vector-builtins.def: riscv-vector-type-indexer.gen.def
 $(srcdir)/config/riscv/riscv-vector-builtins.h: $(srcdir)/config/riscv/riscv-vector-builtins.def

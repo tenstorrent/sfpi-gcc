@@ -336,6 +336,9 @@ bool riscv_user_wants_strict_align;
 /* Stack alignment to assume/maintain.  */
 unsigned riscv_stack_boundary;
 
+// FIXME: Marker for tt oddities
+static bool tt_core;
+
 /* Whether in riscv_output_mi_thunk. */
 static bool riscv_in_thunk_func = false;
 
@@ -360,7 +363,7 @@ unsigned riscv_bytes_per_vector_chunk;
 bool riscv_registering_builtins;
 
 /* Index R is the smallest register class that contains register R.  */
-const enum reg_class riscv_regno_to_class[FIRST_PSEUDO_REGISTER] = {
+/*const*/ enum reg_class riscv_regno_to_class[FIRST_PSEUDO_REGISTER] = {
   GR_REGS,	GR_REGS,	GR_REGS,	GR_REGS,
   GR_REGS,	GR_REGS,	JALR_REGS,	SIBCALL_REGS,
   JALR_REGS,	JALR_REGS,	SIBCALL_REGS,	SIBCALL_REGS,
@@ -381,10 +384,12 @@ const enum reg_class riscv_regno_to_class[FIRST_PSEUDO_REGISTER] = {
   NO_REGS,	NO_REGS,	NO_REGS,	NO_REGS,
   NO_REGS,	NO_REGS,	NO_REGS,	NO_REGS,
   NO_REGS,	NO_REGS,	NO_REGS,	NO_REGS,
+
+  SFPU_REGS_L0, SFPU_REGS_L1, SFPU_REGS_L2, SFPU_REGS_L3,
+  SFPU_REGS_L4, SFPU_REGS_L5, SFPU_REGS_L6, SFPU_REGS_L7,
   NO_REGS,	NO_REGS,	NO_REGS,	NO_REGS,
   NO_REGS,	NO_REGS,	NO_REGS,	NO_REGS,
-  NO_REGS,	NO_REGS,	NO_REGS,	NO_REGS,
-  NO_REGS,	NO_REGS,	NO_REGS,	NO_REGS,
+
   VM_REGS,	VD_REGS,	VD_REGS,	VD_REGS,
   VD_REGS,	VD_REGS,	VD_REGS,	VD_REGS,
   VD_REGS,	VD_REGS,	VD_REGS,	VD_REGS,
@@ -837,6 +842,82 @@ static const struct riscv_tune_param andes_45_tune_info = {
   true,						/* prefer-agnostic.  */
 };
 
+/* The int_mul/int_div values below are not raw latencies; they are
+costs that are used to compare alternative code sequences.
+In particular, GCC decides whether to replace division-by-constant with a
+multiply+shift chain by comparing the total cost of that chain against a 
+single int_div. */
+
+/* Costs to use when optimizing for rvtt_b1 (wormhole / blackhole).
+   HW latencies: multiply 2 cycles, divide variable 6-33 cycles. */
+static const struct riscv_tune_param rvtt_b1_tune_info = {
+  {COSTS_N_INSNS (0), COSTS_N_INSNS (0)},	/* fp_add NA */
+  {COSTS_N_INSNS (0), COSTS_N_INSNS (0)},	/* fp_mul NA */
+  {COSTS_N_INSNS (0), COSTS_N_INSNS (0)},	/* fp_div NA */
+  {COSTS_N_INSNS (2), COSTS_N_INSNS (2)},	/* int_mul */
+  {COSTS_N_INSNS (20), COSTS_N_INSNS (20)},	/* int_div */
+  1,						/* issue_rate */
+  5,						/* branch_cost - theory says 4, 5 performs better 12/12/22 */
+  5,						/* memory_cost */
+  8,						/* fmv_cost */
+  true,						/* slow_unaligned_access */
+  false,					/* vector_unaligned_access */
+  false,					/* use_divmod_expansion */
+  false,					/* overlap_op_by_pieces */
+  RISCV_FUSE_NOTHING,                           /* fusible_ops */
+  NULL,						/* vector cost */
+  NULL,						/* function_align */
+  NULL,						/* jump_align */
+  NULL,						/* loop_align */
+};
+
+/* Costs to use when optimizing for qsr32.
+   HW latencies: multiply 2 cycles, divide 3 cycles (fixed).  */
+static const struct riscv_tune_param rvtt_qsr32_tune_info = {
+  {COSTS_N_INSNS (0), COSTS_N_INSNS (0)},	/* fp_add NA */
+  {COSTS_N_INSNS (0), COSTS_N_INSNS (0)},	/* fp_mul NA */
+  {COSTS_N_INSNS (0), COSTS_N_INSNS (0)},	/* fp_div NA */
+  {COSTS_N_INSNS (2), COSTS_N_INSNS (2)},	/* int_mul */
+  {COSTS_N_INSNS (3), COSTS_N_INSNS (3)},	/* int_div */
+  1,						/* issue_rate */
+  5,						/* branch_cost - theory says 4, 5 performs better 12/12/22 */
+  5,						/* memory_cost */
+  8,						/* fmv_cost */
+  true,						/* slow_unaligned_access */
+  false,					/* vector_unaligned_access */
+  false,					/* use_divmod_expansion */
+  false,					/* overlap_op_by_pieces */
+  RISCV_FUSE_NOTHING,                           /* fusible_ops */
+  NULL,						/* vector cost */
+  NULL,						/* function_align */
+  NULL,						/* jump_align */
+  NULL,						/* loop_align */
+};
+
+/* Costs to use when optimizing for qsr64.
+   HW latencies: multiply 2 cycles, divide variable 3-33 cycles 
+   (typically 3-8 for common 10-bit operands). */
+static const struct riscv_tune_param rvtt_qsr64_tune_info = {
+  {COSTS_N_INSNS (0), COSTS_N_INSNS (0)},	/* fp_add NA */
+  {COSTS_N_INSNS (0), COSTS_N_INSNS (0)},	/* fp_mul NA */
+  {COSTS_N_INSNS (0), COSTS_N_INSNS (0)},	/* fp_div NA */
+  {COSTS_N_INSNS (2), COSTS_N_INSNS (2)},	/* int_mul */
+  {COSTS_N_INSNS (8), COSTS_N_INSNS (8)},	/* int_div */
+  1,						/* issue_rate */
+  5,						/* branch_cost - theory says 4, 5 performs better 12/12/22 */
+  5,						/* memory_cost */
+  8,						/* fmv_cost */
+  true,						/* slow_unaligned_access */
+  false,					/* vector_unaligned_access */
+  false,					/* use_divmod_expansion */
+  false,					/* overlap_op_by_pieces */
+  RISCV_FUSE_NOTHING,                           /* fusible_ops */
+  NULL,						/* vector cost */
+  NULL,						/* function_align */
+  NULL,						/* jump_align */
+  NULL,						/* loop_align */
+};
+
 static bool riscv_avoid_shrink_wrapping_separate ();
 static tree riscv_handle_fndecl_attribute (tree *, tree, tree, int, bool *);
 static tree riscv_handle_type_attribute (tree *, tree, tree, int, bool *);
@@ -882,6 +963,14 @@ static const attribute_spec riscv_gnu_attributes[] =
     standard vector calling convention variant. Syntax:
     __attribute__((norelax)). */
   {"norelax", 0, 0, true, false, false, false, NULL, NULL},
+
+  // Tenstorrent: pointers that point into l1 memory or a hw mapped register.
+  { "rvtt_l1_ptr", 0, 0, false, true, false, true, NULL, NULL },
+  
+  { "rvtt_reg_ptr", 0, 0, false, true, false, true, NULL, NULL },
+
+  // Annotated internally
+  { "__xtt_vector", 0, 0, false, true, false, true, NULL, NULL },
 };
 
 static const scoped_attribute_specs riscv_gnu_attribute_table  =
@@ -4754,6 +4843,13 @@ riscv_rtx_costs (rtx x, machine_mode mode, int outer_code, int opno ATTRIBUTE_UN
 	  *total = 1;
 	  return true;
 	}
+      if (XINT (x, 1) == UNSPEC_SFPCSTLREG
+	  || XINT (x, 1) == UNSPEC_SFPNOVAL
+	  || XINT (x, 1) == UNSPEC_SFPOMIT)
+	{
+	  *total = 0;
+	  return true;
+	}
       return false;
 
     default:
@@ -4790,6 +4886,9 @@ riscv_insn_cost (rtx_insn *insn, bool speed)
 {
   rtx x = PATTERN (insn);
   int cost = pattern_cost (x, speed);
+
+  if (!cost && GET_CODE (x) == UNSPEC_VOLATILE)
+    cost = set_src_cost (x, GET_MODE (x), speed);
 
   if (JUMP_P (insn))
     {
@@ -5236,6 +5335,24 @@ riscv_output_return ()
     return "";
 
   return "ret";
+}
+
+static int
+riscv_comp_type_attributes (const_tree type1, const_tree type2)
+{
+  if (bool (lookup_attribute ("rvtt_l1_ptr", TYPE_ATTRIBUTES (type1)))
+      != bool (lookup_attribute ("rvtt_l1_ptr", TYPE_ATTRIBUTES (type2))))
+    return 0;
+
+  if (bool (lookup_attribute ("rvtt_reg_ptr", TYPE_ATTRIBUTES (type1)))
+      != bool (lookup_attribute ("rvtt_reg_ptr", TYPE_ATTRIBUTES (type2))))
+    return 0;
+
+  if (bool (lookup_attribute ("__xtt_vector", TYPE_ATTRIBUTES (type1)))
+      != bool (lookup_attribute ("__xtt_vector", TYPE_ATTRIBUTES (type2))))
+    return 0;
+
+  return 1;
 }
 
 
@@ -8253,6 +8370,21 @@ riscv_print_operand (FILE *file, rtx op, int letter)
 	fputs (reg_names[REGNO (op) + 1], file);
 	break;
       }
+
+    case 's':
+      if (code == CONST_INT)
+	fprintf (file, "%ld", INTVAL(op));
+      else
+	gcc_unreachable();
+      break;
+
+    case 'u':
+      if (code == CONST_INT)
+	fprintf (file, "%u", ((unsigned)(INTVAL(op) & 0xFFFF)));
+      else
+	gcc_unreachable();
+      break;
+
     default:
       switch (code)
 	{
@@ -8286,6 +8418,24 @@ riscv_print_operand (FILE *file, rtx op, int letter)
 	    asm_fprintf (file, "%s", fli_value_print[fli_index]);
 	    break;
 	  }
+
+	case UNSPEC:
+	  // Tenstorrent
+	  {
+	    auto subcode = XINT (op, 1);
+	    if (subcode == UNSPEC_SFPCSTLREG)
+	      {
+		rtx cst = XVECEXP (op, 0, 0);
+		fprintf(file, "L%d", int (INTVAL (cst)));
+		break;
+	      }
+	    if (subcode == UNSPEC_SFPNOVAL)
+	      {
+		fprintf(file, "-");
+		break;
+	      }
+	  }
+	  //FALLTHROUGH
 
 	default:
 	  if (letter == 'z' && op == CONST0_RTX (GET_MODE (op)))
@@ -10808,6 +10958,9 @@ riscv_hard_regno_nregs (unsigned int regno, machine_mode mode)
   if (FP_REG_P (regno))
     return (GET_MODE_SIZE (mode).to_constant () + UNITS_PER_FP_REG - 1) / UNITS_PER_FP_REG;
 
+  if (SFPU_REG_P (regno))
+    return (GET_MODE_SIZE (mode).to_constant () + 4 * 32 - 1) / (4 * 32);
+
   /* All other registers are word-sized.  */
   return (GET_MODE_SIZE (mode).to_constant () + UNITS_PER_WORD - 1) / UNITS_PER_WORD;
 }
@@ -10817,8 +10970,13 @@ riscv_hard_regno_nregs (unsigned int regno, machine_mode mode)
 static bool
 riscv_hard_regno_mode_ok (unsigned int regno, machine_mode mode)
 {
-  unsigned int nregs = riscv_hard_regno_nregs (regno, mode);
+  bool is_sfpu = SFPU_REG_P (regno);
+  if (mode == XTT32SImode || mode == XTT64SImode || mode == XTT128SImode || mode == XTT256SImode)
+    return is_sfpu;
+  if (is_sfpu)
+    return false;
 
+  unsigned int nregs = riscv_hard_regno_nregs (regno, mode);
   if (GP_REG_P (regno))
     {
       if (riscv_vector_mode_p (mode))
@@ -10915,6 +11073,9 @@ riscv_class_max_nregs (reg_class_t rclass, machine_mode mode)
 
   if (reg_class_subset_p (rclass, V_REGS))
     return riscv_hard_regno_nregs (V_REG_FIRST, mode);
+
+  if (reg_class_subset_p (SFPU_VAR_REGS, rclass))
+    return riscv_hard_regno_nregs (SFPU_REG_FIRST, mode);
 
   return 0;
 }
@@ -11020,6 +11181,10 @@ riscv_sched_variable_issue (FILE *, int, rtx_insn *insn, int more)
   /* If we ever encounter an insn with an unknown type, trip
      an assert so we can find and fix this problem.  */
   gcc_assert (get_attr_type (insn) != TYPE_UNKNOWN);
+
+  // FIXME: Implement for TT cores
+  if (tt_core)
+    return more;
 
   /* If we ever encounter an insn without an insn reservation, trip
      an assert so we can find and fix this problem.  */
@@ -12259,6 +12424,63 @@ riscv_convert_vector_chunks (struct gcc_options *opts)
 void
 riscv_override_options_internal (struct gcc_options *opts)
 {
+  if (auto cpu = opts->x_riscv_cpu_string)
+    {
+      // TT cpu implications
+      auto is_cpu_kind = [&] (char const *name)
+      {
+	auto len = strlen (name);
+	return 0 == strncmp (cpu, name, len)
+	  && (!cpu[len] || cpu[len] == '-');
+      };
+
+      if (is_cpu_kind ("tt-wh"))
+	{
+	  if (riscv_tt_fix_wh_raw < 0)
+	    riscv_tt_fix_wh_raw = 1;
+	  if (riscv_tt_fix_wh_fence < 0)
+	    riscv_tt_fix_wh_fence = 1;
+	}
+
+      if (is_cpu_kind ("tt-wh") || is_cpu_kind ("tt-bh"))
+	{
+	  if (riscv_tt_fix_whbh_ebreak < 0)
+	    riscv_tt_fix_whbh_ebreak = 1;
+
+#if 0 // This was previously disabled, don't reenable as a side-effect of
+      // fixing unrelated bug
+	  if (riscv_tt_opt_hll < 0)
+	    riscv_tt_opt_hll = 1;
+#endif
+
+	  if (riscv_tt_opt_extend < 0
+	      && optimize > 0)
+	    // The rmext optimization ICES on quasar for reasons to be determined.
+	    riscv_tt_opt_extend = 1;
+	}
+
+      if (is_cpu_kind ("tt-qsr32"))
+	{
+	  if (riscv_tt_fix_qsr_replay < 0)
+	    riscv_tt_fix_qsr_replay = 1;
+	  if (!(target_flags_explicit & MASK_FDIV))
+	    {
+	      opts->x_target_flags &= ~MASK_FDIV;
+	      // Say this is explicit so below doesn't turn it back on.
+	      target_flags_explicit |= MASK_FDIV;
+	    }
+	}
+
+      if (is_cpu_kind ("tt-qsr64"))
+	{
+	  if (TARGET_XTT_ROCC_QSR && riscv_tt_fix_qsr_rocc < 0)
+	    riscv_tt_fix_qsr_rocc = 1;
+	}
+
+      // FIXME: Add tune model for our cores.
+      tt_core = is_cpu_kind("tt");
+    }
+
   const struct riscv_tune_info *cpu;
 
   /* The presence of the M extension implies that division instructions
@@ -12559,6 +12781,9 @@ riscv_option_override (void)
      while processing functions with potential target attributes.  */
   target_option_default_node = target_option_current_node
     = build_target_option_node (&global_options, &global_options_set);
+
+  if (int (TARGET_XTT_TENSIX_WH) + int (TARGET_XTT_TENSIX_BH) + int (TARGET_XTT_TENSIX_QSR) > 1)
+    error ("only one ttwh or ttbh extension can be specified");
 }
 
 /* Restore or save the TREE_TARGET_GLOBALS from or to NEW_TREE.
@@ -12665,6 +12890,10 @@ riscv_conditional_register_usage (void)
       fixed_regs[VXRM_REGNUM] = call_used_regs[VXRM_REGNUM] = 1;
       fixed_regs[FRM_REGNUM] = call_used_regs[FRM_REGNUM] = 1;
     }
+
+  if (!TARGET_XTT_TENSIX)
+    for (int regno = SFPU_REG_FIRST; regno <= SFPU_REG_LAST; regno++)
+      fixed_regs[regno] = call_used_regs[regno] = 1;
 }
 
 /* Return a register priority for hard reg REGNO.  */
@@ -13460,6 +13689,10 @@ riscv_reinit (void)
 static bool
 riscv_vector_mode_supported_p (machine_mode mode)
 {
+  if (TARGET_XTT_TENSIX
+      && (mode == XTT32SImode || mode == XTT64SImode || mode == XTT128SImode || mode == XTT256SImode))
+    return true;
+
   if (TARGET_VECTOR)
     {
       /* Avoid fractional LMUL modes for xtheadvector with the exception
@@ -16962,6 +17195,9 @@ riscv_prefetch_offset_address_p (rtx x, machine_mode mode)
 
 #undef TARGET_DOCUMENTATION_NAME
 #define TARGET_DOCUMENTATION_NAME "RISC-V"
+
+#undef TARGET_COMP_TYPE_ATTRIBUTES
+#define TARGET_COMP_TYPE_ATTRIBUTES riscv_comp_type_attributes
 
 struct gcc_target targetm = TARGET_INITIALIZER;
 

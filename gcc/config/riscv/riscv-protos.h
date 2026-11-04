@@ -24,6 +24,8 @@ along with GCC; see the file COPYING3.  If not see
 
 #include "memmodel.h"
 
+#include "tt/rvtt-protos.h"
+
 /* Symbol types we understand.  The order of this list must match that of
    the unspec enum in riscv.md, subsequent to UNSPEC_ADDRESS_FIRST.  */
 enum riscv_symbol_type {
@@ -228,6 +230,9 @@ struct riscv_cpu_info {
 
   /* Default arch for this CPU, could be NULL if no default arch.  */
   const char *arch;
+
+  /* Default ABI for this CPU, can be nullptr if no default abi.  */
+  const char *abi;
 
   /* Which automaton to use for tuning.  */
   const char *tune;

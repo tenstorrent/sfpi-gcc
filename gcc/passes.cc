@@ -1846,6 +1846,7 @@ emergency_dump_function ()
 	   current_pass->name);
   if (!dump_file || !cfun)
     return;
+
   fnotice (stderr, "dump file: %s\n", dump_file_name);
   fprintf (dump_file, "\n\n\nEMERGENCY DUMP:\n\n");
   execute_function_dump (cfun, current_pass);

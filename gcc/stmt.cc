@@ -1096,6 +1096,7 @@ emit_case_dispatch_table (tree index_expr, tree index_type,
   auto_vec<rtx> labelvec;
   rtx_insn *fallback_label = label_rtx (case_list[0].m_code_label);
   rtx_code_label *table_label = gen_label_rtx ();
+  rtx_code_label *code_label = CASE_VECTOR_PC_RELATIVE < 0 ? gen_label_rtx () : table_label;
   bool has_gaps = false;
   profile_probability default_prob = default_edge ? default_edge->probability
 						  : profile_probability::never ();
@@ -1105,6 +1106,7 @@ emit_case_dispatch_table (tree index_expr, tree index_type,
   profile_probability new_default_prob = conditional_probability (default_prob,
 								  base);
 
+  // FIXME: Needs adjusting for code_label != table_label
   if (! try_casesi (index_type, index_expr, minval, range,
 		    table_label, default_label, fallback_label,
                     new_default_prob))
@@ -1195,7 +1197,7 @@ emit_case_dispatch_table (tree index_expr, tree index_type,
   if (try_with_tablejump)
     {
       bool ok = try_tablejump (index_type, index_expr, minval, range,
-                               table_label, default_label, new_default_prob);
+			       table_label, code_label, default_label, new_default_prob);
       gcc_assert (ok);
     }
   /* Output the table.  */
@@ -1205,7 +1207,7 @@ emit_case_dispatch_table (tree index_expr, tree index_type,
 	  || (flag_pic && targetm.asm_out.generate_pic_addr_diff_vec ()))
     emit_jump_table_data (gen_rtx_ADDR_DIFF_VEC (CASE_VECTOR_MODE,
 						 gen_rtx_LABEL_REF (Pmode,
-								    table_label),
+								    code_label),
 						 gen_rtvec_v (ncases, labelvec.address ()),
 						 const0_rtx, const0_rtx));
   else

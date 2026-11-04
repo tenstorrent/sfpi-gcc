@@ -89,7 +89,6 @@ debug_gimple_stmt (gimple *gs)
   print_gimple_stmt (stderr, gs, 0, TDF_VOPS|TDF_MEMSYMS);
 }
 
-
 /* Return formatted string of a VALUE probability
    (biased by REG_BR_PROB_BASE).  Returned string is allocated
    by xstrdup_for_dump.  */

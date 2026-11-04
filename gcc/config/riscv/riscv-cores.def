@@ -59,6 +59,11 @@ RISCV_TUNE("andes-25-series", andes_25_series, andes_25_tune_info)
 RISCV_TUNE("andes-23-series", andes_23_series, andes_23_tune_info)
 RISCV_TUNE("andes-45-series", andes_45_series, andes_45_tune_info)
 
+// TODO: Update instruction scheduling tuning
+RISCV_TUNE("rvtt-b1", rvtt_b1, rvtt_b1_tune_info)
+RISCV_TUNE("rvtt-qsr32", rvtt_b1, rvtt_qsr32_tune_info)
+RISCV_TUNE("rvtt-qsr64", rvtt_b1, rvtt_qsr64_tune_info)
+
 #undef RISCV_TUNE
 
 /* This is a list of cores that implement RISC-V.

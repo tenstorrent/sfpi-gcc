@@ -35,12 +35,14 @@ along with GCC; see the file COPYING3.  If not see
 #include "diagnostic-core.h"
 #include "stor-layout.h"
 #include "stringpool.h"
+#include "attribs.h"
 #include "expr.h"
 #include "langhooks.h"
 #include "tm_p.h"
 #include "backend.h"
 #include "gimple.h"
 #include "gimple-iterator.h"
+#include <map>
 
 /* Macros to create an enumeration identifier for a function prototype.  */
 #define RISCV_FTYPE_NAME0(A) RISCV_##A##_FTYPE
@@ -49,6 +51,16 @@ along with GCC; see the file COPYING3.  If not see
 #define RISCV_FTYPE_NAME3(A, B, C, D) RISCV_##A##_FTYPE_##B##_##C##_##D
 #define RISCV_FTYPE_NAME4(A, B, C, D, E) \
   RISCV_##A##_FTYPE_##B##_##C##_##D##_##E
+#define RISCV_FTYPE_NAME5(A, B, C, D, E, F) \
+  RISCV_##A##_FTYPE_##B##_##C##_##D##_##E##_##F
+#define RISCV_FTYPE_NAME6(A, B, C, D, E, F, G) \
+  RISCV_##A##_FTYPE_##B##_##C##_##D##_##E##_##F##_##G
+#define RISCV_FTYPE_NAME7(A, B, C, D, E, F, G, H) \
+  RISCV_##A##_FTYPE_##B##_##C##_##D##_##E##_##F##_##G##_##H
+#define RISCV_FTYPE_NAME8(A, B, C, D, E, F, G, H, I) \
+  RISCV_##A##_FTYPE_##B##_##C##_##D##_##E##_##F##_##G##_##H##_##I
+#define RISCV_FTYPE_NAME9(A, B, C, D, E, F, G, H, I, J)			\
+  RISCV_##A##_FTYPE_##B##_##C##_##D##_##E##_##F##_##G##_##H##_##I##_##J
 
 /* Classifies the prototype of a built-in function.  */
 enum riscv_function_type {
@@ -56,15 +68,6 @@ enum riscv_function_type {
 #include "config/riscv/riscv-ftypes.def"
 #undef DEF_RISCV_FTYPE
   RISCV_MAX_FTYPE_MAX
-};
-
-/* Specifies how a built-in function should be converted into rtl.  */
-enum riscv_builtin_type {
-  /* The function corresponds directly to an .md pattern.  */
-  RISCV_BUILTIN_DIRECT,
-
-  /* Likewise, but with return type VOID.  */
-  RISCV_BUILTIN_DIRECT_NO_TARGET
 };
 
 /* Declare an availability predicate for built-in functions.  */
@@ -77,18 +80,21 @@ enum riscv_builtin_type {
 
 /* This structure describes a single built-in function.  */
 struct riscv_builtin_description {
-  /* The code of the main .md file instruction.  See riscv_builtin_type
-     for more information.  */
-  enum insn_code icode;
-
   /* The name of the built-in function.  */
   const char *name;
 
-  /* Specifies how the function should be expanded.  */
-  enum riscv_builtin_type builtin_type;
+  /* The code of the main .md file instruction.  See riscv_builtin_type
+     for more information.  */
+  enum insn_code icode : 20;
 
   /* The function's prototype.  */
-  enum riscv_function_type prototype;
+  enum riscv_function_type prototype : 12;
+
+  /* True, if the function returns void (and so expansion has no target RTL).  */
+  bool no_target : 8;
+
+  /* ECF flags */
+  unsigned ecf_flags : 24;
 
   /* Whether the function is available.  */
   unsigned int (*avail) (void);
@@ -105,8 +111,9 @@ AVAIL (zero32,  TARGET_ZICBOZ && !TARGET_64BIT)
 AVAIL (zero64,  TARGET_ZICBOZ && TARGET_64BIT)
 AVAIL (prefetchi32, TARGET_ZICBOP && !TARGET_64BIT)
 AVAIL (prefetchi64, TARGET_ZICBOP && TARGET_64BIT)
-AVAIL (crypto_zbkb, TARGET_ZBKB)
+AVAIL (crypto_zbkb_xtt_zbkb, TARGET_ZBKB || TARGET_XTT_ZBKB)
 AVAIL (crypto_zbkb32, TARGET_ZBKB && !TARGET_64BIT)
+AVAIL (crypto_zbkb32_xtt_zbkb, (TARGET_ZBKB || TARGET_XTT_ZBKB) && !TARGET_64BIT)
 AVAIL (crypto_zbkb64, TARGET_ZBKB && TARGET_64BIT)
 AVAIL (crypto_zbkx32, TARGET_ZBKX && !TARGET_64BIT)
 AVAIL (crypto_zbkx64, TARGET_ZBKX && TARGET_64BIT)
@@ -237,9 +244,11 @@ static GTY(()) int riscv_builtin_decl_index[NUM_INSN_CODES];
 
 #define GET_BUILTIN_DECL(CODE) \
   riscv_builtin_decls[riscv_builtin_decl_index[(CODE)]]
-
 tree riscv_float16_type_node = NULL_TREE;
 tree riscv_bfloat16_type_node = NULL_TREE;
+
+// Do not need to be GTY, as only needed during initiazlization
+static tree xtt_type_nodes[5];
 
 /* Return the function type associated with function prototype TYPE.  */
 
@@ -248,6 +257,8 @@ riscv_build_function_type (enum riscv_function_type type)
 {
   static tree types[(int) RISCV_MAX_FTYPE_MAX];
 
+  if (type >= RISCV_MAX_FTYPE_MAX)
+    return nullptr;
   if (types[(int) type] == NULL_TREE)
     switch (type)
       {
@@ -298,6 +309,41 @@ riscv_init_builtin_types (void)
   if (!maybe_get_identifier ("__bf16"))
     lang_hooks.types.register_builtin_type (riscv_bfloat16_type_node,
 					    "__bf16");
+  if (TARGET_XTT_TENSIX)
+    {
+      RISCV_ATYPE_XTT_IPTR = build_pointer_type
+	(build_qualified_type (long_unsigned_type_node, TYPE_QUAL_VOLATILE));
+
+      tree attrib = get_identifier ("__xtt_vector");
+      char name[16];
+      strcpy (name, "__xtt_vector");
+
+      char *pos = name + strlen (name);
+      pos[1] = 0;
+
+      for (unsigned ix = 0; ix != 4; ix++)
+	{
+	  static const struct
+	  {
+	    machine_mode mode;
+	    char suffix;
+	  } modes[]
+	    = {{XTT32SImode,  0},
+	       {XTT64SImode,  '2'},
+	       {XTT128SImode, '4'},
+	       {XTT256SImode, '8'}};
+
+	  pos[0] = modes[ix].suffix;
+	  tree vec = build_vector_type_for_mode (unsigned_type_node, modes[ix].mode);
+
+	  // We need to add an attribute, so that the lang FE's know this is a
+	  // distinct type
+	  vec = build_type_attribute_variant (vec, tree_cons (attrib, NULL_TREE,
+							      TYPE_ATTRIBUTES (vec)));
+	  (&RISCV_ATYPE_XTT_VEC)[ix] = vec;
+	  lang_hooks.types.register_builtin_type (vec, name);
+	}
+    }
 }
 
 /* Implement TARGET_INIT_BUILTINS.  */
@@ -310,18 +356,56 @@ riscv_init_builtins (void)
 
   for (size_t i = 0; i < ARRAY_SIZE (riscv_builtins); i++)
     {
-      const struct riscv_builtin_description *d = &riscv_builtins[i];
+      struct riscv_builtin_description *d = &riscv_builtins[i];
       if (d->avail ())
 	{
 	  tree type = riscv_build_function_type (d->prototype);
+	  if (!type)
+	    continue;
+	  if (VOID_TYPE_P (TREE_TYPE (type)))
+	    d->no_target = true;
 	  riscv_builtin_decls[i]
 	    = add_builtin_function (d->name, type,
 				    (i << RISCV_BUILTIN_SHIFT)
 				      + RISCV_BUILTIN_GENERAL,
 				    BUILT_IN_MD, NULL, NULL);
 	  riscv_builtin_decl_index[d->icode] = i;
+	  set_call_expr_flags (riscv_builtin_decls[i],
+			       d->ecf_flags | ECF_NOTHROW);
+
+	  extern bool rvtt_record_builtin (unsigned idx, char const *, tree decl);
+	  if (rvtt_record_builtin (i, d->name, riscv_builtin_decls[i]))
+	    {
+	      // Apply Tensix overrides
+	      enum indices {
+#define RVTT_FN(INSN, AVAIL, SFX, FUNCTION_TYPE, fl, ops, ECF) IX_##INSN,
+#include "tt/rvtt-insn.def"
+		IX_hwm
+	      };
+	      static const struct {
+		insn_code icode: 20;
+		indices ix : 12;
+		riscv_function_type prototype : 10;
+		unsigned ecf : 22;
+		unsigned (*avail) ();
+	      } overrides[] = {
+#define RVTT_OVR(INSN, AVAIL, SFX, FUNCTION_TYPE, fl, ops, ECF)		\
+		{CODE_FOR_rvtt_ ## INSN ## SFX, IX_##INSN, RISCV_##FUNCTION_TYPE, ECF, riscv_builtin_avail_tensix ## AVAIL},
+#include "tt/rvtt-insn.def"
+	      };
+	      for (auto const &ovr : overrides)
+		if (ovr.avail ())
+		  {
+		    d[ovr.ix].icode = ovr.icode;
+		    d[ovr.ix].prototype = ovr.prototype;
+		    d[ovr.ix].avail = ovr.avail;
+		  }
+	    }
 	}
     }
+
+  extern void rvtt_init_builtins ();
+  rvtt_init_builtins ();
 }
 
 /* Implement TARGET_BUILTIN_DECL.  */
@@ -443,14 +527,7 @@ riscv_expand_builtin (tree exp, rtx target, rtx subtarget ATTRIBUTE_UNUSED,
       case RISCV_BUILTIN_GENERAL: {
 	const struct riscv_builtin_description *d = &riscv_builtins[subcode];
 
-	switch (d->builtin_type)
-	  {
-	  case RISCV_BUILTIN_DIRECT:
-	    return riscv_expand_builtin_direct (d->icode, target, exp, true);
-
-	  case RISCV_BUILTIN_DIRECT_NO_TARGET:
-	    return riscv_expand_builtin_direct (d->icode, target, exp, false);
-	  }
+	return riscv_expand_builtin_direct (d->icode, target, exp, !d->no_target);
       }
     }
 
@@ -474,3 +551,5 @@ riscv_atomic_assign_expand_fenv (tree *hold, tree *clear, tree *update)
   *clear = build_call_expr (fsflags, 1, old_flags);
   *update = NULL_TREE;
 }
+
+#include "gt-riscv-builtins.h"

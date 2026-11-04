@@ -1701,6 +1701,18 @@ merge_attribute_bits (tree newdecl, tree olddecl)
   TREE_DEPRECATED (olddecl) |= TREE_DEPRECATED (newdecl);
   TREE_UNAVAILABLE (newdecl) |= TREE_UNAVAILABLE (olddecl);
   TREE_UNAVAILABLE (olddecl) |= TREE_UNAVAILABLE (newdecl);
+  DECL_NO_LIMIT_STACK (newdecl) |= DECL_NO_LIMIT_STACK (olddecl);
+  DECL_NO_LIMIT_STACK (olddecl) |= DECL_NO_LIMIT_STACK (newdecl);
+  DECL_NO_INSTRUMENT_FUNCTION_ENTRY_EXIT (newdecl)
+    |= DECL_NO_INSTRUMENT_FUNCTION_ENTRY_EXIT (olddecl);
+  DECL_NO_INSTRUMENT_FUNCTION_ENTRY_EXIT (olddecl)
+    |= DECL_NO_INSTRUMENT_FUNCTION_ENTRY_EXIT (newdecl);
+  DECL_IS_NOVOPS (newdecl) |= DECL_IS_NOVOPS (olddecl);
+  DECL_IS_NOVOPS (olddecl) |= DECL_IS_NOVOPS (newdecl);
+
+  // Tenstorrent
+  DECL_STAY_CONST_P (newdecl) |= DECL_STAY_CONST_P (olddecl);
+  DECL_STAY_CONST_P (olddecl) |= DECL_STAY_CONST_P (newdecl);
 }
 
 #define GNU_INLINE_P(fn) (DECL_DECLARED_INLINE_P (fn)			\
@@ -11701,6 +11713,13 @@ expand_static_init (tree decl, tree init)
 		  "initialization and destruction");
 	  informed = true;
 	}
+      return;
+    }
+
+  if (flag_tt_no_dyninit)
+    {
+      error_at (DECL_SOURCE_LOCATION (decl), "dynamic initialization or destruction of "
+		"static-storage %qD is disallowed in this environment", decl);
       return;
     }
 

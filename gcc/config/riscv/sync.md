@@ -19,18 +19,18 @@
 ;; along with GCC; see the file COPYING3.  If not see
 ;; <http://www.gnu.org/licenses/>.
 
-(define_c_enum "unspec" [
-  UNSPEC_COMPARE_AND_SWAP
-  UNSPEC_COMPARE_AND_SWAP_SUBWORD
-  UNSPEC_SYNC_OLD_OP
-  UNSPEC_SYNC_OLD_OP_SUBWORD
-  UNSPEC_SYNC_OLD_OP_ZABHA
-  UNSPEC_SYNC_EXCHANGE
-  UNSPEC_SYNC_EXCHANGE_SUBWORD
-  UNSPEC_SYNC_EXCHANGE_ZABHA
-  UNSPEC_ATOMIC_LOAD
-  UNSPEC_ATOMIC_STORE
-  UNSPEC_MEMORY_BARRIER
+(define_c_enum "unspecv" [
+  UNSPECV_COMPARE_AND_SWAP
+  UNSPECV_COMPARE_AND_SWAP_SUBWORD
+  UNSPECV_SYNC_OLD_OP
+  UNSPECV_SYNC_OLD_OP_SUBWORD
+  UNSPECV_SYNC_OLD_OP_ZABHA
+  UNSPECV_SYNC_EXCHANGE
+  UNSPECV_SYNC_EXCHANGE_SUBWORD
+  UNSPECV_SYNC_EXCHANGE_ZABHA
+  UNSPECV_ATOMIC_LOAD
+  UNSPECV_ATOMIC_STORE
+  UNSPECV_MEMORY_BARRIER
 ])
 
 ;; Memory barriers.
@@ -51,18 +51,33 @@
       {
 	rtx mem = gen_rtx_MEM (BLKmode, gen_rtx_SCRATCH (Pmode));
 	MEM_VOLATILE_P (mem) = 1;
-	emit_insn (gen_mem_thread_fence_rvwmo (mem, operands[0]));
+	if (riscv_tt_fix_wh_fence > 0)
+	  emit_insn (gen_mem_thread_fence_wh (mem, operands[0]));
+	else
+	  emit_insn (gen_mem_thread_fence_rvwmo (mem, operands[0]));
       }
     DONE;
   })
 
+;; write barrier is 3 writes, read barrier is 7 insns, l
+(define_insn "mem_thread_fence_wh"
+  [(set (match_operand:BLK 0 "" "")
+	(unspec_volatile:BLK [(match_dup 0)] UNSPECV_MEMORY_BARRIER))
+   (match_operand:SI 1 "const_int_operand" "")  ;; model
+   (clobber (match_scratch:SI 2 "=r"))]
+  "riscv_tt_fix_wh_fence > 0"
+  "lui %2,%%hi(0xFFB11014); addi %2,%2,%%lo(0xFFB11014)  # RISCV_TDMA_REG_STATUS
+\tsw zero,0(%2); sw zero,0(%2); sw zero,0(%2)
+\tnop; nop"
+  [(set_attr "type" "multi")
+   (set_attr "length" "28")])
 ;; Atomic memory operations.
 
 (define_expand "atomic_load<mode>"
   [(match_operand:ANYI 0 "register_operand")
    (match_operand:ANYI 1 "memory_operand")
    (match_operand:SI 2 "const_int_operand")] ;; model
-  ""
+  "!(riscv_tt_fix_wh_fence > 0)"
   {
     if (TARGET_ZTSO)
       emit_insn (gen_atomic_load_ztso<mode> (operands[0], operands[1],
@@ -77,7 +92,7 @@
   [(match_operand:ANYI 0 "memory_operand")
    (match_operand:ANYI 1 "reg_or_0_operand")
    (match_operand:SI 2 "const_int_operand")] ;; model
-  ""
+  "!(riscv_tt_fix_wh_fence > 0)"
   {
     if (TARGET_ZTSO)
       emit_insn (gen_atomic_store_ztso<mode> (operands[0], operands[1],
@@ -96,7 +111,7 @@
 	  [(any_atomic:SHORT (match_dup 0)
 		     (match_operand:SHORT 1 "reg_or_0_operand" "rJ"))
 	   (match_operand:SI 2 "const_int_operand")] ;; model
-	 UNSPEC_SYNC_OLD_OP_ZABHA))]
+	 UNSPECV_SYNC_OLD_OP_ZABHA))]
   "TARGET_ZABHA"
   "amo<insn>.<amobh>%A2\tzero,%z1,%0"
   [(set_attr "type" "atomic")
@@ -123,7 +138,7 @@
 	  [(any_atomic:GPR (match_dup 0)
 		     (match_operand:GPR 1 "reg_or_0_operand" "rJ"))
 	   (match_operand:SI 2 "const_int_operand")] ;; model
-	 UNSPEC_SYNC_OLD_OP))]
+	 UNSPECV_SYNC_OLD_OP))]
   "TARGET_ZAAMO"
   "amo<insn>.<amo>%A2\tzero,%z1,%0"
   [(set_attr "type" "atomic")
@@ -135,7 +150,7 @@
 	  [(any_atomic:GPR (match_dup 0)
 		     (match_operand:GPR 1 "reg_or_0_operand" "rJ"))
 	   (match_operand:SI 2 "const_int_operand")] ;; model
-	 UNSPEC_SYNC_OLD_OP))
+	 UNSPECV_SYNC_OLD_OP))
    (clobber (match_scratch:GPR 3 "=&r"))]	     ;; tmp_1
   "!TARGET_ZAAMO && TARGET_ZALRSC"
   {
@@ -174,7 +189,7 @@
 	  [(any_atomic:GPR (match_dup 1)
 		     (match_operand:GPR 2 "reg_or_0_operand" "rJ"))
 	   (match_operand:SI 3 "const_int_operand")] ;; model
-	 UNSPEC_SYNC_OLD_OP))]
+	 UNSPECV_SYNC_OLD_OP))]
   "TARGET_ZAAMO"
   "amo<insn>.<amo>%A3\t%0,%z2,%1"
   [(set_attr "type" "atomic")
@@ -188,7 +203,7 @@
 	  [(any_atomic:GPR (match_dup 1)
 		     (match_operand:GPR 2 "arith_operand" "rI"))
 	   (match_operand:SI 3 "const_int_operand")] ;; model
-	 UNSPEC_SYNC_OLD_OP))
+	 UNSPECV_SYNC_OLD_OP))
    (clobber (match_scratch:GPR 4 "=&r"))]	  ;; tmp_1
   "!TARGET_ZAAMO && TARGET_ZALRSC"
   {
@@ -320,7 +335,7 @@
 	  [(any_atomic:SHORT (match_dup 1)
 		     (match_operand:SHORT 2 "reg_or_0_operand" "rJ"))
 	   (match_operand:SI 3 "const_int_operand")] ;; model
-	 UNSPEC_SYNC_OLD_OP_ZABHA))]
+	 UNSPECV_SYNC_OLD_OP_ZABHA))]
    "TARGET_ZABHA"
    "amo<insn>.<amobh>%A3\t%0,%z2,%1"
    [(set_attr "type" "atomic")
@@ -402,7 +417,7 @@
 	(unspec_volatile:GPR
 	  [(match_operand:GPR 1 "memory_operand" "+A")
 	   (match_operand:SI 3 "const_int_operand")] ;; model
-	  UNSPEC_SYNC_EXCHANGE))
+	  UNSPECV_SYNC_EXCHANGE))
    (set (match_dup 1)
 	(match_operand:GPR 2 "reg_or_0_operand" "rJ"))]
   "TARGET_ZAAMO"
@@ -428,7 +443,7 @@
 	(unspec_volatile:GPR
 	  [(match_operand:GPR 1 "memory_operand" "+A")
 	   (match_operand:SI 3 "const_int_operand")] ;; model
-	  UNSPEC_SYNC_EXCHANGE))
+	  UNSPECV_SYNC_EXCHANGE))
    (set (match_dup 1)
 	(match_operand:GPR 2 "reg_or_0_operand" "rJ"))
    (clobber (match_scratch:GPR 4 "=&r"))]	  ;; tmp_1
@@ -463,7 +478,7 @@
 	(unspec_volatile:SHORT
 	  [(match_operand:SHORT 1 "memory_operand" "+A")
 	   (match_operand:SI 3 "const_int_operand")] ;; model
-	  UNSPEC_SYNC_EXCHANGE_ZABHA))
+	  UNSPECV_SYNC_EXCHANGE_ZABHA))
    (set (match_dup 1)
 	(match_operand:SHORT 2 "reg_or_0_operand" "rJ"))]
   "TARGET_ZABHA"
@@ -569,7 +584,7 @@
 			      (match_operand:GPR 3 "reg_or_0_operand" "rJ")
 			      (match_operand:SI 4 "const_int_operand")  ;; mod_s
 			      (match_operand:SI 5 "const_int_operand")] ;; mod_f
-	 UNSPEC_COMPARE_AND_SWAP))
+	 UNSPECV_COMPARE_AND_SWAP))
    (clobber (match_scratch:GPR 6 "=&r"))]
   "TARGET_ZALRSC"
   {
@@ -654,7 +669,7 @@
 				(match_operand:SHORT 3 "reg_or_0_operand" "rJ") ;; desired_val
 				(match_operand:SI 4 "const_int_operand")	;; mod_s
 				(match_operand:SI 5 "const_int_operand")]	;; mod_f
-	 UNSPEC_COMPARE_AND_SWAP))]
+	 UNSPECV_COMPARE_AND_SWAP))]
   "TARGET_ZACAS && TARGET_ZABHA"
   {
     enum memmodel model_success = (enum memmodel) INTVAL (operands[4]);

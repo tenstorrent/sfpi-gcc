@@ -2627,6 +2627,7 @@ riscv*-*-elf* | riscv*-*-rtems*)
 	  fi
 	esac
 	tmake_file="${tmake_file} riscv/t-riscv"
+	tmake_file="${tmake_file} riscv/tt/t-riscv-tt"
 	gnu_ld=yes
 	gas=yes
 	case $target in

@@ -167,17 +167,17 @@ function replace_pass(line, fnname,			num, i)
   lines[num] = new_line;
 }
 
-/INSERT_PASS_AFTER \(.+\)/ {
+/^[[:blank:]]*INSERT_PASS_AFTER \(.+\)/ {
   insert_pass($0, "INSERT_PASS_AFTER", 1);
   next;
 }
 
-/INSERT_PASS_BEFORE \(.+\)/ {
+/^[[:blank:]]*INSERT_PASS_BEFORE \(.+\)/ {
   insert_pass($0, "INSERT_PASS_BEFORE", 0);
   next;
 }
 
-/REPLACE_PASS \(.+\)/ {
+/^[[:blank:]]*REPLACE_PASS \(.+\)/ {
   replace_pass($0, "REPLACE_PASS");
   next;
 }

@@ -281,10 +281,10 @@ static const riscv_profiles riscv_profiles_table[] =
 
 static const riscv_cpu_info riscv_cpu_tables[] =
 {
-#define RISCV_CORE(CORE_NAME, ARCH, TUNE) \
-    {CORE_NAME, ARCH, TUNE},
+#define RISCV_CORE(CORE_NAME, ARCH, ABI, TUNE)	\
+  {CORE_NAME, ARCH, ABI, TUNE},
 #include "../../../config/riscv/riscv-cores.def"
-    {NULL, NULL, NULL}
+  {NULL, NULL, NULL, NULL}
 };
 
 static const char *riscv_tunes[] =
@@ -1502,6 +1502,12 @@ static const riscv_extra_ext_flag_table_t riscv_extra_ext_flag_table[] =
   RISCV_EXT_FLAG_ENTRY ("xandesvbfhcvt",  x_riscv_vector_elen_flags, MASK_VECTOR_ELEN_BF_16),
   RISCV_EXT_FLAG_ENTRY ("xandesvpackfph", x_riscv_vector_elen_flags, MASK_VECTOR_ELEN_FP_16),
 
+  RISCV_EXT_FLAG_ENTRY ("xttroccqsr", x_riscv_tt_subext, MASK_XTT_ROCC_QSR),
+  RISCV_EXT_FLAG_ENTRY ("xtttensixbh", x_riscv_tt_subext, MASK_XTT_TENSIX_BH),
+  RISCV_EXT_FLAG_ENTRY ("xtttensixqsr", x_riscv_tt_subext, MASK_XTT_TENSIX_QSR),
+  RISCV_EXT_FLAG_ENTRY ("xtttensixwh", x_riscv_tt_subext, MASK_XTT_TENSIX_WH),
+  RISCV_EXT_FLAG_ENTRY ("xttzbkb", x_riscv_tt_subext, MASK_XTT_ZBKB),
+
   {NULL, NULL, NULL, 0}
 };
 
@@ -1769,32 +1775,45 @@ riscv_default_mtune (int argc, const char **argv)
 /* Expand arch string with implied extensions from -mcpu option.  */
 
 const char *
-riscv_expand_arch_from_cpu (int argc ATTRIBUTE_UNUSED,
-			    const char **argv)
+riscv_expand_arch_from_cpu (int argc, const char **argv)
 {
-  gcc_assert (argc > 0 && argc <= 2);
-  const char *default_arch_str = NULL;
-  const char *arch_str = NULL;
-  if (argc >= 2)
-    default_arch_str = argv[1];
+  const char *arch_str = nullptr;
 
-  const riscv_cpu_info *cpu = riscv_find_cpu (argv[0]);
+  if (argc > 0)
+    if (const riscv_cpu_info *cpu = riscv_find_cpu (argv[0]))
+      arch_str = cpu->arch;
 
-  if (cpu == NULL)
+  if (!arch_str)
     {
-      if (default_arch_str == NULL)
+      if (argc < 2)
 	return "";
-      else
-	arch_str = default_arch_str;
+      arch_str = argv[1];
     }
-  else
-    arch_str = cpu->arch;
 
-  location_t loc = UNKNOWN_LOCATION;
-
-  riscv_parse_arch_string (arch_str, NULL, loc);
+  riscv_parse_arch_string (arch_str, NULL, UNKNOWN_LOCATION);
   const std::string arch = riscv_arch_str (false);
   return xasprintf ("-march=%s", arch.c_str());
+}
+
+/* Expand abi string from -mcpu option.  */
+
+const char *
+riscv_expand_abi_from_cpu (int argc, const char **argv)
+{
+  const char *abi_str = nullptr;
+
+  if (argc > 0)
+    if (const riscv_cpu_info *cpu = riscv_find_cpu (argv[0]))
+      abi_str = cpu->abi;
+
+  if (!abi_str)
+    {
+      if (argc < 2)
+	return "";
+      abi_str = argv[1];
+    }
+
+  return xasprintf ("-mabi=%s", abi_str);
 }
 
 /* Report error if not found suitable multilib.  */

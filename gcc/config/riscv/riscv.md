@@ -2481,28 +2481,7 @@
 		      MAX_MACHINE_MODE, &operands[3]);
 })
 
-;; Pretend to have the ability to load complex const_int in order to get
-;; better code generation around them.
-;; But avoid constants that are special cased elsewhere.
-;;
-;; Hide it from IRA register equiv recog* () to elide potential undoing of split
-;;
-(define_insn_and_split "*mvconst_internal"
-  [(set (match_operand:GPR 0 "register_operand" "=r")
-        (match_operand:GPR 1 "splittable_const_int_operand" "i"))]
-  "!ira_in_progress
-   && !(p2m1_shift_operand (operands[1], <MODE>mode)
-	|| high_mask_shift_operand (operands[1], <MODE>mode)
-	|| exact_log2 (INTVAL (operands[1])) >= 0)"
-  "#"
-  "&& 1"
-  [(const_int 0)]
-{
-  riscv_move_integer (operands[0], operands[0], INTVAL (operands[1]),
-                      <MODE>mode);
-  DONE;
-}
-[(set_attr "type" "move")])
+;; *mvconst_internal removed. It results in code-bloat
 
 ;; 64-bit integer moves
 
@@ -3826,7 +3805,8 @@
 
 (define_expand "tablejump"
   [(set (pc) (match_operand 0 "register_operand" ""))
-	      (use (label_ref (match_operand 1 "" "")))]
+	      (use (label_ref (match_operand 1 "" "")))
+	      (use (label_ref (match_operand 2 "" "")))]
   ""
 {
   if (CASE_VECTOR_PC_RELATIVE)
@@ -3847,16 +3827,17 @@
   else
     {
       if (CASE_VECTOR_PC_RELATIVE && Pmode == DImode)
-	emit_jump_insn (gen_tablejumpdi (operands[0], operands[1]));
+	emit_jump_insn (gen_tablejumpdi (operands[0], operands[1], operands[2]));
       else
-	emit_jump_insn (gen_tablejumpsi (operands[0], operands[1]));
+	emit_jump_insn (gen_tablejumpsi (operands[0], operands[1], operands[2]));
     }
   DONE;
 })
 
 (define_insn "tablejump<mode>"
   [(set (pc) (match_operand:GPR 0 "register_operand" "l"))
-   (use (label_ref (match_operand 1 "" "")))]
+   (use (label_ref (match_operand 1 "" "")))
+   (use (label_ref (match_operand 2 "" "")))]
   "!is_zicfilp_p ()"
   "jr\t%0"
   [(set_attr "type" "jalr")
