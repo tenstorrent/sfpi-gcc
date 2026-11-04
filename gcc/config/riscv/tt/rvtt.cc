@@ -470,7 +470,7 @@ rtx
 rvtt_gen_rtx_noval (machine_mode mode)
 {
   return gen_rtx_UNSPEC (mode,
-			 gen_rtvec (1, const0_rtx), UNSPEC_SFPNOVAL);
+			 gen_rtvec (1, CONST0_RTX (SImode)), UNSPEC_SFPNOVAL);
 }
 
 bool
@@ -487,7 +487,7 @@ rvtt_merge_lv_src (rtx *lv, rtx *src, rtx *commute)
   emit_insn (gen_rvtt_sfpassign_lv (tmp, *lv, *src));
   *src = tmp;
   *lv = gen_rtx_UNSPEC (XTT32SImode,
-			gen_rtvec (1, const0_rtx), UNSPEC_SFPOMIT);
+			gen_rtvec (1, CONST0_RTX (SImode)), UNSPEC_SFPOMIT);
   return commuted;
 }
 
