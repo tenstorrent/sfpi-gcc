@@ -1,5 +1,5 @@
 ;; Machine description for RISC-V atomic operations.
-;; Copyright (C) 2011-2025 Free Software Foundation, Inc.
+;; Copyright (C) 2011-2026 Free Software Foundation, Inc.
 ;; Contributed by Andrew Waterman (andrew@sifive.com).
 ;; Based on MIPS target for GNU compiler.
 
@@ -23,9 +23,9 @@
 
 (define_insn "mem_thread_fence_rvwmo"
   [(set (match_operand:BLK 0 "" "")
-	(unspec_volatile:BLK [(match_dup 0)] UNSPECV_MEMORY_BARRIER))
+	(unspec:BLK [(match_dup 0)] UNSPEC_MEMORY_BARRIER))
    (match_operand:SI 1 "const_int_operand" "")]  ;; model
-  "!TARGET_ZTSO && !(riscv_tt_fix_wh_fence > 0)"
+  "!TARGET_ZTSO"
   {
     enum memmodel model = (enum memmodel) INTVAL (operands[1]);
     model = memmodel_base (model);
@@ -51,8 +51,8 @@
 	(unspec_volatile:ANYI
 	    [(match_operand:ANYI 1 "memory_operand" "A")
 	     (match_operand:SI 2 "const_int_operand")]  ;; model
-	 UNSPECV_ATOMIC_LOAD))]
-  "!TARGET_ZTSO && !(riscv_tt_fix_wh_fence > 0)"
+	 UNSPEC_ATOMIC_LOAD))]
+  "!TARGET_ZTSO"
   {
     enum memmodel model = (enum memmodel) INTVAL (operands[2]);
     model = memmodel_base (model);
@@ -80,8 +80,8 @@
 	(unspec_volatile:ANYI
 	    [(match_operand:ANYI 1 "reg_or_0_operand" "rJ")
 	     (match_operand:SI 2 "const_int_operand")]  ;; model
-	 UNSPECV_ATOMIC_STORE))]
-  "!TARGET_ZTSO && !(riscv_tt_fix_wh_fence > 0)"
+	 UNSPEC_ATOMIC_STORE))]
+  "!TARGET_ZTSO"
   {
     enum memmodel model = (enum memmodel) INTVAL (operands[2]);
     model = memmodel_base (model);

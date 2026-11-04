@@ -1,4 +1,4 @@
-#  Copyright (C) 2013-2025 Free Software Foundation, Inc.
+#  Copyright (C) 2013-2026 Free Software Foundation, Inc.
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License as published by the
@@ -167,17 +167,17 @@ function replace_pass(line, fnname,			num, i)
   lines[num] = new_line;
 }
 
-/^[[:blank:]]*INSERT_PASS_AFTER \(.+\)/ {
+/INSERT_PASS_AFTER \(.+\)/ {
   insert_pass($0, "INSERT_PASS_AFTER", 1);
   next;
 }
 
-/^[[:blank:]]*INSERT_PASS_BEFORE \(.+\)/ {
+/INSERT_PASS_BEFORE \(.+\)/ {
   insert_pass($0, "INSERT_PASS_BEFORE", 0);
   next;
 }
 
-/^[[:blank:]]*REPLACE_PASS \(.+\)/ {
+/REPLACE_PASS \(.+\)/ {
   replace_pass($0, "REPLACE_PASS");
   next;
 }

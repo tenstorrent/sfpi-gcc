@@ -1,5 +1,5 @@
 /* Print RTL for GCC.
-   Copyright (C) 1987-2025 Free Software Foundation, Inc.
+   Copyright (C) 1987-2026 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -51,8 +51,13 @@ along with GCC; see the file COPYING3.  If not see
 #include "pretty-print.h"
 #endif
 
+#include "dumpfile.h"
+#include "cfghooks.h"
 #include "print-rtl.h"
 #include "rtl-iter.h"
+#include "json.h"
+
+#include "custom-sarif-properties/cfg.h"
 
 /* Disable warnings about quoting issues in the pp_xxx calls below
    that (intentionally) don't follow GCC diagnostic conventions.  */
@@ -185,8 +190,7 @@ void
 print_mem_expr (FILE *outfile, const_tree expr)
 {
   fputc (' ', outfile);
-  print_generic_expr (outfile, CONST_CAST_TREE (expr),
-		      dump_flags | TDF_SLIM);
+  print_generic_expr (outfile, const_cast<tree> (expr), dump_flags | TDF_SLIM);
 }
 #endif
 
@@ -453,10 +457,9 @@ rtx_writer::print_rtx_operand_code_L (const_rtx in_rtx, int idx)
 	  expanded_location xloc = insn_location (in_insn);
 	  fprintf (m_outfile, " \"%s\":%i:%i", xloc.file, xloc.line,
 		   xloc.column);
-	  int discriminator = insn_discriminator (in_insn);
-	    if (discriminator)
+	  if ((dump_flags & TDF_COMPARE_DEBUG) == 0)
+	    if (int discriminator = insn_discriminator (in_insn))
 	      fprintf (m_outfile, " discrim %d", discriminator);
-
 	}
 #endif
     }
@@ -505,11 +508,7 @@ rtx_writer::print_rtx_operand_code_i (const_rtx in_rtx, int idx)
 #if !defined(GENERATOR_FILE) && NUM_UNSPEC_VALUES > 0
   else if (idx == 1
 	   && (GET_CODE (in_rtx) == UNSPEC
-#if !(NUM_UNSPECV_VALUES > 0)
-	       // Only accept unspec_volatiles, if there's no unspecv enum.
-	       || GET_CODE (in_rtx) == UNSPEC_VOLATILE
-#endif
-	       || false)
+	       || GET_CODE (in_rtx) == UNSPEC_VOLATILE)
 	   && XINT (in_rtx, 1) >= 0
 	   && XINT (in_rtx, 1) < NUM_UNSPEC_VALUES)
     fprintf (m_outfile, " %s", unspec_strings[XINT (in_rtx, 1)]);
@@ -1611,36 +1610,8 @@ print_exp (pretty_printer *pp, const_rtx x, int verbose)
 	      pp_comma (pp);
 	    print_pattern (pp, XVECEXP (x, 0, i), verbose);
 	  }
-	pp_string (pp, "]");
-	const char *str = nullptr;
-	auto unspec = XINT (x, 1);
-#if !defined(GENERATOR_FILE)
-	if (unspec < 0)
-	  ;
-#if NUM_UNSPECV_VALUES > 0
-	else if (GET_CODE (x) == UNSPEC_VOLATILE
-		 && unspec < NUM_UNSPECV_VALUES)
-	  str = unspecv_strings[unspec];
-#endif
-#if NUM_UNSPEC_VALUES > 0
-	else if (true
-#if NUM_UNSPECV_VALUES > 0
-		 // Only accept unspec_volatiles, if there's no unspecv enum.
-		 && GET_CODE (x) == UNSPEC
-#endif
-		 && unspec < NUM_UNSPEC_VALUES)
-	  str = unspec_strings[unspec];
-#endif
-#endif
-	if (str)
-	  {
-	    // Strip leading UNSPEC[_] leaving FOO or V_FOO by convention.
-	    if (0 == strncmp (str, "UNSPEC", 6))
-	      str += 6 + (str[6] == '_');
-	    pp_string (pp, str);
-	  }
-	else
-	  pp_decimal_int (pp, unspec);
+	pp_string (pp, "] ");
+	pp_decimal_int (pp, XINT (x, 1));
       }
       break;
     default:
@@ -2176,6 +2147,26 @@ rtl_dump_bb_for_graph (pretty_printer *pp, basic_block bb)
       print_insn_with_notes (pp, insn);
       pp_write_text_as_dot_label_to_stream (pp, /*for_record=*/true);
     }
+}
+
+
+void
+rtl_dump_bb_as_sarif_properties (diagnostics::sarif_builder *,
+				 json::object &output_bag,
+				 basic_block bb)
+{
+  /* TODO: inter-bb stuff.  */
+  auto json_insn_arr = std::make_unique<json::array> ();
+  rtx_insn *insn;
+  FOR_BB_INSNS (bb, insn)
+    {
+      pretty_printer pp;
+      print_insn_with_notes (&pp, insn);
+      json_insn_arr->append_string (pp_formatted_text (&pp));
+    }
+  output_bag.set_array_of_string
+    (custom_sarif_properties::cfg::basic_block::rtl::insns,
+     std::move (json_insn_arr));
 }
 
 /* Pretty-print pattern X of some insn in non-verbose mode.
