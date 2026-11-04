@@ -1,5 +1,5 @@
 /* Subroutines used for expanding RISC-V builtins.
-   Copyright (C) 2011-2025 Free Software Foundation, Inc.
+   Copyright (C) 2011-2026 Free Software Foundation, Inc.
    Contributed by Andrew Waterman (andrew@sifive.com).
 
 This file is part of GCC.
@@ -143,6 +143,11 @@ AVAIL (cvmac, TARGET_XCVMAC && !TARGET_64BIT)
 AVAIL (cvalu, TARGET_XCVALU && !TARGET_64BIT)
 AVAIL (cvelw, TARGET_XCVELW && !TARGET_64BIT)
 AVAIL (cvsimd, TARGET_XCVSIMD && !TARGET_64BIT)
+
+/* ANDES AVAIL.  */
+AVAIL (andesperf32, !TARGET_64BIT && TARGET_XANDESPERF)
+AVAIL (andesperf64, TARGET_64BIT && TARGET_XANDESPERF)
+AVAIL (andesbfhcvt, TARGET_XANDESBFHCVT)
 AVAIL (tensix, TARGET_XTT_TENSIX)
 AVAIL (tensixwh_bh, TARGET_XTT_TENSIX_WH_BH)
 AVAIL (tensixbh, TARGET_XTT_TENSIX_BH)
@@ -186,8 +191,11 @@ AVAIL (roccqsr, TARGET_XTT_ROCC_QSR)
 #define RISCV_ATYPE_QI intQI_type_node
 #define RISCV_ATYPE_HI intHI_type_node
 #define RISCV_ATYPE_SI intSI_type_node
+#define RISCV_ATYPE_DI intDI_type_node
 #define RISCV_ATYPE_VOID_PTR ptr_type_node
 #define RISCV_ATYPE_INT_PTR integer_ptr_type_node
+#define RISCV_ATYPE_BF bfloat16_type_node
+#define RISCV_ATYPE_SF float_type_node
 #define RISCV_ATYPE_XTT_IPTR xtt_type_nodes[0]
 #define RISCV_ATYPE_XTT_VEC xtt_type_nodes[1]
 #define RISCV_ATYPE_XTT_VEC2 xtt_type_nodes[2]
@@ -229,6 +237,7 @@ static struct riscv_builtin_description riscv_builtins[] = {
   #include "riscv-cmo.def"
   #include "riscv-scalar-crypto.def"
   #include "corev.def"
+  #include "andes.def"
   #include "ttrocc.def"
 
   DIRECT_BUILTIN (frflags, RISCV_USI_FTYPE, hard_float, 0),

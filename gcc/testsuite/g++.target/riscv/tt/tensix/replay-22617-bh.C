@@ -49,7 +49,7 @@ void two (volatile unsigned *ptr)
   x = __builtin_rvtt_sfpmul (x, x, 0);
   x = __builtin_rvtt_sfpmul (x, x, 0);
   x = __builtin_rvtt_sfpmul (x, x, 0);
-  (*ptr)++;
+  *ptr = *ptr + 1;
   x = __builtin_rvtt_sfpmul (x, x, 0);
   x = __builtin_rvtt_sfpmul (x, x, 0);
   x = __builtin_rvtt_sfpmul (x, x, 0);
