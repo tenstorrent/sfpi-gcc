@@ -648,8 +648,8 @@ expand_cmp_using_sub (gimple_stmt_iterator *right, gcall *cmp, rvtt_arg_info (&a
       auto *sub_call = gimple_build_call (sub_insnd->decl, sub_insnd->num_args ());
       if (neg1)
 	gimple_call_set_arg (sub_call, sub_insnd->src_arg (), neg1);
-      gimple_call_set_arg (sub_call, sub_insnd->src_arg () + bool (neg1), args[1].get_arg ());
-      gimple_call_set_arg (sub_call, sub_insnd->src_arg () + bool (neg1) + 1, args[0].get_arg ());
+      gimple_call_set_arg (sub_call, sub_insnd->src_arg (bool (neg1)), args[1].get_arg ());
+      gimple_call_set_arg (sub_call, sub_insnd->src_arg (bool (neg1) + 1), args[0].get_arg ());
       gimple_call_set_arg (sub_call, sub_insnd->mod_arg (),
 			   build_int_cst (unsigned_type_node, sub_mod));
       if (setcc_op >= 0)
@@ -708,8 +708,8 @@ expand_cmp_using_gtle (gimple_stmt_iterator *right, gcall *cmp, rvtt_arg_info (&
 				    ? rvtt_insn_data::sfpgt : rvtt_insn_data::sfple);
   auto mod_arg = build_int_cst (unsigned_type_node, SFPGTLE_MOD1_SET_CC);
   auto *call = gimple_build_call (insnd->decl, insnd->num_args ());
-  gimple_call_set_arg (call, insnd->src_arg (), args[0].get_arg ());
-  gimple_call_set_arg (call, insnd->src_arg () + 1, args[1].get_arg ());
+  gimple_call_set_arg (call, insnd->src_arg (0), args[0].get_arg ());
+  gimple_call_set_arg (call, insnd->src_arg (1), args[1].get_arg ());
   gimple_call_set_arg (call, insnd->mod_arg (), mod_arg);
   if (TARGET_XTT_TENSIX_QSR)
     {
@@ -765,8 +765,8 @@ expand_cmp (gimple_stmt_iterator *left, gimple_stmt_iterator *right,
     op ^= SFPXCMP_MOD1_CC_EQ ^ SFPXCMP_MOD1_CC_NE;
 
   rvtt_arg_info args[2] =
-    {{gimple_call_arg (cmp, insnd->src_arg ()), true},
-     {gimple_call_arg (cmp, insnd->src_arg () + 1), true}};
+    {{gimple_call_arg (cmp, insnd->src_arg (0)), true},
+     {gimple_call_arg (cmp, insnd->src_arg (1)), true}};
 
   /*
     We have SFPGT & SFPLE, which work on smag, 2's complement and unsigned (arch-depending)

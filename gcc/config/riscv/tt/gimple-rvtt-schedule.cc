@@ -110,8 +110,8 @@ maybe_elide_load (gimple_stmt_iterator gsi, rvtt_insn_data::insn_id store_id,
   auto load_addr = gimple_call_arg (load_call, load_insnd->imm_arg ());
   auto store_addr = gimple_call_arg (store_call, store_insnd->imm_arg ());
   if (load_addr != store_addr
-      && (SSA_VAR_P (load_addr)
-	  || SSA_VAR_P (store_addr)
+      && (TREE_CODE (load_addr) != INTEGER_CST
+	  || TREE_CODE (store_addr) != INTEGER_CST
 	  || !tree_int_cst_equal (load_addr, store_addr)))
     // Addresses are different
     return false;
