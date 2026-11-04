@@ -32,7 +32,7 @@ along with GCC; see the file COPYING3.  If not see
 // XTT_IPTR:CST0/SSA:iptr
 // XTT_VEC:SSA:LVs[]
 // XTT_VEC:SSA:src ops[]
-// UINT:CST/SSA:immediate
+// UINT:CST/SSA:immediate[s]
 // UINT:CST0/SSA:imm var
 // UINT:CST:imm id
 // UINT:CST:mod
@@ -48,9 +48,10 @@ struct rvtt_insn_data {
   };
 public:
   enum flags_t : uint16_t {
-    MOD_SHIFT,
+    NUM_IMMS_SHIFT,
+    NUM_IMMS_BITS = 2,
+    MOD_SHIFT = NUM_IMMS_SHIFT + NUM_IMMS_BITS,
     IPTR_SHIFT,
-    VAR_SHIFT,
     LV_SHIFT,
     VOLATILE_SHIFT,
     EXPANDED_SHIFT,
@@ -63,13 +64,13 @@ public:
 
     HAS_MOD = 1 << MOD_SHIFT, // Has a MOD operand
     HAS_IPTR = 1 << IPTR_SHIFT, // Has an ipointer operand
-    HAS_VAR = 1 << VAR_SHIFT, // Has a variable immediate operand
     HAS_LV = 1 << LV_SHIFT,   // Has an explicit live value operand
     VOLATILE = 1 << VOLATILE_SHIFT, // Has unrepresented side-effects
     EXPANDED = 1 << EXPANDED_SHIFT, // Immediate is expanded
     EMPTY = 1 << EMPTY_SHIFT, // (Usually) expands to no instruction
   };
   static_assert (HWM <= 16);
+  constexpr static unsigned imm_arg_hwm = 2;
 
 public:
   class op_t
@@ -124,6 +125,7 @@ public:
     bool is_checked () const { return bool ((enc >> KIND_shift) & CHECKED); }
     bool is_early () const { return bool ((enc >> KIND_shift) & EARLY); }
     kind_t kind () const { return kind_t ((enc >> KIND_shift) & (((1u << KIND_bits) - 1u) ^ (CHECKED | EARLY))); }
+    bool is_int () const { return kind () && kind () < MOD; }
     bool is_mod () const { return kind () == MOD; }
     bool is_xmod () const { return kind () == XMOD; }
     bool is_runtime () const { return kind () == RUNTIME; }
@@ -214,7 +216,7 @@ public:
   bool is_live () const { return flags & HAS_LV; }
   bool is_expanded () const { return flags & EXPANDED; }
   bool is_empty () const { return flags & EMPTY; }
-  int live_arg () const { return has_var (); }
+  int live_arg () const { return has_iptr (); }
 
 public:
   // We know these objects are in an array.
@@ -239,7 +241,7 @@ public:
     return res;
   }
   const rvtt_insn_data *get_scalar () const {
-    if (is_expanded () && !has_var ())
+    if (is_expanded () && !has_imms ())
       {
 	auto res = this + 1;
 	if (res->is_live ())
@@ -257,21 +259,19 @@ public:
 
   bool has_mod () const { return flags & HAS_MOD; }
   int mod_arg () const { return mod_pos; }
-  auto &mod_info () const { return ops[has_var ()]; }
+  auto &mod_info () const { return ops[num_imms ()]; }
 
   bool has_iptr () const { return flags & HAS_IPTR; }
-  bool has_var () const { return flags & HAS_VAR; }
-  int imm_arg () const { return ops[0].argno (); }
-  int var_arg () const { return imm_arg () + 1; }
-  int id_arg () const { return imm_arg () + 2; }
+  bool has_imms () const { return bool (num_imms ()); }
+  int num_imms () const { return (flags >> NUM_IMMS_SHIFT) & ((1 << NUM_IMMS_BITS) - 1); }
+  int imm_arg (unsigned ix = 0) const { return ops[0].argno () + ix; }
+  int var_arg () const { return imm_arg () + num_imms (); }
+  int id_arg () const { return var_arg () + 1; }
 
   bool has_src () const { return src_pos >= 0; }
-  int src_arg () const { return src_pos; }
+  int src_arg (unsigned ix = 0) const { return src_pos + ix; }
 
-  unsigned imm_bits () const {
-    return ops[0].bits () + bool (ops[0].bias ());
-  }
-  unsigned imm_encode () const { return ops[0].encode (); }
+  op_t imm_op (unsigned ix) const { return ops[ix]; }
 
 public:
   bool sets_cc (unsigned mod) const {

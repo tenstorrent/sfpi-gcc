@@ -9,7 +9,7 @@
 **	andi	a0,a0,1008
 **	li	a5, 67371009	# 1:4040001
 **	lui	a4,%hi\(__instrn_buffer\)
-**	add	a5,a0,a5
+**	add	a5,(a0,a5|a5,a0)
 **	addi	a4,a4,%lo\(__instrn_buffer\)
 **	sw	a5, 0\(a4\)	# 1:TTREPLAY	16, -, 0, 1
 **	li	a5, 67436547	# 2:4050003

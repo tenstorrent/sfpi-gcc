@@ -55,7 +55,7 @@ class rvtt_synth
   rvtt_synth (unsigned HOST_WIDE_INT val)
     : encode (unsigned (val)) {}
 
-  // Extract encode
+  // Extract encode, int is correct here btw
   operator int () const { return encode; }
 
   // Generate pattern

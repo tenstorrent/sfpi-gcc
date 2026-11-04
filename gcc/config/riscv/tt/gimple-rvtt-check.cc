@@ -82,7 +82,7 @@ check_int_args (bool is_early, const rvtt_insn_data *insnd, gcall *call)
 {
   bool changed = false;
 
-  for (unsigned ix = 0; auto info = insnd->ops[ix]; ix++)
+  for (int ix = 0; auto info = insnd->ops[ix]; ix++)
     {
       if (info.is_runtime ())
 	continue;
@@ -93,7 +93,9 @@ check_int_args (bool is_early, const rvtt_insn_data *insnd, gcall *call)
       tree op = gimple_call_arg (call, info.argno ());
       if (TREE_CODE (op) != INTEGER_CST)
 	{
-	  if (!ix && insnd->has_iptr ())
+	  if (insnd->has_iptr ()
+	      && (!insnd->num_imms ()
+		  || ix < insnd->num_imms ()))
 	    continue;
 	  error_at (gimple_nonartificial_location (call),
 		    "argument %d is not a constant", info.argno () + 1);

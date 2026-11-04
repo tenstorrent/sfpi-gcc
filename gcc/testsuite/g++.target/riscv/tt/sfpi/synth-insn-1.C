@@ -44,7 +44,7 @@ void two(int s) {
 **	and	a0,a0,a5
 **	lui	a4,%hi\(_ZN7ckernel13instrn_bufferE\)
 **	li	a5, 2046820407	# 1:7a000037
-**	add	a5,a0,a5
+**	add	a5,(a0,a5|a5,a0)
 **	addi	a4,a4,%lo\(_ZN7ckernel13instrn_bufferE\)
 **	sw	a5, 0\(a4\)	# 1:SFPSHFT	L3, L0, -, 7
 **	li	a5, 2046821175	# 2:7a000337

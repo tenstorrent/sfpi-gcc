@@ -70,36 +70,33 @@ make_synth (location_t loc, tree id, tree var = nullptr)
   return stmt;
 }
 
-static tree
-build_var_synth (gimple_stmt_iterator gsi, const rvtt_insn_data *insnd,
-		 location_t loc, tree val, tree id)
-{
-  uint32_t mask = (uint32_t (1) << insnd->imm_bits ()) - 1;
-  tree var_mask = make_temp_ssa_name (unsigned_type_node, nullptr, "mask");
-  gimple *stmt_mask = gimple_build_assign (var_mask, BIT_AND_EXPR, val,
-					   build_int_cst (unsigned_type_node, mask));
-  gimple_set_location (stmt_mask, loc);
-  gsi_insert_before (&gsi, stmt_mask, GSI_SAME_STMT);
+// mask then shift
 
-  tree var_encode = var_mask;
-  if (uint32_t shift = insnd->imm_encode ())
+static tree
+build_mask_shift (gimple_stmt_iterator &gsi, location_t loc, rvtt_insn_data::op_t op,
+		  tree imm)
+{
+  if (unsigned bits = op.bits () + bool (op.bias ()))
     {
-      var_encode = make_temp_ssa_name (unsigned_type_node, nullptr, "shift");
-      gimple *stmt_encode = gimple_build_assign (var_encode, LSHIFT_EXPR, var_mask,
-						 build_int_cst (unsigned_type_node, shift));
-      gimple_set_location (stmt_encode, loc);
-      gsi_insert_before (&gsi, stmt_encode, GSI_SAME_STMT);
+      tree mask_var = make_temp_ssa_name (unsigned_type_node, nullptr, "mask");
+      gimple *mask_stmt = gimple_build_assign (mask_var, BIT_AND_EXPR, imm,
+					       build_int_cst (unsigned_type_node, (uint32_t (1) << bits) - 1));
+      gimple_set_location (mask_stmt, loc);
+      gsi_insert_before (&gsi, mask_stmt, GSI_SAME_STMT);
+      imm = mask_var;
     }
 
-  gimple *opc_stmt = make_synth (loc, id);
-  gsi_insert_before (&gsi, opc_stmt, GSI_SAME_STMT);
+  if (unsigned shift = op.encode ())
+    {
+      tree shift_var = make_temp_ssa_name (unsigned_type_node, nullptr, "shift");
+      gimple *shift_stmt = gimple_build_assign (shift_var, LSHIFT_EXPR, imm,
+						build_int_cst (unsigned_type_node, shift));
+      gimple_set_location (shift_stmt, loc);
+      gsi_insert_before (&gsi, shift_stmt, GSI_SAME_STMT);
+      imm = shift_var;
+    }
 
-  tree var_sum = make_temp_ssa_name (unsigned_type_node, nullptr, "sum");
-  gimple *stmt_sum = gimple_build_assign (var_sum, PLUS_EXPR, gimple_call_lhs (opc_stmt), var_encode);
-  gimple_set_location (stmt_sum, loc);
-  gsi_insert_before (&gsi, stmt_sum, GSI_SAME_STMT);
-
-  return var_sum;
+  return imm;
 }
 
 static unsigned
@@ -121,32 +118,76 @@ split (function *fn)
 	  continue;
 
 	auto *call = as_a <gcall *> (*gsi);
-	tree immarg = gimple_call_arg (call, insnd->imm_arg ());
+	unsigned non_const_mask = 0;
+	unsigned num_non_const = 0;
+	unsigned num_imms = insnd->num_imms () ? insnd->num_imms () : 1;
+	for (unsigned ix = num_imms; ix--;)
+	  {
+	    tree immarg = gimple_call_arg (call, insnd->imm_arg (ix));
+	    if (TREE_CODE (immarg) != INTEGER_CST)
+	      {
+		non_const_mask |= 1 << ix;
+		num_non_const++;
+	      }
+	  }
+
 	const char *msg = nullptr;
-	if (TREE_CODE (immarg) == INTEGER_CST)
+	if (!num_non_const)
 	  {
 	    if (integer_zerop (gimple_call_arg (call, 0)))
 	      continue;
-	    msg = "Constant";
 	    gimple_call_set_arg (call, 0, null_pointer_node);
-	    if (insnd->has_var ())
+	    if (insnd->has_imms ())
 	      gimple_call_set_arg (call, insnd->var_arg (), integer_zero_node);
+	    update_stmt (call);
+	    msg = "Constant";
 	  }
-	else if (!insnd->has_var ())
+	else if (!insnd->has_imms ())
 	  msg = "Variable";
 	else if (!integer_zerop (gimple_call_arg (call, insnd->var_arg ())))
-	  msg = "User set";
+	  msg = "User-set";
+	else if (integer_zerop (gimple_call_arg (call, 0)))
+	  msg = "Later constant";
 	else
 	  {
 	    tree synth_val = build_int_cst (unsigned_type_node, synth_id++);
-	    tree sum = build_var_synth (gsi, insnd, gimple_location (call),
-					immarg, synth_val);
+	    gcall *synth = make_synth (gimple_location (call), synth_val);
+	    gsi_insert_before (&gsi, synth, GSI_SAME_STMT);
 
-	    gimple_call_set_arg (call, insnd->var_arg (), sum);
+	    tree sum_var = make_temp_ssa_name (unsigned_type_node, nullptr, "sum");
+	    gimple *sum_stmt = nullptr;
+	    if (num_imms == 1)
+	      sum_stmt = gimple_build_assign (sum_var, PLUS_EXPR, gimple_get_lhs (synth), integer_zero_node);
+	    else
+	      {
+		auto *sum_insnd = rvtt_get_insn_data (rvtt_insn_data::insn_id (rvtt_insn_data::synth_opcode + num_imms - 1));
+		sum_stmt = gimple_build_call (sum_insnd->decl, num_imms + 1);
+		gimple_call_set_arg (sum_stmt, 0, gimple_get_lhs (synth));
+		gimple_call_set_lhs (sum_stmt, sum_var);
+	      }
+
+	    for (unsigned ix = 0; ix != num_imms; ix++)
+	      {
+		tree var = integer_zero_node;
+		if ((1 << ix) & non_const_mask)
+		  var = build_mask_shift (gsi, gimple_location (call),
+					  insnd->imm_op (ix), gimple_call_arg (call, insnd->imm_arg (ix)));
+		if (num_imms == 1)
+		  gimple_assign_set_rhs2 (sum_stmt, var);
+		else
+		  gimple_call_set_arg (sum_stmt, 1 + ix, var);
+	      }
+
+	    gimple_set_location (sum_stmt, gimple_location (call));
+	    gsi_insert_before (&gsi, sum_stmt, GSI_SAME_STMT);
+
+	    gimple_call_set_arg (call, insnd->var_arg (), sum_var);
 	    gimple_call_set_arg (call, insnd->id_arg (), synth_val);
+
+	    update_stmt (call);
 	    msg = "Synthesize";
 	  }
-	update_stmt (call);
+
 	if (dump_file)
 	  {
 	    fprintf (dump_file, "%s:", msg);
@@ -215,7 +256,7 @@ check_synth (std::unordered_set<gphi *> &phis, tree var, tree &id)
 
 static std::pair<unsigned, unsigned>
 check_add (std::unordered_set<gphi *> &add_phis, std::unordered_set<gphi *> &synth_phis, tree var,
-	   tree &id, tree &addend)
+	   tree &id, tree &addend, gcall *&multi_add)
 {
   if (!SSA_VAR_P (var))
     return {0, 0};
@@ -231,7 +272,7 @@ check_add (std::unordered_set<gphi *> &add_phis, std::unordered_set<gphi *> &syn
       std::pair count {0, 0};
       FOR_EACH_PHI_ARG (arg_p, phi, ix, SSA_OP_USE)
 	{
-	  auto inner = check_add (add_phis, synth_phis, USE_FROM_PTR (arg_p), id, addend);
+	  auto inner = check_add (add_phis, synth_phis, USE_FROM_PTR (arg_p), id, addend, multi_add);
 	  if (!inner.first)
 	    return {0, 0};
 
@@ -240,6 +281,14 @@ check_add (std::unordered_set<gphi *> &add_phis, std::unordered_set<gphi *> &syn
 	}
       return count;
     }
+
+  auto equal_p = [] (tree a, tree b) {
+    if (a == b)
+      return true;
+    if (TREE_CODE (a) == INTEGER_CST && TREE_CODE (b) == INTEGER_CST)
+      return TREE_INT_CST_LOW (a) == TREE_INT_CST_LOW (b);
+    return false;
+  };
 
   if (auto *assign = dyn_cast<gassign *> (stmt))
     {
@@ -260,13 +309,35 @@ check_add (std::unordered_set<gphi *> &add_phis, std::unordered_set<gphi *> &syn
 	    return {0, 0};
 	  other = first;
 	}
+      gcc_assert (!multi_add);
       if (!addend)
 	addend = other;
-      else if (other != addend)
+      else if (!equal_p (addend, other))
 	return {0, 0};
 
       return {1, synth_count};
     }
+
+  if (auto *insnd = rvtt_get_insn_data (stmt))
+    if (insnd->id > rvtt_insn_data::synth_opcode
+	&& insnd->id < rvtt_insn_data::synth_opcode + rvtt_insn_data::imm_arg_hwm)
+      {
+	gcc_assert (!addend);
+	auto *call = as_a <gcall *> (stmt);
+	synth_phis.clear ();
+	unsigned synth_count = check_synth (synth_phis, gimple_call_arg (call, 0), id);
+	if (!synth_count)
+	  return {0, 0};
+	if (!multi_add)
+	  multi_add = call;
+	else
+	  for (int ix = insnd->num_args (); --ix;)
+	    if (!equal_p (gimple_call_arg (call, ix),
+			  gimple_call_arg (multi_add, ix)))
+	      return {0, 0};
+
+	return {1, synth_count};
+      }
 
   return {0, 0};
 }
@@ -276,8 +347,9 @@ cse_add (std::unordered_set<gphi *> &add_phis, std::unordered_set<gphi *> &synth
 {
   tree id = nullptr;
   tree addend = nullptr;
+  gcall *multi_add = nullptr;
 
-  auto counts = check_add (add_phis, synth_phis, var, id, addend);
+  auto counts = check_add (add_phis, synth_phis, var, id, addend, multi_add);
   if (!counts.first)
     return false;
 
@@ -293,10 +365,19 @@ cse_add (std::unordered_set<gphi *> &add_phis, std::unordered_set<gphi *> &synth
   if (counts.first == 1)
     {
       // We'll keep the add, add the synth just before it
-      auto *assign = as_a <gassign *> (stmt);
-      tree opc_var = gimple_assign_rhs1 (assign);
-      if (opc_var == addend)
-	opc_var = gimple_assign_rhs2 (assign);
+      tree opc_var = nullptr;
+      if (addend)
+	{
+	  auto *assign = as_a <gassign *> (stmt);
+	  opc_var = gimple_assign_rhs1 (assign);
+	  if (opc_var == addend)
+	    opc_var = gimple_assign_rhs2 (assign);
+	}
+      else
+	{
+	  auto *call = as_a <gcall *> (stmt);
+	  opc_var = gimple_call_arg (call, 0);
+	}
       phi_gsi = gsi_for_stmt (SSA_NAME_DEF_STMT (opc_var));
       gsi = gsi_for_stmt (stmt);
       opc_stmt = make_synth (gimple_location (stmt), id, opc_var);
@@ -306,7 +387,42 @@ cse_add (std::unordered_set<gphi *> &add_phis, std::unordered_set<gphi *> &synth
     {
       // We'll create a new add, insert just after addend's def
       phi_gsi = gsi;
-      auto *addend_def = SSA_NAME_DEF_STMT (addend);
+      gimple *addend_def = nullptr;
+      if (addend)
+	addend_def = SSA_NAME_DEF_STMT (addend);
+      else
+	for (unsigned ix = gimple_call_num_args (multi_add); --ix;)
+	  {
+	    tree var = gimple_call_arg (multi_add, ix);
+	    if (SSA_VAR_P (var))
+	      {
+		auto *def = SSA_NAME_DEF_STMT (var);
+		if (!addend_def)
+		  addend_def = def;
+		else if (addend_def == def)
+		  ;
+		else if (gimple_bb (addend_def) == gimple_bb (def))
+		  {
+		    // Pick the later one
+		    for (auto gsi = gsi_for_stmt (addend_def);
+			 !gsi_end_p (gsi); gsi_next (&gsi))
+		      if (*gsi == def)
+			{
+			  addend_def = def;
+			  break;
+			}
+		  }
+		else
+		  {
+		    if (dump_file)
+		      {
+			fprintf (dump_file, "Add has multiple vars from different blocks");
+			print_gimple_stmt (dump_file, multi_add, 0);
+		      }
+		    return false;
+		  }
+	      }
+	  }
       gsi = is_a <gphi *> (addend_def)
 	? gsi_after_labels (gimple_bb (addend_def))
 	: gsi_for_stmt (addend_def);
@@ -325,7 +441,18 @@ cse_add (std::unordered_set<gphi *> &add_phis, std::unordered_set<gphi *> &synth
       // Synth new add
       tree sum_var = gimple_phi_result (as_a <gphi *> (stmt));
       tree opc_var = gimple_call_lhs (opc_stmt);
-      auto *sum_stmt = gimple_build_assign (sum_var, PLUS_EXPR, opc_var, addend);
+      gimple *sum_stmt = nullptr;
+      if (addend)
+	sum_stmt = gimple_build_assign (sum_var, PLUS_EXPR, opc_var, addend);
+      else
+	{
+	  int nargs = gimple_call_num_args (multi_add);
+	  sum_stmt = gimple_build_call (gimple_call_fndecl (multi_add), nargs);
+	  gimple_call_set_lhs (sum_stmt, sum_var);
+	  gimple_call_set_arg (sum_stmt, 0, opc_var);
+	  for (int ix = nargs; --ix;)
+	    gimple_call_set_arg (sum_stmt, ix, gimple_call_arg (multi_add, ix));
+	}
       gsi_insert_after (&gsi, sum_stmt, GSI_SAME_STMT);
 
       if (dump_file)
@@ -357,7 +484,7 @@ cse (function *fn)
 	auto *insnd = rvtt_get_insn_data (*gsi);
 	if (!insnd)
 	  continue;
-	if (!insnd->has_var ())
+	if (!insnd->has_imms ())
 	  continue;
 	auto *call = as_a <gcall *> (*gsi);
 	tree var = gimple_call_arg (call, insnd->var_arg ());
@@ -467,52 +594,59 @@ struct synth
 	{
 #if ENABLE_ASSERT_CHECKING
 	  auto [seen, not_seen] = nodes.emplace (use_stmt, use_node);
-	  gcc_assert (not_seen);
+	  gcc_assert (not_seen || is_a <gphi *> (use_stmt));
 #endif
 	}
 
-	if (rvtt_get_insn_data (use_stmt))
+	bool now_seen_var_add = seen_var_add;
+	if (auto *insnd = rvtt_get_insn_data (use_stmt))
 	  {
-	    // A final use
-	    if (dump_file)
+	    if (insnd->id < rvtt_insn_data::synth_opcode + rvtt_insn_data::imm_arg_hwm)
+	      now_seen_var_add = true;
+	    else
 	      {
-		fprintf (dump_file, "%u:%.*sFinal use ", id, depth * 2, SPACES);
-		print_gimple_stmt (dump_file, use_stmt, 0);
+		// A final use
+		if (dump_file)
+		  {
+		    fprintf (dump_file, "%u:%.*sFinal use ", id, depth * 2, SPACES);
+		    print_gimple_stmt (dump_file, use_stmt, 0);
+		  }
+		use_node->use_flags |= USE_IsFinal;
+		use_flags |= USE_ChildFinal | USE_HasFinal;
+		continue;
 	      }
-	    use_node->use_flags |= USE_IsFinal;
-	    use_flags |= USE_ChildFinal | USE_HasFinal;
-	    continue;
-	  }
-
-	auto *add_stmt = dyn_cast <gassign *> (use_stmt);
-	if (!add_stmt || gimple_assign_rhs_code (add_stmt) != PLUS_EXPR)
-	  {
-	  unfollowable:
-	    if (dump_file)
-	      {
-		fprintf (dump_file, "%u:%.*sUnfollowable ", id, depth * 2, SPACES);
-		print_gimple_stmt (dump_file, use_stmt, 0);
-	      }
-	    use_node->use_flags = USE_IsUnfollowable;
-	    use_flags |= USE_HasUnfollowable;
-	    continue;
-	  }
-
-	tree other_arg = gimple_assign_rhs1 (add_stmt);
-	if (other_arg == ssa_var)
-	  {
-	    other_arg = gimple_assign_rhs2 (add_stmt);
-	    use_node->other_is_rhs2 = true;
 	  }
 	else
-	  gcc_assert (gimple_assign_rhs2 (add_stmt) == ssa_var);
-
-	bool now_seen_var_add = seen_var_add;
-	if (TREE_CODE (other_arg) != INTEGER_CST)
 	  {
-	    if (seen_var_add)
-	      goto unfollowable;
-	    now_seen_var_add = true;
+	    auto *add_stmt = dyn_cast <gassign *> (use_stmt);
+	    if (!add_stmt || gimple_assign_rhs_code (add_stmt) != PLUS_EXPR)
+	      {
+	      unfollowable:
+		if (dump_file)
+		  {
+		    fprintf (dump_file, "%u:%.*sUnfollowable ", id, depth * 2, SPACES);
+		    print_gimple_stmt (dump_file, use_stmt, 0);
+		  }
+		use_node->use_flags = USE_IsUnfollowable;
+		use_flags |= USE_HasUnfollowable;
+		continue;
+	      }
+
+	    tree other_arg = gimple_assign_rhs1 (add_stmt);
+	    if (other_arg == ssa_var)
+	      {
+		other_arg = gimple_assign_rhs2 (add_stmt);
+		use_node->other_is_rhs2 = true;
+	      }
+	    else
+	      gcc_assert (gimple_assign_rhs2 (add_stmt) == ssa_var);
+
+	    if (TREE_CODE (other_arg) != INTEGER_CST)
+	      {
+		if (seen_var_add)
+		  goto unfollowable;
+		now_seen_var_add = true;
+	      }
 	  }
 
 	if (dump_file)
@@ -547,10 +681,14 @@ struct synth
     // Figure addend and val_node
     if (use_flags & USE_IsAdd)
       {
-	auto *add_stmt = dyn_cast <gassign *> (stmt);
-	tree other = other_is_rhs2 ? gimple_assign_rhs2 (add_stmt) : gimple_assign_rhs1 (add_stmt);
-	if (TREE_CODE (other) == INTEGER_CST)
-	  addend += TREE_INT_CST_LOW (other);
+	if (auto *add_stmt = dyn_cast <gassign *> (stmt))
+	  {
+	    tree other = other_is_rhs2 ? gimple_assign_rhs2 (add_stmt) : gimple_assign_rhs1 (add_stmt);
+	    if (TREE_CODE (other) == INTEGER_CST)
+	      addend += TREE_INT_CST_LOW (other);
+	    else
+	      val_node = this;
+	  }
 	else
 	  val_node = this;
       }
@@ -582,18 +720,35 @@ struct synth
 	if (val_node)
 	  {
 	    // Duplicate val addition
-	    tree add_res = make_temp_ssa_name (unsigned_type_node, NULL, "val");
-	    tree val_arg = val_node->other_is_rhs2
-	      ? gimple_assign_rhs2 (val_node->stmt) : gimple_assign_rhs1 (val_node->stmt);
-	    gassign *new_add = gimple_build_assign (add_res, PLUS_EXPR, ssa_var, val_arg);
-	    gimple_set_location (new_add, gimple_location (stmt));
-	    gsi_insert_after (&gsi, new_add, GSI_NEW_STMT);
+	    tree sum_val = make_temp_ssa_name (unsigned_type_node, NULL, "val");
+	    gimple *sum_stmt = nullptr;
+
+	    if (is_a <gassign *> (val_node->stmt))
+	      {
+		tree val_arg = val_node->other_is_rhs2
+		  ? gimple_assign_rhs2 (val_node->stmt) : gimple_assign_rhs1 (val_node->stmt);
+		sum_stmt = gimple_build_assign (sum_val, PLUS_EXPR, ssa_var, val_arg);
+	      }
+	    else
+	      {
+		auto *insnd = rvtt_get_insn_data (val_node->stmt);
+		gcc_assert (insnd->id < rvtt_insn_data::synth_opcode + rvtt_insn_data::imm_arg_hwm);
+
+		sum_stmt = gimple_build_call (insnd->decl, insnd->num_args ());
+		gimple_call_set_lhs (sum_stmt, sum_val);
+		gimple_call_set_arg (sum_stmt, 0, ssa_var);
+		for (unsigned ix = insnd->num_args (); --ix;)
+		  gimple_call_set_arg (sum_stmt, ix, gimple_call_arg (val_node->stmt, ix));
+	      }
+
+	    gimple_set_location (sum_stmt, gimple_location (stmt));
+	    gsi_insert_after (&gsi, sum_stmt, GSI_NEW_STMT);
 	    if (dump_file)
 	      {
 		fprintf (dump_file, "%u:%.*sCloning add ", id, depth * 2, SPACES);
-		print_gimple_stmt (dump_file, new_add, 0);
+		print_gimple_stmt (dump_file, sum_stmt, 0);
 	      }
-	    ssa_var = add_res;
+	    ssa_var = sum_val;
 	  }
 
 	for (auto *final = child; final; final = final->sib)

@@ -155,6 +155,28 @@
 }
   [(set_attr "type" "const")])
 
+(define_expand "rvtt_synth_add2"
+  [(set (match_operand:SI 0 "register_operand")
+        (unspec:SI [
+	  (match_operand:SI 1 "register_operand") ;; synth result
+	  (match_operand:SI 2 "arith_operand") ;; immediate 0
+          (match_operand:SI 3 "arith_operand") ;; immediate 1
+	  ] 0))]
+  "TARGET_XTT_TENSIX"
+{
+  // expands to up to 2 adds
+  rtx sum = operands[1];
+  for (unsigned ix = 2; ix != 4; ix++)
+    if (operands[ix] != CONST0_RTX(SImode))
+      {
+        rtx tmp = gen_reg_rtx (SImode);
+        emit_insn (gen_addsi3 (tmp, sum, operands[ix]));
+        sum = tmp;
+      }
+  emit_move_insn (operands[0], sum);
+  DONE;
+})
+
 (define_expand "rvtt_lreg_pressure"
   [(unspec:SI [
      (match_operand:SI 0 "const_int_operand")]

@@ -37,6 +37,7 @@ along with GCC; see the file COPYING3.  If not see
 #define VOL rvtt_insn_data::VOLATILE
 #define EXP rvtt_insn_data::EXPANDED
 #define EMP rvtt_insn_data::EMPTY
+#define IMM(N) (N << rvtt_insn_data::NUM_IMMS_SHIFT)
 
 #define N rvtt_insn_data::op_t::NONE
 #define R rvtt_insn_data::op_t::RUNTIME
@@ -58,6 +59,8 @@ along with GCC; see the file COPYING3.  If not see
 
 // This is first
 RVTT_FN (synth_opcode,       ,,USI_FTYPE_USI_USI,                                            0, ({U,0},{U,0}), ECF | ECF_CONST)
+// add2 numbered after opcode, used for 2-immediate fns
+RVTT_FN (synth_add2,         ,,USI_FTYPE_USI_USI_USI,                                        0, ({R},{R},{R}), ECF | ECF_CONST)
 RVTT_FN (lreg_pressure,      ,,VOID_FTYPE_USI,                                               VOL|EMP, ({U,1}), ECF)
 
 // These builtins are expanded to something else during compilation
@@ -257,6 +260,7 @@ RVTT_FN (ttincrwc,             ,,VOID_FTYPE_SI_SI_SI_SI,                        
 #undef VOL
 #undef EXP
 #undef EMP
+#undef IMM
 
 #undef N
 #undef R

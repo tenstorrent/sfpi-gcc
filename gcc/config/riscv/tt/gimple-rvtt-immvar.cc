@@ -18,6 +18,7 @@ You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
+#define INCLUDE_VECTOR
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
@@ -36,6 +37,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree-into-ssa.h"
 #include "diagnostic-core.h"
 #include "rvtt.h"
+#include <unordered_set>
 
 static tree
 emit_sfploadi (gimple_stmt_iterator &gsi, location_t loc, unsigned mod,
@@ -85,7 +87,7 @@ emit_loadimm (gimple_stmt_iterator &gsi, location_t loc, int bits,
   tree lower = val;
   if (!needs_both)
     ;
-  else if (SSA_VAR_P (lower))
+  else if (TREE_CODE (lower) != INTEGER_CST)
     {
       lower = make_ssa_name (TREE_TYPE (lower));
       auto *lower_stmt = gimple_build_assign
@@ -125,7 +127,7 @@ emit_loadimm (gimple_stmt_iterator &gsi, location_t loc, int bits,
   if (needs_both)
     {
       tree shift = val;
-      if (SSA_VAR_P (shift))
+      if (TREE_CODE (shift) != INTEGER_CST)
 	{
 	  shift = make_ssa_name (TREE_TYPE (val));
 	  auto *shift_stmt = gimple_build_assign
@@ -150,13 +152,15 @@ emit_replacement (gimple_stmt_iterator &gsi, const rvtt_insn_data *insnd, gcall 
 	      || (1u << TREE_INT_CST_LOW (mod)) & new_insnd->mod_info ().mod ());
   gimple *stmt = gimple_build_call (new_insnd->decl, new_insnd->num_args ());
   gimple_set_location (stmt, gimple_location (call));
-  gcc_checking_assert (new_insnd->num_srcs () == insnd->num_srcs () + 1);
+  gcc_checking_assert (new_insnd->num_srcs () == insnd->num_srcs () + 1
+		       && insnd->num_imms () == 1
+		       && !new_insnd->has_imms ());
 
-  gimple_call_set_arg (stmt, new_insnd->src_arg () + insnd->num_srcs (), imm);
+  gimple_call_set_arg (stmt, new_insnd->src_arg (insnd->num_srcs ()), imm);
   gimple_call_set_arg (stmt, new_insnd->mod_arg (), mod);
   for (unsigned ix = insnd->num_srcs (); ix--; )
-    gimple_call_set_arg (stmt, new_insnd->src_arg () + ix,
-			 gimple_call_arg (call, insnd->src_arg () + ix));
+    gimple_call_set_arg (stmt, new_insnd->src_arg (ix),
+			 gimple_call_arg (call, insnd->src_arg (ix)));
   for (unsigned ix = new_insnd->mod_arg () + 1, jx = insnd->id_arg () + 1,
 	 limit = new_insnd->num_args (); ix != limit; ix++, jx++)
     gimple_call_set_arg (stmt, ix, gimple_call_arg (call, jx));
@@ -173,81 +177,126 @@ emit_replacement (gimple_stmt_iterator &gsi, const rvtt_insn_data *insnd, gcall 
 static bool
 immvar_expand (gimple_stmt_iterator &gsi, const rvtt_insn_data *insnd, gcall *call)
 {
-  if (!insnd->has_var ())
+  if (!insnd->has_imms ())
     return false;
   tree imm = gimple_call_arg (call, insnd->imm_arg ());
-  tree addr = insnd->has_var () ? gimple_call_arg (call, 0) : nullptr;
-  tree mod = insnd->has_mod () ? gimple_call_arg (call, insnd->mod_arg ()) : nullptr;
-  switch (insnd->id)
-    {
-    default:
-      if (!insnd->is_expanded ())
-	break;
-      {
-	bool expand = SSA_VAR_P (imm);
-	auto info = insnd->ops[0];
-	bool is_signed = info.kind () == rvtt_insn_data::op_t::SIGNED;
-	if (!expand)
-	  {
-	    HOST_WIDE_INT i_imm = TREE_INT_CST_LOW (imm);
-	    HOST_WIDE_INT bound = (1u << info.bits ()) - 1;
-	    if (is_signed)
-	      {
-		bound >>= 1;
-		if (i_imm < ~bound)
-		  expand = true;
-	      }
-	    else if (i_imm < 0)
-	      expand = true;
-	    if (i_imm > bound)
-	      expand = true;
-	  }
-	if (expand)
-	  {
-	    tree tmp = emit_loadimm (gsi, gimple_location (call), is_signed ? -32 : 32, addr, imm, nullptr);
-	    return emit_replacement (gsi, insnd, call, insnd->get_vector (), tmp, mod);
-	  }
-      }
-      break;
+  tree addr = gimple_call_arg (call, 0);
 
-    case rvtt_insn_data::sfpxloadi:
-      {
-	int bits = TREE_INT_CST_LOW (gimple_call_arg (call, 4));
-	emit_loadimm (gsi, gimple_location (call),
-		      bits, addr, imm, gimple_call_lhs (call));
-	return true;
-      }
+  if (insnd->id == rvtt_insn_data::sfpxloadi)
+    {
+      int bits = TREE_INT_CST_LOW (gimple_call_arg (call, 4));
+      emit_loadimm (gsi, gimple_location (call),
+		    bits, addr, imm, gimple_call_lhs (call));
+      return true;
     }
+
+  if (!insnd->is_expanded ())
+    return false;
+
+  tree mod = insnd->has_mod () ? gimple_call_arg (call, insnd->mod_arg ()) : nullptr;
+  bool expand = TREE_CODE (imm) != INTEGER_CST;
+  auto info = insnd->ops[0];
+  bool is_signed = info.kind () == rvtt_insn_data::op_t::SIGNED;
+  if (!expand)
+    {
+      HOST_WIDE_INT i_imm = TREE_INT_CST_LOW (imm);
+      HOST_WIDE_INT bound = (1u << info.bits ()) - 1;
+      if (is_signed)
+	{
+	  bound >>= 1;
+	  if (i_imm < ~bound)
+	    expand = true;
+	}
+      else if (i_imm < 0)
+	expand = true;
+      if (i_imm > bound)
+	expand = true;
+    }
+
+  if (expand)
+    {
+      tree tmp = emit_loadimm (gsi, gimple_location (call), is_signed ? -32 : 32, addr, imm, nullptr);
+      return emit_replacement (gsi, insnd, call, insnd->get_vector (), tmp, mod);
+    }
+
   return false;
 }
 
+static void
+update_sums (std::unordered_set<gphi *> &phis, int num_imms, unsigned non_const_mask, tree sum_var)
+{
+  if (!SSA_VAR_P (sum_var))
+    return;
+
+  auto sum_stmt = SSA_NAME_DEF_STMT (sum_var);
+  if (auto phi = dyn_cast <gphi *> (sum_stmt))
+    {
+      if (!phis.insert (phi).second)
+	return;
+
+      use_operand_p arg_p;
+      ssa_op_iter ix;
+      FOR_EACH_PHI_ARG (arg_p, phi, ix, SSA_OP_USE)
+	update_sums (phis, num_imms, non_const_mask, USE_FROM_PTR (arg_p));
+      return;
+    }
+
+  gcc_assert (rvtt_get_insn_data (sum_stmt)->id
+	      < rvtt_insn_data::synth_opcode + rvtt_insn_data::imm_arg_hwm
+	      && rvtt_get_insn_data (sum_stmt)->num_args () == num_imms + 1);
+  for (unsigned ix = num_imms; ix--;)
+    if (!((1 << ix) & non_const_mask))
+      gimple_call_set_arg (sum_stmt, ix + 1, integer_zero_node);
+  update_stmt (sum_stmt);
+}
+
 static bool
-immvar_gather (const rvtt_insn_data *insnd,
+immvar_gather (std::unordered_set<gphi *> &phis,
+	       const rvtt_insn_data *insnd,
 	       gcall *call, std::vector<gcall *> *loads)
 {
   if (!insnd->has_iptr ())
     return false;
 
-  tree imm = gimple_call_arg (call, insnd->imm_arg ());
-  if (SSA_VAR_P (imm))
+  int num_imms = insnd->num_imms () ? insnd->num_imms () : 1;
+  unsigned non_const_mask = 0;
+  for (int ix = num_imms; ix--; )
     {
-      if (loads && integer_zerop (gimple_call_arg (call, 0)))
-	error_at (gimple_location (call), "%qE immediate operand is not known at compile time",
-		  gimple_call_fndecl (call));
+      tree imm = gimple_call_arg (call, insnd->imm_arg (ix));
+      if (TREE_CODE (imm) != INTEGER_CST)
+	{
+	  non_const_mask |= 1 << ix;
+	  if (loads && integer_zerop (gimple_call_arg (call, 0)))
+	    error_at (gimple_location (call), "%qE immediate operand %d is not known at compile time",
+		      gimple_call_fndecl (call), 1 + insnd->imm_arg (ix));
+	}
+    }
 
+  if (non_const_mask)
+    {
+      // Not everything is const
+      if (non_const_mask != (1u << num_imms) - 1)
+	{
+	  // But something is const
+	  update_sums (phis, num_imms, non_const_mask, 
+		       gimple_call_arg (call, insnd->var_arg ()));
+	  phis.clear ();
+	}
       return false;
     }
 
+  // Everything is const
   bool changed = false;
   if (!integer_zerop (gimple_call_arg (call, 0)))
     {
+      // And that wasn't true last time
       if (dump_file)
 	{
-	  fprintf (dump_file, "Immediate is now known: ");
+	  fprintf (dump_file, "Immediates are now known: ");
 	  print_gimple_stmt (dump_file, call, 0);
 	}
       gimple_call_set_arg (call, 0, null_pointer_node);
-      if (insnd->has_var ())
+      if (insnd->has_imms ())
 	{
 	  gimple_call_set_arg (call, insnd->var_arg (), integer_zero_node);
 	  gimple_call_set_arg (call, insnd->id_arg (), integer_zero_node);
@@ -267,12 +316,13 @@ static bool immvar_gather (function *fn, std::vector<gcall *> *loads)
 {
     bool changed = false;
     basic_block bb;
+    std::unordered_set<gphi *> phis;
 
     FOR_EACH_BB_FN (bb, fn)
       for (gimple_stmt_iterator gsi = gsi_start_bb (bb);
 	   !gsi_end_p (gsi); gsi_next (&gsi))
 	if (auto *insnd = rvtt_get_insn_data (*gsi))
-	  if (immvar_gather (insnd, as_a <gcall *> (*gsi), loads))
+	  if (immvar_gather (phis, insnd, as_a <gcall *> (*gsi), loads))
 	    changed = true;
 
     return changed;

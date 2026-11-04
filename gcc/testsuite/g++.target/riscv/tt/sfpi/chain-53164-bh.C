@@ -78,7 +78,7 @@ void loop () {
 **	li	a2, 1897922560	# 1:71200000
 **	addi	a5,a3,-64
 **	addi	a3,a3,-144
-**	add	a4,a5,a2
+**	add	a4,(a5,a2|a2,a5)
 **	sw	a4, 0\(a1\)	# 1:SFPLOADI	L2, -, 0
 **	SFPGT	L2, L0, 0, 1
 **	addi	a5,a5,-16
