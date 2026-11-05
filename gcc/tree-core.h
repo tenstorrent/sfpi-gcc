@@ -107,7 +107,7 @@ struct die_struct;
 
 // Tenstorrent
 /* Nonzero if this function should keep const parms const (like constantp).  */
-#define ECF_STAY_CONST		  (1 << 17)
+#define ECF_STAY_CONST		  (1 << 18)
 
 /* Call argument flags.  */
 
