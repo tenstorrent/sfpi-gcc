@@ -1502,12 +1502,6 @@ static const riscv_extra_ext_flag_table_t riscv_extra_ext_flag_table[] =
   RISCV_EXT_FLAG_ENTRY ("xandesvbfhcvt",  x_riscv_vector_elen_flags, MASK_VECTOR_ELEN_BF_16),
   RISCV_EXT_FLAG_ENTRY ("xandesvpackfph", x_riscv_vector_elen_flags, MASK_VECTOR_ELEN_FP_16),
 
-  RISCV_EXT_FLAG_ENTRY ("xttroccqsr", x_riscv_tt_subext, MASK_XTT_ROCC_QSR),
-  RISCV_EXT_FLAG_ENTRY ("xtttensixbh", x_riscv_tt_subext, MASK_XTT_TENSIX_BH),
-  RISCV_EXT_FLAG_ENTRY ("xtttensixqsr", x_riscv_tt_subext, MASK_XTT_TENSIX_QSR),
-  RISCV_EXT_FLAG_ENTRY ("xtttensixwh", x_riscv_tt_subext, MASK_XTT_TENSIX_WH),
-  RISCV_EXT_FLAG_ENTRY ("xttzbkb", x_riscv_tt_subext, MASK_XTT_ZBKB),
-
   {NULL, NULL, NULL, 0}
 };
 
