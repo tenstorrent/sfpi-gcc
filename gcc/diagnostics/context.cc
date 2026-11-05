@@ -1023,6 +1023,7 @@ context::action_after_output (enum kind diag_kind)
 	if (m_abort_on_error)
 	  real_abort ();
 
+	fnotice (stderr, "gcc %s%s\n", pkgversion_string, version_string);
 	bool space = false;
 	for (auto *argv = saved_argv; *argv; space = true)
 	  fnotice (stderr, &" %s"[1 - space], *argv++);
