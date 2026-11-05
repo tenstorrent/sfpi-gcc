@@ -864,11 +864,14 @@ static const struct riscv_tune_param rvtt_b1_tune_info = {
   false,					/* vector_unaligned_access */
   false,					/* use_divmod_expansion */
   false,					/* overlap_op_by_pieces */
+  true,						/* use_zero_stride_load */
+  false,					/* speculative_sched_vsetvl */
   RISCV_FUSE_NOTHING,                           /* fusible_ops */
   NULL,						/* vector cost */
   NULL,						/* function_align */
   NULL,						/* jump_align */
   NULL,						/* loop_align */
+  false,					/* prefer-agnostic.  */
 };
 
 /* Costs to use when optimizing for qsr32.
@@ -887,11 +890,14 @@ static const struct riscv_tune_param rvtt_qsr32_tune_info = {
   false,					/* vector_unaligned_access */
   false,					/* use_divmod_expansion */
   false,					/* overlap_op_by_pieces */
+  true,						/* use_zero_stride_load */
+  false,					/* speculative_sched_vsetvl */
   RISCV_FUSE_NOTHING,                           /* fusible_ops */
   NULL,						/* vector cost */
   NULL,						/* function_align */
   NULL,						/* jump_align */
   NULL,						/* loop_align */
+  false,					/* prefer-agnostic.  */
 };
 
 /* Costs to use when optimizing for qsr64.
@@ -911,11 +917,14 @@ static const struct riscv_tune_param rvtt_qsr64_tune_info = {
   false,					/* vector_unaligned_access */
   false,					/* use_divmod_expansion */
   false,					/* overlap_op_by_pieces */
+  true,						/* use_zero_stride_load */
+  false,					/* speculative_sched_vsetvl */
   RISCV_FUSE_NOTHING,                           /* fusible_ops */
   NULL,						/* vector cost */
   NULL,						/* function_align */
   NULL,						/* jump_align */
   NULL,						/* loop_align */
+  false,					/* prefer-agnostic.  */
 };
 
 static bool riscv_avoid_shrink_wrapping_separate ();
