@@ -224,7 +224,7 @@
 	  [(any_atomic:SI (match_dup 1)
 		     (match_operand:SI 2 "arith_operand" "rI")) ;; value for op
 	   (match_operand:SI 3 "const_int_operand")]		   ;; model
-	 UNSPEC_SYNC_OLD_OP_SUBWORD))
+	 UNSPECV_SYNC_OLD_OP_SUBWORD))
     (use (match_operand:SI 4 "arith_operand" "rI"))	   ;; mask
     (use (match_operand:SI 5 "arith_operand" "rI"))	   ;; not_mask
     (clobber (match_scratch:SI 6 "=&r"))			   ;; tmp_1
@@ -291,7 +291,7 @@
 	  [(not:SI (and:SI (match_dup 1)
 			   (match_operand:SI 2 "arith_operand" "rI")))    ;; value for op
 	   (match_operand:SI 3 "const_int_operand")]			  ;; mask
-	 UNSPEC_SYNC_OLD_OP_SUBWORD))
+	 UNSPECV_SYNC_OLD_OP_SUBWORD))
     (use (match_operand:SI 4 "arith_operand" "rI"))		  ;; mask
     (use (match_operand:SI 5 "arith_operand" "rI"))		  ;; not_mask
     (clobber (match_scratch:SI 6 "=&r"))				  ;; tmp_1
@@ -430,7 +430,7 @@
     (sign_extend:DI (unspec_volatile:SI
       [(match_operand:SI 1 "memory_operand" "+A")
        (match_operand:SI 3 "const_int_operand")] ;; model
-      UNSPEC_SYNC_EXCHANGE)))
+      UNSPECV_SYNC_EXCHANGE)))
    (set (match_dup 1)
     (match_operand:SI 2 "reg_or_0_operand" "rJ"))]
   "TARGET_64BIT && TARGET_ZAAMO"
@@ -526,7 +526,7 @@
 	(unspec_volatile:SI
 	  [(match_operand:SI 2 "arith_operand" "rI")	 ;; value
 	   (match_operand:SI 3 "const_int_operand")]	 ;; model
-      UNSPEC_SYNC_EXCHANGE_SUBWORD))
+      UNSPECV_SYNC_EXCHANGE_SUBWORD))
     (use (match_operand:SI 4 "arith_operand" "rI"))	 ;; not_mask
     (clobber (match_scratch:SI 5 "=&r"))]		 ;; tmp_1
   "TARGET_ZALRSC && TARGET_INLINE_SUBWORD_ATOMIC"
@@ -556,7 +556,7 @@
 			      (match_operand:GPR 3 "reg_or_0_operand" "rJ") ;; desired val
 			      (match_operand:SI 4 "const_int_operand")	    ;; mod_s
 			      (match_operand:SI 5 "const_int_operand")]	    ;; mod_f
-	 UNSPEC_COMPARE_AND_SWAP))]
+	 UNSPECV_COMPARE_AND_SWAP))]
   "TARGET_ZACAS"
   {
     enum memmodel model_success = (enum memmodel) INTVAL (operands[4]);
@@ -799,7 +799,7 @@
    (set (match_dup 1)
 	(unspec_volatile:SI [(match_operand:SI 2 "reg_or_0_operand" "rJ")  ;; expected value
 			     (match_operand:SI 3 "arith_operand" "rI")] ;; desired value
-	 UNSPEC_COMPARE_AND_SWAP_SUBWORD))
+	 UNSPECV_COMPARE_AND_SWAP_SUBWORD))
 	(match_operand:SI 4 "const_int_operand")		;; model
 	(use (match_operand:SI 5 "arith_operand" "rI"))		;; mask
 	(use (match_operand:SI 6 "arith_operand" "rI"))		;; not_mask

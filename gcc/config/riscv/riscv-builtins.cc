@@ -148,51 +148,39 @@ AVAIL (cvsimd, TARGET_XCVSIMD && !TARGET_64BIT)
 AVAIL (andesperf32, !TARGET_64BIT && TARGET_XANDESPERF)
 AVAIL (andesperf64, TARGET_64BIT && TARGET_XANDESPERF)
 AVAIL (andesbfhcvt, TARGET_XANDESBFHCVT)
+AVAIL (tensix, TARGET_XTT_TENSIX)
+AVAIL (tensixwh_bh, TARGET_XTT_TENSIX_WH_BH)
+AVAIL (tensixbh, TARGET_XTT_TENSIX_BH)
+AVAIL (tensixbh_qsr, TARGET_XTT_TENSIX_BH_QSR)
+AVAIL (tensixqsr, TARGET_XTT_TENSIX_QSR)
+AVAIL (roccqsr, TARGET_XTT_ROCC_QSR)
 
-/* Construct a riscv_builtin_description from the given arguments.
-
-   INSN is the name of the associated instruction pattern, without the
-   leading CODE_FOR_riscv_.
+/* Construct a riscv_builtin_description from the given arguments like RISCV_BUILTIN.
 
    NAME is the name of the function itself, without the leading
    "__builtin_riscv_".
-
-   BUILTIN_TYPE and FUNCTION_TYPE are riscv_builtin_description fields.
-
-   AVAIL is the name of the availability predicate, without the leading
-   riscv_builtin_avail_.  */
-#define RISCV_BUILTIN(INSN, NAME, BUILTIN_TYPE,	FUNCTION_TYPE, AVAIL)	\
-  { CODE_FOR_riscv_ ## INSN, "__builtin_riscv_" NAME,			\
-    BUILTIN_TYPE, FUNCTION_TYPE, riscv_builtin_avail_ ## AVAIL }
-
-/* Construct a riscv_builtin_description from the given arguments like RISCV_BUILTIN.
 
    INSN is the name of the associated instruction pattern, without the
    leading CODE_FOR_.
 
-   NAME is the name of the function itself, without the leading
-   "__builtin_riscv_".
-
-   BUILTIN_TYPE and FUNCTION_TYPE are riscv_builtin_description fields.
+   FUNCTION_TYPE is the builtin type enumerator.
 
    AVAIL is the name of the availability predicate, without the leading
    riscv_builtin_avail_.  */
-#define RISCV_BUILTIN_NO_PREFIX(INSN, NAME, BUILTIN_TYPE,	FUNCTION_TYPE, AVAIL)	\
-  { CODE_FOR_ ## INSN, "__builtin_riscv_" NAME,			\
-    BUILTIN_TYPE, FUNCTION_TYPE, riscv_builtin_avail_ ## AVAIL }
+#define RISCV_BUILTIN_NO_PREFIX(INSN, NAME, FUNCTION_TYPE, AVAIL, ECF)	\
+  { "__builtin_riscv_" NAME, CODE_FOR_ ## INSN,				\
+      FUNCTION_TYPE, false, ECF, riscv_builtin_avail_ ## AVAIL }
 
-/* Define __builtin_riscv_<INSN>, which is a RISCV_BUILTIN_DIRECT function
-   mapped to instruction CODE_FOR_riscv_<INSN>,  FUNCTION_TYPE and AVAIL
-   are as for RISCV_BUILTIN.  */
-#define DIRECT_BUILTIN(INSN, FUNCTION_TYPE, AVAIL)			\
-  RISCV_BUILTIN (INSN, #INSN, RISCV_BUILTIN_DIRECT, FUNCTION_TYPE, AVAIL)
+/* Like RISCV_BUiLTIN_NO_PREFIX but with a 'riscv_' prefix added to the
+   instruction code.  */
+#define RISCV_BUILTIN(INSN, NAME, FUNCTION_TYPE, AVAIL, ECF)		\
+  RISCV_BUILTIN_NO_PREFIX (riscv_ ## INSN, NAME, FUNCTION_TYPE, AVAIL, ECF)
 
-/* Define __builtin_riscv_<INSN>, which is a RISCV_BUILTIN_DIRECT_NO_TARGET
-   function mapped to instruction CODE_FOR_riscv_<INSN>,  FUNCTION_TYPE
-   and AVAIL are as for RISCV_BUILTIN.  */
-#define DIRECT_NO_TARGET_BUILTIN(INSN, FUNCTION_TYPE, AVAIL)		\
-  RISCV_BUILTIN (INSN, #INSN, RISCV_BUILTIN_DIRECT_NO_TARGET,		\
-		FUNCTION_TYPE, AVAIL)
+/* Define __builtin_riscv_<INSN>, which is builtin function mapped to
+   instruction CODE_FOR_riscv_<INSN>, FUNCTION_TYPE and AVAIL are as for
+   RISCV_BUILTIN.  */
+#define DIRECT_BUILTIN(INSN, FUNCTION_TYPE, AVAIL, ECF)	\
+  RISCV_BUILTIN (INSN, #INSN, FUNCTION_TYPE, AVAIL, ECF)
 
 /* Argument types.  */
 #define RISCV_ATYPE_VOID void_type_node
@@ -208,6 +196,11 @@ AVAIL (andesbfhcvt, TARGET_XANDESBFHCVT)
 #define RISCV_ATYPE_INT_PTR integer_ptr_type_node
 #define RISCV_ATYPE_BF bfloat16_type_node
 #define RISCV_ATYPE_SF float_type_node
+#define RISCV_ATYPE_XTT_IPTR xtt_type_nodes[0]
+#define RISCV_ATYPE_XTT_VEC xtt_type_nodes[1]
+#define RISCV_ATYPE_XTT_VEC2 xtt_type_nodes[2]
+#define RISCV_ATYPE_XTT_VEC4 xtt_type_nodes[3]
+#define RISCV_ATYPE_XTT_VEC8 xtt_type_nodes[4]
 
 /* RISCV_FTYPE_ATYPESN takes N RISCV_FTYPES-like type codes and lists
    their associated RISCV_ATYPEs.  */
@@ -222,16 +215,39 @@ AVAIL (andesbfhcvt, TARGET_XANDESBFHCVT)
 #define RISCV_FTYPE_ATYPES4(A, B, C, D, E) \
   RISCV_ATYPE_##A, RISCV_ATYPE_##B, RISCV_ATYPE_##C, RISCV_ATYPE_##D, \
   RISCV_ATYPE_##E
+#define RISCV_FTYPE_ATYPES5(A, B, C, D, E, F) \
+  RISCV_ATYPE_##A, RISCV_ATYPE_##B, RISCV_ATYPE_##C, RISCV_ATYPE_##D, \
+  RISCV_ATYPE_##E, RISCV_ATYPE_##F
+#define RISCV_FTYPE_ATYPES6(A, B, C, D, E, F, G) \
+  RISCV_ATYPE_##A, RISCV_ATYPE_##B, RISCV_ATYPE_##C, RISCV_ATYPE_##D, \
+  RISCV_ATYPE_##E, RISCV_ATYPE_##F, RISCV_ATYPE_##G
+#define RISCV_FTYPE_ATYPES7(A, B, C, D, E, F, G, H) \
+  RISCV_ATYPE_##A, RISCV_ATYPE_##B, RISCV_ATYPE_##C, RISCV_ATYPE_##D, \
+  RISCV_ATYPE_##E, RISCV_ATYPE_##F, RISCV_ATYPE_##G, RISCV_ATYPE_##H
+#define RISCV_FTYPE_ATYPES8(A, B, C, D, E, F, G, H, I) \
+  RISCV_ATYPE_##A, RISCV_ATYPE_##B, RISCV_ATYPE_##C, RISCV_ATYPE_##D, \
+  RISCV_ATYPE_##E, RISCV_ATYPE_##F, RISCV_ATYPE_##G, RISCV_ATYPE_##H, \
+  RISCV_ATYPE_##I
+#define RISCV_FTYPE_ATYPES9(A, B, C, D, E, F, G, H, I, J)		      \
+  RISCV_ATYPE_##A, RISCV_ATYPE_##B, RISCV_ATYPE_##C, RISCV_ATYPE_##D, \
+  RISCV_ATYPE_##E, RISCV_ATYPE_##F, RISCV_ATYPE_##G, RISCV_ATYPE_##H, \
+  RISCV_ATYPE_##I, RISCV_ATYPE_##J
 
-static const struct riscv_builtin_description riscv_builtins[] = {
+static struct riscv_builtin_description riscv_builtins[] = {
   #include "riscv-cmo.def"
   #include "riscv-scalar-crypto.def"
   #include "corev.def"
   #include "andes.def"
+  #include "ttrocc.def"
 
-  DIRECT_BUILTIN (frflags, RISCV_USI_FTYPE, hard_float),
-  DIRECT_NO_TARGET_BUILTIN (fsflags, RISCV_VOID_FTYPE_USI, hard_float),
-  RISCV_BUILTIN (pause, "pause", RISCV_BUILTIN_DIRECT_NO_TARGET, RISCV_VOID_FTYPE, hint_pause),
+  DIRECT_BUILTIN (frflags, RISCV_USI_FTYPE, hard_float, 0),
+  DIRECT_BUILTIN (fsflags, RISCV_VOID_FTYPE_USI, hard_float, 0),
+  RISCV_BUILTIN (pause, "pause", RISCV_VOID_FTYPE, hint_pause, 0),
+
+  /* Tenstorrent Tensix builtins */
+#define RVTT_FN(INSN, AVAIL, SFX, FUNCTION_TYPE, fl, ops, ECF)		\
+  { "__builtin_rvtt_" #INSN, CODE_FOR_rvtt_##INSN##SFX, RISCV_##FUNCTION_TYPE, false, ECF, riscv_builtin_avail_tensix##AVAIL},
+#include "tt/rvtt-insn.def"
 };
 
 /* Index I is the function declaration for riscv_builtins[I], or null if the

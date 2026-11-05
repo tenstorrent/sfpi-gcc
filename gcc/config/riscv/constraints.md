@@ -344,3 +344,6 @@
   "Sequence bit extract."
   (and (match_code "const_int")
        (match_test "(ival & (ival + 1)) == 0")))
+
+;; TT has additional constraints
+(include "tt/rvtt-constraints.md")

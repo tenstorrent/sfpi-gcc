@@ -578,6 +578,7 @@ riscv*)
 	target_gtfiles="$target_gtfiles \$(srcdir)/config/riscv/riscv-vector-builtins.cc"
 	target_gtfiles="$target_gtfiles \$(srcdir)/config/riscv/riscv-vector-builtins.h"
 	extra_options="${extra_options} riscv/riscv-ext.opt"
+	target_gtfiles="$target_gtfiles \$(srcdir)/config/riscv/riscv-builtins.cc"
 	;;
 rs6000*-*-*)
 	extra_options="${extra_options} g.opt fused-madd.opt rs6000/rs6000-tables.opt"

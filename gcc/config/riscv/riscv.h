@@ -128,7 +128,8 @@ ARCH_UNSET_CLEANUP_SPECS \
 "%{-print-supported-extensions:%:riscv_arch_help()} "		\
 "%{march=*:%:riscv_expand_arch(%*)} "				\
 "%{!march=*|march=unset:%{mcpu=*:%:riscv_expand_arch_from_cpu(%*)}} " \
-"%{march=unset:%{!mcpu=*:%eAt least one valid -mcpu option must be given after -march=unset}} "
+"%{march=unset:%{!mcpu=*:%eAt least one valid -mcpu option must be given after -march=unset}} " \
+"%{!mabi=*:%{mcpu=*:%:riscv_expand_abi_from_cpu(%*)}} "
 
 #define LOCAL_LABEL_PREFIX	"."
 #define USER_LABEL_PREFIX	""

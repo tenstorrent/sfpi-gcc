@@ -209,7 +209,7 @@ s-riscv-vector-type-indexer.gen.defs: build/genrvv-type-indexer$(build_exeext)
 	$(SHELL) $(srcdir)/../move-if-change tmp-riscv-vector-type-indexer.gen.def    riscv-vector-type-indexer.gen.def
 	$(STAMP) s-riscv-vector-type-indexer.gen.defs
 
-genprog+=rvv-type-indexer
+genprog += rvv-type-indexer
 
 RISCV_EXT_DEFS = \
   $(srcdir)/config/riscv/riscv-ext.def \
@@ -220,7 +220,8 @@ RISCV_EXT_DEFS = \
   $(srcdir)/config/riscv/riscv-ext-ventana.def \
   $(srcdir)/config/riscv/riscv-ext-mips.def \
   $(srcdir)/config/riscv/riscv-ext-andes.def \
-  $(srcdir)/config/riscv/riscv-ext-spacemit.def
+  $(srcdir)/config/riscv/riscv-ext-spacemit.def \
+  $(srcdir)/config/riscv/riscv-ext-tt.def
 
 $(srcdir)/config/riscv/riscv-ext.opt: $(RISCV_EXT_DEFS)
 
