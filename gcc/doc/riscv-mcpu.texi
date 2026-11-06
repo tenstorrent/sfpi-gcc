@@ -96,4 +96,20 @@ by particular CPU name. Permissible values for this option are:
 
 @samp{andes-ax45},
 
-@samp{spacemit-x60}.
+@samp{spacemit-x60},
+
+@samp{tt-wh},
+
+@samp{tt-wh-tensix},
+
+@samp{tt-bh},
+
+@samp{tt-bh-tensix},
+
+@samp{tt-qsr64},
+
+@samp{tt-qsr64-rocc},
+
+@samp{tt-qsr32},
+
+@samp{tt-qsr32-tensix}.

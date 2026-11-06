@@ -750,4 +750,28 @@
 @tab 1.0
 @tab SpacemiT vector dot product extension
 
+@item @samp{xttcache}
+@tab 1.0
+@tab Tenstorrent cache control extension
+
+@item @samp{xttroccqsr}
+@tab 1.0
+@tab Tenstorrent Quasar RoCC extension
+
+@item @samp{xtttensixbh}
+@tab 1.0
+@tab Tenstorrent Blackhole Tensix extension
+
+@item @samp{xtttensixqsr}
+@tab 1.0
+@tab Tenstorrent Quasar Tensix extension
+
+@item @samp{xtttensixwh}
+@tab 1.0
+@tab Tenstorrent Wormhole Tensix extension
+
+@item @samp{xttzbkb}
+@tab 1.0
+@tab Tenstorrent subset of the Zbkb extension
+
 @end multitable
