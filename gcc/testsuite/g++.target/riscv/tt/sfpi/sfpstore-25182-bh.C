@@ -24,12 +24,10 @@ void frob (int i) {
 }
 /*
 **_Z4frobi:
-**	li	a5,8192
+**	slli	a0,a0,20
 **	SFPMOV	L0, L12, 2
-**	addi	a5,a5,-1
-**	slli	a0,a0,1
-**	and	a0,a0,a5
 **	li	a5, 1912659968	# 1:7200e000
+**	srli	a0,a0,19
 **	add	a0,a0,a5
 **	lui	a5,%hi\(_ZN7ckernel13instrn_bufferE\)
 **	sw	a0, %lo\(_ZN7ckernel13instrn_bufferE\)\(a5\)	# 1:SFPSTORE	L0, -, 0, 7
