@@ -604,22 +604,22 @@ Combiner::replace (gimple_stmt_iterator *gsi, matched_data &matched, Deferred &d
 	    assign_lv_mask = 1 << rep.lhs;
 	}
       gcc_checking_assert (insnd->num_args () + lv_delta == rep.num_args
-			   && insnd->decl);
-      auto *call = gimple_build_call (insnd->decl, insnd->num_args ());
+			   && insnd->enabled ());
+      auto *call = gimple_build_call (insnd->decl (), insnd->num_args ());
       matched.replace[rep.lhs] = call;
 
       unsigned from_loc = rep.lhs;
       if (rep.lhs >= pats_hwm)
 	{
 	  matched.vars[rep.lhs]
-	    = make_temp_ssa_name (TREE_TYPE (TREE_TYPE (insnd->decl)), nullptr, "cmb");
+	    = make_temp_ssa_name (TREE_TYPE (TREE_TYPE (insnd->decl ())), nullptr, "cmb");
 	  from_loc = pats_hwm - 1;
 	}
       gimple_set_location (call, gimple_location (matched.calls[from_loc]));
 
       gimple_set_lhs (call, matched.vars[rep.lhs]);
 
-      tree arg_types = TYPE_ARG_TYPES (TREE_TYPE (insnd->decl));
+      tree arg_types = TYPE_ARG_TYPES (TREE_TYPE (insnd->decl ()));
       for (int argno = 0; argno != rep.num_args; argno++)
 	{
 	  if (argno == lv_arg && lv_delta)
@@ -734,7 +734,7 @@ init ()
 	// Check all patterns and replacements have decls and correct number of arguments
 	for (unsigned ix = combiner.reps_hwm; ix--;) {
 	  auto const *insnd = rvtt_get_insn_data (combiner.shapes[ix].id);
-	  gcc_checking_assert (insnd->decl && insnd->get_non_live ()->decl);
+	  gcc_checking_assert (insnd->enabled () && insnd->get_non_live ()->enabled ());
 	  gcc_checking_assert (insnd->num_args () == combiner.shapes[ix].num_args);
 	  if (!ix && combiner.is_deferred && combiner.label == Combiner::T_MULI_ADDI)
 	    // The first pattern to match must be an sfploadi

@@ -61,7 +61,7 @@ make_synth (location_t loc, tree id, tree var = nullptr)
   auto opcode_insnd = rvtt_get_insn_data (rvtt_insn_data::synth_opcode);
   if (!var)
     var = make_temp_ssa_name (unsigned_type_node, nullptr, "li");
-  gcall *stmt = gimple_build_call (opcode_insnd->decl, opcode_insnd->num_args ());
+  gcall *stmt = gimple_build_call (opcode_insnd->decl (), opcode_insnd->num_args ());
   gimple_call_set_arg (stmt, 0, id);
   gimple_call_set_arg (stmt, 1, integer_zero_node);
   gimple_call_set_lhs (stmt, var);
@@ -160,8 +160,8 @@ split (function *fn)
 	      sum_stmt = gimple_build_assign (sum_var, PLUS_EXPR, gimple_get_lhs (synth), integer_zero_node);
 	    else
 	      {
-		auto *sum_insnd = rvtt_get_insn_data (rvtt_insn_data::insn_id (rvtt_insn_data::synth_opcode + num_imms - 1));
-		sum_stmt = gimple_build_call (sum_insnd->decl, num_imms + 1);
+		auto sum_decl = rvtt_get_insn_decl (rvtt_insn_data::insn_id (rvtt_insn_data::synth_opcode + num_imms - 1));
+		sum_stmt = gimple_build_call (sum_decl, num_imms + 1);
 		gimple_call_set_arg (sum_stmt, 0, gimple_get_lhs (synth));
 		gimple_call_set_lhs (sum_stmt, sum_var);
 	      }
@@ -703,7 +703,7 @@ struct synth
 	// new synth and (probably) val_node
 	tree ssa_var = make_temp_ssa_name (unsigned_type_node, NULL, "li");
 	tree new_id = build_int_cst (unsigned_type_node, id_hwm++);
-	tree synth_opcode_decl = rvtt_get_insn_data (rvtt_insn_data::synth_opcode)->decl;
+	tree synth_opcode_decl = rvtt_get_insn_decl (rvtt_insn_data::synth_opcode);
 	gcall *new_call = gimple_build_call (synth_opcode_decl, 2);
 	gimple_call_set_arg (new_call, 0, new_id);
 	gimple_call_set_arg (new_call, 1, build_int_cst (unsigned_type_node, addend));
@@ -734,7 +734,7 @@ struct synth
 		auto *insnd = rvtt_get_insn_data (val_node->stmt);
 		gcc_assert (insnd->id < rvtt_insn_data::synth_opcode + rvtt_insn_data::imm_arg_hwm);
 
-		sum_stmt = gimple_build_call (insnd->decl, insnd->num_args ());
+		sum_stmt = gimple_build_call (insnd->decl (), insnd->num_args ());
 		gimple_call_set_lhs (sum_stmt, sum_val);
 		gimple_call_set_arg (sum_stmt, 0, ssa_var);
 		for (unsigned ix = insnd->num_args (); --ix;)

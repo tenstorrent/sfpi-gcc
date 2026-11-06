@@ -46,9 +46,9 @@ emit_sfploadi (gimple_stmt_iterator &gsi, location_t loc, unsigned mod,
   const auto *insnd = rvtt_get_insn_data (rvtt_insn_data::sfploadi) + bool (lv);
 
   if (!res)
-    res = make_ssa_name (TREE_TYPE (TREE_TYPE (insnd->decl)));
+    res = make_ssa_name (TREE_TYPE (TREE_TYPE (insnd->decl ())));
 
-  auto *stmt = gimple_build_call (insnd->decl, insnd->num_args ());
+  auto *stmt = gimple_build_call (insnd->decl (), insnd->num_args ());
   gimple_set_location (stmt, loc);
   gimple_call_set_arg (stmt, 0, addr);
   if (lv)
@@ -150,7 +150,7 @@ emit_replacement (gimple_stmt_iterator &gsi, const rvtt_insn_data *insnd, gcall 
 {
   gcc_assert (new_insnd->mod_info ().is_xmod ()
 	      || (1u << TREE_INT_CST_LOW (mod)) & new_insnd->mod_info ().mod ());
-  gimple *stmt = gimple_build_call (new_insnd->decl, new_insnd->num_args ());
+  gimple *stmt = gimple_build_call (new_insnd->decl (), new_insnd->num_args ());
   gimple_set_location (stmt, gimple_location (call));
   gcc_checking_assert (new_insnd->num_srcs () == insnd->num_srcs () + 1
 		       && insnd->num_imms () == 1
@@ -337,7 +337,7 @@ replace_loadi (gcall *call, gcall *earlier, int op, tree val,
     extra_insnd ? extra_insnd : rvtt_get_insn_data (rvtt_insn_data::sfploadi);
   const auto *new_insnd = reg_insnd ? reg_insnd : other_insnd;
 
-  gimple *new_call = gimple_build_call (new_insnd->decl, new_insnd->num_args ());
+  gimple *new_call = gimple_build_call (new_insnd->decl (), new_insnd->num_args ());
   gimple_set_location (new_call, gimple_location (call));
   gimple_call_set_lhs (new_call,
 		       extra_call ? gimple_call_arg (extra_call, 1) : gimple_call_lhs (call));
@@ -545,7 +545,7 @@ immvar_simplify (gcall *call, std::vector<gcall *> seconds)
 		second_val = nullptr;
 	      else
 		{
-		  extra_call = gimple_build_call (extra_insnd->decl, extra_insnd->num_args ());
+		  extra_call = gimple_build_call (extra_insnd->decl (), extra_insnd->num_args ());
 
 		  gimple_set_location (extra_call, gimple_location (second));
 		  gimple_call_set_arg (extra_call, 1,
@@ -696,7 +696,7 @@ immload_combine (gimple_stmt_iterator gsi, const rvtt_insn_data *call_insnd,
     }
 
   // Replace the CALL with one of SCALAR
-  gimple *new_call = gimple_build_call (scalar_insnd->decl, scalar_insnd->num_args ());
+  gimple *new_call = gimple_build_call (scalar_insnd->decl (), scalar_insnd->num_args ());
   gimple_set_location (new_call, gimple_location (call));
   gimple_call_set_lhs (new_call, gimple_call_lhs (call));
   unsigned argno = 0;

@@ -529,7 +529,7 @@ fold_live_assign (function *fn)
 		  {
 		    // Create _lv version of prev, delete assign stmt, delete prev_stmt
 		    DUMP("    building new %s\n", new_insnd->name);
-		    gimple *new_stmt = gimple_build_call (new_insnd->decl,
+		    gimple *new_stmt = gimple_build_call (new_insnd->decl (),
 							  gimple_call_num_args (prev_stmt) + 1);
 
 		    copy_args_to_live_insn (new_stmt, new_insnd->live_arg (), prev_stmt);

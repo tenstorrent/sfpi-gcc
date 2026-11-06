@@ -147,7 +147,7 @@ maybe_elide_load (gimple_stmt_iterator gsi, rvtt_insn_data::insn_id store_id,
   if (live)
     assign = assign->get_live ();
 
-  gcall *ass_call = gimple_build_call (assign->decl, assign->num_args ());
+  gcall *ass_call = gimple_build_call (assign->decl (), assign->num_args ());
   gimple_set_location (ass_call, gimple_location (load_call));
   gimple_call_set_lhs (ass_call, gimple_call_lhs (load_call));
   gimple_call_set_arg (ass_call, int (live), gimple_call_arg (store_call, 1));

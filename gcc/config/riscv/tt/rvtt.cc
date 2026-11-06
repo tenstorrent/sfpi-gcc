@@ -49,6 +49,8 @@ along with GCC; see the file COPYING3.  If not see
 
 DEBUG_FUNCTION void debug_tree (tree node);
 
+// We do not need to mark these for PCH, they are regenerated at init time, and
+// the PCH elements (decls) are elsewhere.
 static rvtt_insn_data sfpu_insn_data[] = {
 #define RVTT_FN(id, av, sfx, fmt, fl, ops, ecf)			\
   { rvtt_insn_data::id, #id, fl, rvtt_insn_data::ops_t ops },
@@ -57,13 +59,15 @@ static rvtt_insn_data sfpu_insn_data[] = {
 
 static unsigned riscv_builtin_rvtt_first;
 
+// This is called after the builtin decls have been created.
+
 void
 rvtt_init_builtins ()
 {
   if (!TARGET_XTT_TENSIX)
     return;
 
-  gcc_checking_assert (sfpu_insn_data[0].decl);
+  gcc_checking_assert (sfpu_insn_data[0].enabled ());
 
   static const auto tensixbh = []() { return TARGET_XTT_TENSIX_BH; };
   static const auto tensixqsr = []() { return TARGET_XTT_TENSIX_QSR; };
@@ -75,26 +79,29 @@ rvtt_init_builtins ()
     rvtt_insn_data::ops_t ops;
   } overrides[] = {
 #define RVTT_OVR(id, av, sfx, fmt, fl, ops, ecf)				\
-    { tensix##av, rvtt_insn_data::id, rvtt_insn_data::flags_t (fl), rvtt_insn_data::ops_t ops },
+    { tensix##av, rvtt_insn_data::id, rvtt_insn_data::flags_t (fl | rvtt_insn_data::ENABLED), rvtt_insn_data::ops_t ops },
 #include "rvtt-insn.def"
   };
 
   // Process overrides
   for (auto const &ovr : overrides)
     if (ovr.avail ())
-      sfpu_insn_data[ovr.index].override (ovr.flags, ovr.ops);
+      {
+	gcc_checking_assert (sfpu_insn_data[ovr.index].enabled ());
+	sfpu_insn_data[ovr.index].override (ovr.flags, ovr.ops);
+      }
 
+  char const *prev_name = nullptr;
   for (auto &insn : sfpu_insn_data)
-    if (insn.decl)
-      insn.init ();
+    prev_name = insn.enabled () ? insn.init (prev_name) : nullptr;
 }
 
-void
-rvtt_insn_data::init ()
+char const *
+rvtt_insn_data::init (char const *prev_name ATTRIBUTE_UNUSED)
 {
   // Compute derived fields.
   int argno = 0, ix = 0;
-  tree arg_types = TYPE_ARG_TYPES (TREE_TYPE (decl));
+  tree arg_types = TYPE_ARG_TYPES (TREE_TYPE (decl ()));
 
   {
     // Check liveness consistency -- we know these objects are in an array, and
@@ -102,7 +109,7 @@ rvtt_insn_data::init ()
     unsigned len = strlen (name);
     gcc_checking_assert (is_live () == (len > 3 && 0 == memcmp ("_lv", name + len - 3, 4)));
     if (is_live ())
-      gcc_checking_assert (this[-1].decl && 0 == strncmp (this[-1].name, name, len - 3) && !this[-1].name[len - 3]);
+      gcc_checking_assert (prev_name && 0 == strncmp (prev_name, name, len - 3) && !prev_name[len - 3]);
   }
 
   if (POINTER_TYPE_P (TREE_VALUE (arg_types)))
@@ -194,10 +201,12 @@ rvtt_insn_data::init ()
     }
   gcc_checking_assert (VOID_TYPE_P (TREE_VALUE (arg_types)));
   arg_num = argno;
+
+  return name;
 }
 
 bool
-rvtt_record_builtin (unsigned ix, char const *name, tree decl)
+rvtt_record_builtin (unsigned ix, char const *name, tree)
 {
   if (!TARGET_XTT_TENSIX)
     return false;
@@ -213,13 +222,9 @@ rvtt_record_builtin (unsigned ix, char const *name, tree decl)
 
       riscv_builtin_rvtt_first = ix;
     }
-
   ix -= riscv_builtin_rvtt_first;
 
-  if (ix >= rvtt_insn_data::hwm)
-    return false;
-
-  sfpu_insn_data[ix].decl = decl;
+  sfpu_insn_data[ix].set_enabled ();
 
   return !ix;
 }
@@ -257,6 +262,19 @@ rvtt_get_insn_data (gimple const *stmt)
   if (!is_a <gcall const *> (stmt))
     return nullptr;
   return rvtt_get_insn_data (as_a <gcall const *> (stmt));
+}
+
+tree
+rvtt_get_insn_decl (rvtt_insn_data::insn_id id)
+{
+  return riscv_builtin_decl (((id + riscv_builtin_rvtt_first) << RISCV_BUILTIN_SHIFT)
+			     | RISCV_BUILTIN_GENERAL, false);
+}
+
+tree
+rvtt_insn_data::decl () const
+{
+  return rvtt_get_insn_decl (id);
 }
 
 bool

@@ -202,7 +202,7 @@ process_block_stmts(basic_block bb,
 		    const rvtt_insn_data *new_insnd =
 		      rvtt_get_insn_data(rvtt_insn_data::sfpencc);
 		    gimple *new_stmt = gimple_build_call
-		      (new_insnd->decl, 2,
+		      (new_insnd->decl (), 2,
 		       build_int_cst (unsigned_type_node, SFPENCC_MOD1_EI_RI),
 		       build_int_cst (unsigned_type_node, SFPENCC_IMM12_BOTH));
 
