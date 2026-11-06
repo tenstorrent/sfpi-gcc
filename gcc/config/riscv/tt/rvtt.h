@@ -56,6 +56,7 @@ public:
     VOLATILE_SHIFT,
     EXPANDED_SHIFT,
     EMPTY_SHIFT,
+    ENABLED_SHIFT,
 
     HWM,
 
@@ -68,6 +69,7 @@ public:
     VOLATILE = 1 << VOLATILE_SHIFT, // Has unrepresented side-effects
     EXPANDED = 1 << EXPANDED_SHIFT, // Immediate is expanded
     EMPTY = 1 << EMPTY_SHIFT, // (Usually) expands to no instruction
+    ENABLED = 1 << ENABLED_SHIFT, // Is available
   };
   static_assert (HWM <= 16);
   constexpr static unsigned imm_arg_hwm = 2;
@@ -180,19 +182,21 @@ public:
 
 public:
   constexpr rvtt_insn_data (insn_id id_, const char *name_, uint32_t flags_, ops_t ops_)
-    : decl (nullptr), name (name_), flags (flags_t (flags_ & 0xffff)),
+    : name (name_), flags (flags_t (flags_ & 0xffff)),
       cc_mask (uint16_t ((flags_ >> CC_MASK_SHIFT) & 0xffff)),
       id (id_), src_pos (-1), arg_num (0), src_num (0), ops (ops_) {}
 
 public:
-  void init ();
+  char const *init (char const *prev_name);
+  void set_enabled () {
+    flags = flags_t (flags | ENABLED);
+  }
   void override (flags_t flags_, const ops_t &ops_) {
     flags = flags_;
     ops = ops_;
   }
 
 public:
-  tree decl;
   const char *name;
 
 private:
@@ -222,15 +226,12 @@ public:
   // We know these objects are in an array.
   // We never ask for the live version of the last entry.
   const rvtt_insn_data *get_live () const {
-    if (this[1].is_live () && this[1].decl)
+    if (this[1].is_live () && this[1].enabled ())
       return this + 1;
     return nullptr;
   }
   const rvtt_insn_data *get_non_live () const {
-    auto res = this;
-    if (is_live ())
-      res -= 1;
-    return res;
+    return this - is_live ();
   }
 
 public:
@@ -248,12 +249,14 @@ public:
 	  res += 1;
 	if (is_live ())
 	  res += 1;
-	return res->decl ? res : nullptr;
+	return res->decl () ? res : nullptr;
       }
     return nullptr;
   }
 
 public:
+  tree decl () const;
+  bool enabled () const { return flags & ENABLED; }
   int num_args () const { return arg_num; };
   int num_srcs () const { return src_num; };
 
@@ -293,6 +296,7 @@ extern bool rvtt_record_builtin (unsigned idx, char const *, tree decl);
 extern bool rvtt_preds_valid ();
 
 extern const rvtt_insn_data *rvtt_get_insn_data (rvtt_insn_data::insn_id id) ATTRIBUTE_PURE;
+extern tree rvtt_get_insn_decl (rvtt_insn_data::insn_id id) ATTRIBUTE_PURE;
 extern const rvtt_insn_data *rvtt_get_insn_data (gimple const *stmt) ATTRIBUTE_PURE;
 extern const rvtt_insn_data *rvtt_get_insn_data (gcall const *stmt) ATTRIBUTE_PURE;
 

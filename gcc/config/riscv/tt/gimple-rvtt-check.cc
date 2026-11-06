@@ -194,10 +194,10 @@ static tree
 const_zero_reg (gimple_stmt_iterator *gsi, tree res = nullptr)
 {
   auto *insnd = rvtt_get_insn_data (rvtt_insn_data::sfpreadlreg);
-  gcall *new_stmt = gimple_build_call (insnd->decl, 1);
+  gcall *new_stmt = gimple_build_call (insnd->decl (), 1);
 
   if (!res)
-    res = make_ssa_name (TREE_TYPE (TREE_TYPE (insnd->decl)));
+    res = make_ssa_name (TREE_TYPE (TREE_TYPE (insnd->decl ())));
 
   gimple_call_set_arg (new_stmt, 0, build_int_cst (unsigned_type_node, CREG_IDX_0));
   gimple_set_location (new_stmt, gimple_location (**gsi));

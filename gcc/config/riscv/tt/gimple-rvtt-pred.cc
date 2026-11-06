@@ -506,7 +506,7 @@ emit_pushc (gimple_stmt_iterator *gsip, gcall *stmt, bool insert_before)
 {
   const rvtt_insn_data *new_insnd =
     rvtt_get_insn_data(rvtt_insn_data::sfppushc);
-  gimple *new_stmt = gimple_build_call(new_insnd->decl, 1,
+  gimple *new_stmt = gimple_build_call(new_insnd->decl (), 1,
 				       build_int_cst (unsigned_type_node, SFPPUSHCC_MOD1_PUSH));
   finish_new_insn (gsip, insert_before, new_stmt, stmt);
 }
@@ -516,7 +516,7 @@ emit_popc (gimple_stmt_iterator *gsip, gcall *stmt, bool insert_before)
 {
   const rvtt_insn_data *new_insnd =
     rvtt_get_insn_data(rvtt_insn_data::sfppopc);
-  gimple *new_stmt = gimple_build_call(new_insnd->decl, 1,
+  gimple *new_stmt = gimple_build_call(new_insnd->decl (), 1,
 				       build_int_cst (unsigned_type_node, SFPPOPCC_MOD1_POP));
   finish_new_insn(gsip, insert_before, new_stmt, stmt);
 }
@@ -526,7 +526,7 @@ emit_compc (gimple_stmt_iterator *gsip, gcall *stmt, bool emit_before)
 {
   const rvtt_insn_data *new_insnd =
     rvtt_get_insn_data(rvtt_insn_data::sfpcompc);
-  gimple *new_stmt = gimple_build_call(new_insnd->decl, 0);
+  gimple *new_stmt = gimple_build_call(new_insnd->decl (), 0);
   finish_new_insn(gsip, emit_before, new_stmt, stmt);
 }
 
@@ -535,11 +535,11 @@ emit_loadi(gimple_stmt_iterator *gsip, gcall *stmt, int val, bool emit_before)
 {
   const rvtt_insn_data *new_insnd =
     rvtt_get_insn_data(rvtt_insn_data::sfploadi);
-  gimple *new_stmt = gimple_build_call(new_insnd->decl, 5, null_pointer_node,
+  gimple *new_stmt = gimple_build_call(new_insnd->decl (), 5, null_pointer_node,
 				       build_int_cst (unsigned_type_node, val),
 				       integer_zero_node, integer_zero_node,
 				       build_int_cst (unsigned_type_node, SFPLOADI_MOD0_SHORT));
-  tree tmp = make_ssa_name (TREE_TYPE (TREE_TYPE (new_insnd->decl)), new_stmt);
+  tree tmp = make_ssa_name (TREE_TYPE (TREE_TYPE (new_insnd->decl ())), new_stmt);
   gimple_call_set_lhs (new_stmt, tmp);
 
   finish_new_insn(gsip, emit_before, new_stmt, stmt);
@@ -552,12 +552,12 @@ emit_loadi_lv(gimple_stmt_iterator *gsip, gcall *stmt, tree lhs, tree in, int va
 {
   const rvtt_insn_data *new_insnd =
     rvtt_get_insn_data(rvtt_insn_data::sfploadi_lv);
-  gimple *new_stmt = gimple_build_call(new_insnd->decl, 6, null_pointer_node, in,
-				       build_int_cst (unsigned_type_node, val),
-				       integer_zero_node, integer_zero_node,
-				       build_int_cst (unsigned_type_node, SFPLOADI_MOD0_SHORT));
+  gimple *new_stmt = gimple_build_call (new_insnd->decl (), 6, null_pointer_node, in,
+					build_int_cst (unsigned_type_node, val),
+					integer_zero_node, integer_zero_node,
+					build_int_cst (unsigned_type_node, SFPLOADI_MOD0_SHORT));
   if (lhs == NULL_TREE)
-    lhs = make_ssa_name (TREE_TYPE (TREE_TYPE (new_insnd->decl)), new_stmt);
+    lhs = make_ssa_name (TREE_TYPE (TREE_TYPE (new_insnd->decl ())), new_stmt);
   gimple_call_set_lhs (new_stmt, lhs);
 
   finish_new_insn(gsip, emit_before, new_stmt, stmt);
@@ -571,7 +571,7 @@ emit_setcc (gimple_stmt_iterator *gsip, gcall *stmt, tree in,
 {
   const rvtt_insn_data *new_insnd =
     rvtt_get_insn_data(rvtt_insn_data::sfpsetcc);
-  gimple *new_stmt = gimple_build_call (new_insnd->decl, new_insnd->num_args ());
+  gimple *new_stmt = gimple_build_call (new_insnd->decl (), new_insnd->num_args ());
   gimple_call_set_arg (new_stmt, new_insnd->src_arg (), in);
   gimple_call_set_arg (new_stmt, new_insnd->mod_arg (),
 		       build_int_cst (unsigned_type_node, mod));
@@ -615,7 +615,7 @@ expand_cmp_using_sub (gimple_stmt_iterator *right, gcall *cmp, rvtt_arg_info (&a
       if (type == SFPXCMP_MOD1_TYPE_FLOAT && op < SFPXCMP_MOD1_CC_EQ)
 	{
 	  auto *lreg_insnd = rvtt_get_insn_data(rvtt_insn_data::sfpreadlreg);
-	  gcall *lreg_call = gimple_build_call (lreg_insnd->decl, lreg_insnd->num_args ());
+	  gcall *lreg_call = gimple_build_call (lreg_insnd->decl (), lreg_insnd->num_args ());
 	  auto reg = build_int_cst (unsigned_type_node,
 				    TARGET_XTT_TENSIX_WH ? CREG_IDX_NEG_1 : CREG_IDX_1);
 	  gimple_call_set_arg (lreg_call, 0, reg);
@@ -645,7 +645,7 @@ expand_cmp_using_sub (gimple_stmt_iterator *right, gcall *cmp, rvtt_arg_info (&a
 	  sub_insnd = rvtt_get_insn_data (rvtt_insn_data::sfpiadd_v);
 	}
 
-      auto *sub_call = gimple_build_call (sub_insnd->decl, sub_insnd->num_args ());
+      auto *sub_call = gimple_build_call (sub_insnd->decl (), sub_insnd->num_args ());
       if (neg1)
 	gimple_call_set_arg (sub_call, sub_insnd->src_arg (), neg1);
       gimple_call_set_arg (sub_call, sub_insnd->src_arg (bool (neg1)), args[1].get_arg ());
@@ -707,7 +707,7 @@ expand_cmp_using_gtle (gimple_stmt_iterator *right, gcall *cmp, rvtt_arg_info (&
   auto *insnd = rvtt_get_insn_data (op == SFPXCMP_MOD1_CC_GT
 				    ? rvtt_insn_data::sfpgt : rvtt_insn_data::sfple);
   auto mod_arg = build_int_cst (unsigned_type_node, SFPGTLE_MOD1_SET_CC);
-  auto *call = gimple_build_call (insnd->decl, insnd->num_args ());
+  auto *call = gimple_build_call (insnd->decl (), insnd->num_args ());
   gimple_call_set_arg (call, insnd->src_arg (0), args[0].get_arg ());
   gimple_call_set_arg (call, insnd->src_arg (1), args[1].get_arg ());
   gimple_call_set_arg (call, insnd->mod_arg (), mod_arg);
