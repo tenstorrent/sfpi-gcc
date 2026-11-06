@@ -28,9 +28,11 @@ MULTILIB_EXCEPTIONS :=
 MULTILIB_EXTRA_OPTS :=
 
 RVTT_OBJS := rvtt.o \
+	rvtt-refuse.o \
 	gimple-rvtt-attrib.o \
 	gimple-rvtt-cc.o \
 	gimple-rvtt-check.o \
+	gimple-rvtt-int-not.o \
 	gimple-rvtt-combine.o \
 	gimple-rvtt-dce.o \
 	gimple-rvtt-schedule.o \
