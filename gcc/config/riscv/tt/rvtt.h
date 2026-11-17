@@ -290,6 +290,31 @@ public:
   }
 };
 
+// A row of rvtt-ttinsn.def
+struct rvtt_ttinsn
+{
+  enum class arch_t { WH, BH, HWM };
+  struct field_t
+  {
+    uint8_t shift, width;
+  };
+
+  const char *name;
+  field_t fields[13];
+  uint8_t archs;
+  uint8_t opcode;
+  uint8_t num_fields;
+
+  uint32_t field (uint32_t word, unsigned ix) const
+  {
+    gcc_checking_assert (ix < num_fields && fields[ix].width < 32);
+    return (word >> fields[ix].shift) & ((1u << fields[ix].width) - 1u);
+  }
+};
+
+extern const rvtt_ttinsn *rvtt_decode_ttinsn (rvtt_ttinsn::arch_t arch,
+					      uint32_t word);
+
 extern void rvtt_init_builtins ();
 extern bool rvtt_record_builtin (unsigned idx, char const *, tree decl);
 

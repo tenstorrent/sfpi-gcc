@@ -714,3 +714,33 @@ bool rvtt_reg_store_p(const rtx pat)
 
   return false;
 }
+
+static constexpr rvtt_ttinsn ttinsns[] = {
+#define RVTT_FIELDS(...) __VA_ARGS__
+#define RVTT_TTINSN(archs, opcode, name, num_fields, fields)	\
+  { #name, { RVTT_FIELDS fields }, archs, opcode, num_fields },
+#include "rvtt-ttinsn.def"
+#undef RVTT_FIELDS
+};
+
+static constexpr struct ttinsn_index
+{
+  const rvtt_ttinsn *rows[static_cast<int> (rvtt_ttinsn::arch_t::HWM)][256];
+
+  constexpr ttinsn_index () : rows {}
+  {
+    for (const rvtt_ttinsn &insn : ttinsns)
+      for (unsigned ix = 0;
+	   ix != static_cast<unsigned> (rvtt_ttinsn::arch_t::HWM); ix++)
+	if (insn.archs & (1u << ix))
+	  rows[ix][insn.opcode] = &insn;
+  }
+} by_opcode;
+
+// The instruction WORD encodes on ARCH.
+
+const rvtt_ttinsn *
+rvtt_decode_ttinsn (rvtt_ttinsn::arch_t arch, uint32_t word)
+{
+  return by_opcode.rows[static_cast<int> (arch)][word >> 24];
+}
