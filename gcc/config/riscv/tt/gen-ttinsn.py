@@ -103,6 +103,7 @@ def make_rows(srcdir):
         open(srcdir + '/include/opcode/riscv-opc-sfpu.h').read())}
     text = open(srcdir + '/opcodes/riscv-opc-sfpu-insns.h').read()
     rows = {}
+    by_opcode = {}
     for entry in re.finditer(r'\{"', text):
         m = INSN.match(text, entry.start())
         if not m:
@@ -110,8 +111,12 @@ def make_rows(srcdir):
                      + text[entry.start():].split('\n', 1)[0])
         name, arch, args, match, flags = m.groups()
         if arch in ARCHS and 'INSN_ALIAS' not in flags:
-            key = (matches[match] >> 24, re.sub('^tt', '', name),
-                   insn_fields(name, args))
+            opcode = matches[match] >> 24
+            key = (opcode, re.sub('^tt', '', name), insn_fields(name, args))
+            other = by_opcode.setdefault((arch, opcode), key)
+            if other != key:
+                sys.exit('%s: %s and %s share opcode 0x%02x'
+                         % (arch, other[1], key[1], opcode))
             rows.setdefault(key, set()).add(arch)
     return rows
 
