@@ -725,12 +725,13 @@ static constexpr rvtt_ttinsn ttinsns[] = {
 
 static constexpr struct ttinsn_index
 {
-  const rvtt_ttinsn *rows[(int) rvtt_ttinsn::arch_t::HWM][256];
+  const rvtt_ttinsn *rows[static_cast<int> (rvtt_ttinsn::arch_t::HWM)][256];
 
-  constexpr ttinsn_index () : rows ()
+  constexpr ttinsn_index () : rows {}
   {
     for (const rvtt_ttinsn &insn : ttinsns)
-      for (unsigned ix = 0; ix != (unsigned) rvtt_ttinsn::arch_t::HWM; ix++)
+      for (unsigned ix = 0;
+	   ix != static_cast<unsigned> (rvtt_ttinsn::arch_t::HWM); ix++)
 	if (insn.archs & (1u << ix))
 	  rows[ix][insn.opcode] = &insn;
   }
@@ -741,5 +742,5 @@ static constexpr struct ttinsn_index
 const rvtt_ttinsn *
 rvtt_decode_ttinsn (rvtt_ttinsn::arch_t arch, uint32_t word)
 {
-  return by_opcode.rows[(int) arch][word >> 24];
+  return by_opcode.rows[static_cast<int> (arch)][word >> 24];
 }

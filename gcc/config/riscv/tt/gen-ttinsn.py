@@ -56,8 +56,8 @@ along with GCC; see the file COPYING3.  If not see
    31 on the architectures ARCHS.  NAME is the mnemonic without the tt
    prefix.  The NUM_FIELDS fields are operands, most significant first.  */
 
-#define WH (1 << (int) rvtt_ttinsn::arch_t::WH)
-#define BH (1 << (int) rvtt_ttinsn::arch_t::BH)
+#define WH (1 << static_cast<int> (rvtt_ttinsn::arch_t::WH))
+#define BH (1 << static_cast<int> (rvtt_ttinsn::arch_t::BH))
 '''
 
 FOOTER = '''
