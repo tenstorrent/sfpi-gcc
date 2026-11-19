@@ -35,10 +35,6 @@
   (ior (match_operand 0 "noval_operand")
        (match_operand 0 "omit_operand")))
 
-(define_predicate "reg_or_const_int_operand"
-  (ior (match_operand 0 "const_int_operand")
-       (match_operand 0 "register_operand")))
-
 (define_predicate "reg_or_cstlreg_operand"
   (ior (match_operand 0 "cstlreg_operand")
        (match_operand 0 "register_operand")))
